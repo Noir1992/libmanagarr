@@ -1,0 +1,42 @@
+<main class="page-shell">
+  <section class="page-header">
+    <div class="page-title-row">
+      <h1 class="page-title">{{ title() }}</h1>
+    </div>
+    <p class="page-description">{{ description() }}</p>
+  </section>
+
+  <section class="page-content">
+    @if (loadSettingsError(); as error) {
+      <app-loading-error-section [error]="error" />
+    } @else {
+      @if (noInstancesConfigured()) {
+        <app-no-arr-instances-configured-section />
+      } @else {
+        <app-page-filter
+          [filters]="filterOptions()"
+          [storagePrefix]="'codec-statistics'"
+          (activeFilterCountChange)="isFiltered.set($event > 0)"
+        />
+
+        @if (loading()) {
+          <app-loading-section />
+        } @else if (loadError(); as error) {
+          <app-loading-error-section [error]="error" />
+        }
+
+        @if (stats()) {
+          @if (noDataAvailable()) {
+            <app-no-data-section [isFiltered]="isFiltered()" />
+          } @else {
+            <section class="charts-grid">
+              @for (category of chartCategories(); track category.title) {
+                <app-statistics-chart [category]="category" />
+              }
+            </section>
+          }
+        }
+      }
+    }
+  </section>
+</main>

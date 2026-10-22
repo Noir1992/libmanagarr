@@ -1,0 +1,30 @@
+<ul class="chart-rows">
+  @for (item of items; track item.label) {
+    <li>
+      <button type="button" class="chart-row-button" [class.expanded]="isExpanded(item)" (click)="toggleItem(item)">
+        <span class="chart-row-header">
+          <span class="chart-label">
+            <span class="swatch" [style.background]="item.color"></span>
+            <span>
+              {{ item.label }}
+              <small class="chart-meta">{{ item.metaText }}</small>
+            </span>
+          </span>
+          <span class="chart-row-right">
+            <strong>{{ item.percentage }}%</strong>
+            <mat-icon class="material-symbols-outlined collapse-icon" [class.is-collapsed]="!isExpanded(item)">expand_more</mat-icon>
+          </span>
+        </span>
+        <span class="chart-bar-track">
+          <span class="chart-bar-fill" [style.width.%]="item.percentage" [style.background]="item.color"></span>
+        </span>
+      </button>
+
+      @if (isExpanded(item)) {
+        <div class="expand-content" animate.enter="expand-in" animate.leave="expand-out">
+          <app-media-files-tree [scopeKey]="scopeKey(item.label)" [roots]="item.treeRoots" (interaction)="treeInteraction.emit()" />
+        </div>
+      }
+    </li>
+  }
+</ul>

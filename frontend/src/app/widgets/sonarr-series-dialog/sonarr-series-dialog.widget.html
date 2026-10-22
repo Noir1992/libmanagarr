@@ -1,0 +1,99 @@
+<div class="series-dialog">
+  <div class="series-dialog-header">
+    <h2 class="series-dialog-title" [title]="data.title">
+      {{ data.title }}
+    </h2>
+    <button mat-icon-button (click)="close()" [title]="closeButtonLabel()">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+  </div>
+
+  <div class="series-dialog-content">
+    <div class="series-dialog-top">
+      @if (data.posterUrl) {
+        <img class="series-dialog-poster" [src]="data.posterUrl" alt="" loading="lazy" />
+      }
+      <dl class="series-dialog-info">
+        @for (row of seriesRows(); track row.key) {
+          <div class="series-dialog-info-row">
+            <dt class="series-dialog-info-label">{{ row.label }}</dt>
+            <dd
+              class="series-dialog-info-value"
+              [class.tone-success]="row.tone === 'success'"
+              [class.tone-warning]="row.tone === 'warning'"
+              [class.tone-danger]="row.tone === 'danger'"
+              [class.tone-info]="row.tone === 'info'"
+            >
+              @if (row.key === 'common.column.instance' && data.url) {
+                {{ row.value }}
+                <a
+                  class="instance-link"
+                  [href]="data.url"
+                  target="_blank"
+                  rel="noopener"
+                  [title]="instanceLinkLabel(row.value)"
+                  [attr.aria-label]="instanceLinkLabel(row.value)"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">link</span>
+                </a>
+              } @else {
+                {{ row.value }}
+              }
+            </dd>
+          </div>
+        }
+      </dl>
+    </div>
+
+    @for (season of seasons(); track season.number) {
+      <div class="series-dialog-season">
+        <div class="series-dialog-season-header" [class.expanded]="isSeasonExpanded(season.number)">
+          <span class="series-dialog-season-label">
+            {{ seasonTitle(season.number) }}
+
+            <span class="series-dialog-count">
+              ({{ season.episodes.length }} {{ i18n.tCount(season.episodes.length, 'common.episodeCountOne', 'common.episodeCount') }})
+            </span>
+          </span>
+          <button type="button" mat-icon-button (click)="toggleSeason(season.number)">
+            <span class="material-symbols-outlined collapse-icon" [class.is-collapsed]="!isSeasonExpanded(season.number)">
+              expand_more
+            </span>
+          </button>
+        </div>
+        @if (isSeasonExpanded(season.number)) {
+          <div class="series-dialog-table-wrapper">
+            <table class="series-dialog-episodes-table">
+              <thead>
+                <tr>
+                  <th>{{ episodeLabel() }}</th>
+                  <th>{{ titleLabel() }}</th>
+                  <th>{{ airDateLabel() }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (ep of season.episodes; track ep.number) {
+                  <tr (click)="openEpisode(ep.details)" [class.episode-clickable]="!!ep.details">
+                    <td>
+                      <span class="episode-details-button" [class.available]="!!ep.hasFile">
+                        {{ ep.number }}
+                      </span>
+                    </td>
+                    <td class="series-dialog-title-cell">{{ ep.title || naLabel() }}</td>
+                    <td>
+                      @if (ep.airDateUtc) {
+                        {{ ep.airDateUtc | date: 'yyyy-MM-dd' }}
+                      } @else {
+                        {{ naLabel() }}
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

@@ -1,0 +1,28 @@
+:host {
+  display: block;
+}
+
+.auth-page {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: var(--theme-default-gap);
+}
+
+.auth-card {
+  max-width: 26rem;
+  width: 100%;
+}
+
+.auth-title {
+  font-size: 1.1rem;
+  margin: 0;
+  white-space: normal;
+}
+
+.auth-submit {
+  margin-top: var(--theme-default-gap);
+  width: 100%;
+}

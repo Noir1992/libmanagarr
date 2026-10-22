@@ -1,0 +1,136 @@
+<section class="card trend-chart-card">
+  <div class="card-header">
+    <h3 class="card-title">{{ title() }}</h3>
+    @if (chart(); as model) {
+      <div class="trend-zoom-controls">
+        <button
+          mat-icon-button
+          type="button"
+          [attr.aria-label]="zoomLabels().previous"
+          [title]="zoomLabels().previous"
+          [disabled]="viewport().start <= 0"
+          (click)="pan(-1)"
+        >
+          <mat-icon fontSet="material-symbols-outlined">chevron_left</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          type="button"
+          [attr.aria-label]="zoomLabels().zoomIn"
+          [title]="zoomLabels().zoomIn"
+          [disabled]="!canZoomIn()"
+          (click)="changeZoom(2)"
+        >
+          <mat-icon fontSet="material-symbols-outlined">add</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          type="button"
+          [attr.aria-label]="zoomLabels().zoomOut"
+          [title]="zoomLabels().zoomOut"
+          [disabled]="!zoomed()"
+          (click)="changeZoom(0.5)"
+        >
+          <mat-icon fontSet="material-symbols-outlined">remove</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          type="button"
+          [attr.aria-label]="zoomLabels().reset"
+          [title]="zoomLabels().reset"
+          [disabled]="!zoomed()"
+          (click)="resetZoom()"
+        >
+          <mat-icon fontSet="material-symbols-outlined">restart_alt</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          type="button"
+          [attr.aria-label]="zoomLabels().next"
+          [title]="zoomLabels().next"
+          [disabled]="viewport().end >= 1"
+          (click)="pan(1)"
+        >
+          <mat-icon fontSet="material-symbols-outlined">chevron_right</mat-icon>
+        </button>
+      </div>
+    }
+  </div>
+
+  <div class="card-content">
+    @if (displayChart(); as chartModel) {
+      <p class="trend-zoom-hint">{{ zoomLabels().hint }}</p>
+      <div class="trend-chart-wrap">
+        <svg
+          class="trend-chart"
+          [class.zoomed]="zoomed()"
+          [attr.aria-description]="zoomLabels().hint"
+          (wheel)="onWheel($event)"
+          (pointerdown)="onPointerDown($event)"
+          (pointermove)="onPointerMove($event)"
+          (pointerup)="onPointerEnd()"
+          (pointercancel)="onPointerEnd()"
+          (lostpointercapture)="onPointerEnd()"
+          viewBox="0 0 960 360"
+          preserveAspectRatio="none"
+          role="img"
+          [attr.aria-label]="title()"
+          (mouseenter)="onChartHoverMove($event, chartModel)"
+          (mousemove)="onChartHoverMove($event, chartModel)"
+          (mouseleave)="onChartHoverEnd()"
+          (click)="onChartPointClick($event, chartModel)"
+        >
+          <defs>
+            <clipPath [id]="'trend-plot-clip-' + chartId()"><rect x="72" y="24" width="864" height="280" /></clipPath>
+            <linearGradient [id]="'trend-area-gradient-' + chartId()" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" [attr.stop-color]="chartAccentColor()" stop-opacity="0.32"></stop>
+            </linearGradient>
+          </defs>
+
+          @for (tick of chartModel.yTicks; track tick.label + tick.y) {
+            <line class="trend-grid-line" x1="72" [attr.y1]="tick.y" x2="936" [attr.y2]="tick.y"></line>
+            <text class="trend-axis-label trend-y-label" x="64" [attr.y]="tick.y + 4" text-anchor="end">
+              {{ tick.label }}
+            </text>
+          }
+
+          <g [attr.clip-path]="'url(#trend-plot-clip-' + chartId() + ')'">
+            @if (chartModel.areaPath) {
+              <path class="trend-area" [attr.fill]="'url(#trend-area-gradient-' + chartId() + ')'" [attr.d]="chartModel.areaPath"></path>
+            }
+            <path class="trend-line" [attr.d]="chartModel.linePath"></path>
+
+            @if (hoverTooltip(); as tooltip) {
+              @if (tooltip.chartId === chartId()) {
+                <line
+                  class="trend-hover-line"
+                  [attr.x1]="tooltip.pointX"
+                  [attr.y1]="hoverLineTop"
+                  [attr.x2]="tooltip.pointX"
+                  [attr.y2]="hoverLineBottom"
+                ></line>
+                <circle class="trend-point" [attr.cx]="tooltip.pointX" [attr.cy]="tooltip.pointY"></circle>
+              }
+            }
+          </g>
+
+          @for (label of chartModel.xLabels; track label.label + label.x) {
+            <text class="trend-axis-label trend-x-label" [attr.x]="label.x" y="336" [attr.text-anchor]="label.anchor">
+              {{ label.label }}
+            </text>
+          }
+        </svg>
+
+        @if (hoverTooltip(); as tooltip) {
+          @if (tooltip.chartId === chartId()) {
+            <div class="trend-tooltip" [style.left.px]="tooltip.x + 12" [style.top.px]="tooltip.y + 12">
+              @for (line of tooltip.lines; track $index) {
+                <div>{{ line }}</div>
+              }
+            </div>
+          }
+        }
+      </div>
+    }
+  </div>
+</section>

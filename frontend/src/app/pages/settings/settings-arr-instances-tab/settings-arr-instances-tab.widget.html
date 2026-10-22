@@ -1,0 +1,71 @@
+<section class="tab-header">{{ instancesDescription() }}</section>
+
+<section class="tab-content">
+  @if (instancesLoadedState()) {
+    <section class="card">
+      <section>
+        <div class="card-header">
+          <img [ngSrc]="instanceLogoPath('Radarr')" [height]="24" [width]="24" alt="" aria-hidden="true" />
+
+          <h2 class="card-title">{{ radarrHeading() }}</h2>
+
+          <div class="card-header-actions">
+            <button type="button" mat-stroked-button class="secondary-button" (click)="addRadarrInstanceAsync()">
+              <mat-icon class="material-symbols-outlined">add</mat-icon>
+              {{ addInstanceLabel() }}
+            </button>
+          </div>
+        </div>
+
+        <div class="card-content instance-list">
+          @if (radarrInstancesForm.controls.length === 0) {
+            <p class="instance-empty-state">{{ noInstanceConfiguredLabel() }}</p>
+          } @else {
+            @for (instanceGroup of radarrInstancesForm.controls; track instanceGroup.controls.clientKey.getRawValue()) {
+              <app-settings-arr-instance-card
+                [instanceGroup]="instanceGroup"
+                [instanceKind]="radarrApplicationKind"
+                [instanceIndex]="$index"
+                [isDeletingState]="isDeleting(instanceGroup)"
+                (removeInstance)="removeRadarrInstanceAsync($index)"
+              />
+            }
+          }
+        </div>
+      </section>
+    </section>
+
+    <section class="card">
+      <section>
+        <div class="card-header">
+          <img [ngSrc]="instanceLogoPath('Sonarr')" [height]="24" [width]="24" alt="" aria-hidden="true" />
+
+          <h2 class="card-title">{{ sonarrHeading() }}</h2>
+
+          <div class="card-header-actions">
+            <button type="button" mat-stroked-button class="secondary-button" (click)="addSonarrInstanceAsync()">
+              <mat-icon class="material-symbols-outlined">add</mat-icon>
+              {{ addInstanceLabel() }}
+            </button>
+          </div>
+        </div>
+
+        <div class="card-content instance-list">
+          @if (sonarrInstancesForm.controls.length === 0) {
+            <p class="instance-empty-state">{{ noInstanceConfiguredLabel() }}</p>
+          } @else {
+            @for (instanceGroup of sonarrInstancesForm.controls; track instanceGroup.controls.clientKey.getRawValue()) {
+              <app-settings-arr-instance-card
+                [instanceGroup]="instanceGroup"
+                [instanceKind]="sonarrApplicationKind"
+                [instanceIndex]="$index"
+                [isDeletingState]="isDeleting(instanceGroup)"
+                (removeInstance)="removeSonarrInstanceAsync($index)"
+              />
+            }
+          }
+        </div>
+      </section>
+    </section>
+  }
+</section>

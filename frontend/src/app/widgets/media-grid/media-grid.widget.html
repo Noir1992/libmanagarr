@@ -1,0 +1,7 @@
+<div class="media-grid-window" #gridWindow [class.is-windowed]="isWindowed()" [style.height.px]="windowHeight()">
+  <div class="media-grid" #grid [style.transform]="gridTransform()">
+    @for (item of visibleItems(); track $index) {
+      <app-media-card [item]="item" [clickable]="!!item.seriesData || !!item.movieData" />
+    }
+  </div>
+</div>

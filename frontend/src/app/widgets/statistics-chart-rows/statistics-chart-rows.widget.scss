@@ -1,0 +1,92 @@
+.chart-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--theme-default-gap-small);
+
+  .chart-row-button {
+    width: 100%;
+    border: 1px solid var(--theme-border-color);
+    border-radius: var(--theme-border-radius);
+    background: var(--theme-table-head);
+    color: inherit;
+    padding: var(--theme-default-gap-small);
+
+    &:hover {
+      background: var(--theme-interactive-hover-bg);
+      cursor: pointer;
+    }
+
+    &.expanded {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+
+    .chart-row-header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: var(--theme-default-gap-small);
+      white-space: nowrap;
+
+      .chart-label {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--theme-default-gap-small);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+
+        .swatch {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          border: 1px solid rgb(0 0 0 / 18%);
+        }
+
+        .chart-meta {
+          margin-left: 6px;
+          opacity: 0.7;
+          font-weight: 400;
+          font-size: 0.82em;
+        }
+      }
+
+      .chart-row-right {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--theme-default-gap-small);
+
+        .collapse-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
+          width: 10px;
+          height: 10px;
+        }
+      }
+    }
+
+    .chart-bar-track {
+      display: block;
+      height: 4px;
+      margin-top: 7px;
+      border-radius: 999px;
+      background: var(--theme-table-rule);
+      overflow: hidden;
+
+      .chart-bar-fill {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        transition: width 260ms ease;
+      }
+    }
+  }
+
+  .expand-content {
+    overflow: visible;
+  }
+}

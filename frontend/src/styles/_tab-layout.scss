@@ -1,0 +1,9 @@
+.tab-header {
+  margin: 20px 0;
+  color: var(--theme-muted);
+}
+
+.tab-content {
+  display: grid;
+  gap: var(--theme-default-gap);
+}

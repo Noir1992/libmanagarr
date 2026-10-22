@@ -1,0 +1,19 @@
+:host {
+  display: flex;
+}
+.sort-toggle-button {
+  flex-shrink: 0;
+  color: var(--theme-text);
+  &:hover {
+    color: var(--theme-accent);
+  }
+}
+.sort-menu-item {
+  justify-content: flex-start;
+  text-align: start;
+}
+.sort-option-icon {
+  font-size: 18px;
+  margin-left: 6px;
+  color: var(--theme-accent);
+}

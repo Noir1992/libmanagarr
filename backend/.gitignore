@@ -1,0 +1,61 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+.codex-build/
+
+# .NET CLI
+.dotnet/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Test results
+TestResults/
+coverage/
+coverage.cobertura.xml
+coverage.opencover.xml
+*.coverage
+*.coveragexml
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Visual Studio
+.vs/
+Generated\ Files/
+
+# Rider and ReSharper
+.idea/
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+*.nuget.props
+*.nuget.targets
+
+# ASP.NET local artifacts
+appsettings.Local.json
+appsettings.*.local.json
+secrets.json
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# System files
+.DS_Store
+Thumbs.db
+/LibManagarr.Api/data/

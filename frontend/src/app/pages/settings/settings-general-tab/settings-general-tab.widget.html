@@ -1,0 +1,68 @@
+<section class="tab-header">{{ generalDescription() }}</section>
+
+<section class="tab-content">
+  <section class="card">
+    <div class="card-content settings-general-grid" [formGroup]="settingsForm">
+      <div class="field">
+        <div class="field-label-row">
+          <label id="language-select-label" for="language-select">{{ languageHeading() }}</label>
+          <app-info-icon [messageText]="languageInfoMessage()" />
+        </div>
+
+        <div class="field-control-wrap">
+          <mat-select
+            id="language-select"
+            formControlName="language"
+            [class.has-error]="fieldFeedbackMessage('language') !== null"
+            [attr.aria-labelledby]="'language-select-label'"
+          >
+            @for (language of languageOptions; track language) {
+              <mat-option [value]="language">{{ languageLabel(language) }}</mat-option>
+            }
+          </mat-select>
+          <app-feedback-icon
+            [state]="generalFieldSavingState().language ? 'loading' : fieldFeedback('language')"
+            variant="overlay-space"
+            [tooltipText]="fieldFeedbackMessage('language')"
+          />
+        </div>
+
+        @if (fieldFeedbackMessage('language')) {
+          <p class="field-error">{{ fieldFeedbackMessage('language') }}</p>
+        }
+      </div>
+
+      <div class="field">
+        <div class="field-label-row">
+          <label id="theme-select-label" for="theme-select">{{ themeHeading() }}</label>
+          <app-info-icon [messageText]="themeInfoMessage()" />
+        </div>
+
+        <div class="field-control-wrap">
+          <mat-select
+            id="theme-select"
+            formControlName="theme"
+            [class.has-error]="fieldFeedbackMessage('theme') !== null"
+            [attr.aria-labelledby]="'theme-select-label'"
+          >
+            @for (theme of themeOptions; track theme) {
+              <mat-option [value]="theme">{{ themeLabel(theme) }}</mat-option>
+            }
+          </mat-select>
+          <app-feedback-icon
+            [state]="generalFieldSavingState().theme ? 'loading' : fieldFeedback('theme')"
+            variant="overlay-space"
+            [tooltipText]="fieldFeedbackMessage('theme')"
+          />
+        </div>
+
+        @if (fieldFeedbackMessage('theme')) {
+          <p class="field-error">{{ fieldFeedbackMessage('theme') }}</p>
+        }
+      </div>
+    </div>
+  </section>
+
+  <app-title-sorting-settings-card />
+  <app-settings-logging-card-widget />
+</section>

@@ -1,0 +1,52 @@
+<ul class="media-files-tree expand-content">
+  @for (entry of visibleTreeNodes(roots); track entry.node.key; let i = $index) {
+    <li class="tree-row" [class.root-divider]="entry.isRoot && i > 0" [style.padding-left.px]="entry.depth * 8">
+      <div class="tree-row-main">
+        @if (entry.node.isDirectory && !entry.isRoot) {
+          <button class="tree-toggle" type="button" (click)="toggleTreeNode(entry.node.key)">
+            <span class="material-symbols-outlined folder-icon">
+              {{ isTreeNodeExpanded(entry.node.key) ? 'folder_open' : 'folder' }}
+            </span>
+            <span class="tree-name" [title]="entry.node.label">{{ entry.node.label }}</span>
+            <small class="tree-meta">{{ entry.node.fileCount }} files &middot; {{ entry.node.totalSizeBytes | formatBytes }}</small>
+          </button>
+        } @else if (entry.isRoot) {
+          <button class="tree-toggle root-toggle" type="button" (click)="toggleTreeNode(entry.node.key)">
+            <span class="tree-name" [title]="entry.node.label">{{ entry.node.label }}</span>
+            <small class="tree-meta">{{ entry.node.fileCount }} files &middot; {{ entry.node.totalSizeBytes | formatBytes }}</small>
+          </button>
+        } @else {
+          <span class="file-row">
+            <span class="material-symbols-outlined file-icon">insert_drive_file</span>
+            <span class="tree-name" [title]="entry.node.label">{{ entry.node.label }}</span>
+            <small class="tree-meta">{{ entry.node.totalSizeBytes | formatBytes }}</small>
+          </span>
+        }
+
+        @if (!entry.isRoot) {
+          <div class="tree-row-actions" (click)="$event.stopPropagation()">
+            <button
+              mat-icon-button
+              type="button"
+              class="material-symbols-outlined"
+              [attr.aria-label]="optionsLabel()"
+              (click)="toggleNodeContextMenu(entry.node, $event)"
+            >
+              more_vert
+            </button>
+            @if (isNodeContextMenuOpen(entry.node)) {
+              <div class="tree-context-menu">
+                <button class="tree-context-item" type="button" [disabled]="!entry.node.url" (click)="openNodeInArr(entry.node)">
+                  {{ openInArrLabel(entry.node) }}
+                </button>
+                <button class="tree-context-item" type="button" (click)="copyNodeName(entry.node)">
+                  {{ copyNameLabel() }}
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </li>
+  }
+</ul>

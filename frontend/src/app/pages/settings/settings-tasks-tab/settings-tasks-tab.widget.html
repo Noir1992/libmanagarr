@@ -1,0 +1,101 @@
+<section class="tab-header">{{ tasksDescription() }}</section>
+
+<section class="tab-content">
+  @if (taskService.loadError(); as taskSaveError) {
+    <section class="feedback error">{{ taskSaveError }}</section>
+  }
+
+  @if (taskService.loading()) {
+    <app-feedback-icon state="loading" variant="inline" />
+  }
+
+  <table mat-table [dataSource]="taskRows()">
+    <ng-container matColumnDef="name">
+      <th mat-header-cell *matHeaderCellDef>{{ taskNameColumnLabel() }}</th>
+      <td mat-cell *matCellDef="let row">{{ row.name }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="lastRunAt">
+      <th mat-header-cell *matHeaderCellDef>{{ taskLastRunLabel() }}</th>
+      <td mat-cell *matCellDef="let row">
+        @if (isTaskDateValue(row.lastRunAt)) {
+          {{ row.lastRunAt | appDate: 'medium' }}
+        } @else {
+          {{ taskNoValueLabel() }}
+        }
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="nextRunAt">
+      <th mat-header-cell *matHeaderCellDef>{{ taskNextRunLabel() }}</th>
+      <td mat-cell *matCellDef="let row">
+        @if (isTaskDateValue(row.nextRunAt)) {
+          {{ row.nextRunAt | appDate: 'medium' }}
+        } @else {
+          {{ taskNoValueLabel() }}
+        }
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="enabled">
+      <th mat-header-cell *matHeaderCellDef>{{ taskEnabledColumnLabel() }}</th>
+      <td mat-cell *matCellDef="let row">
+        @if (!row.readOnly) {
+          <mat-slide-toggle
+            [checked]="row.enabled"
+            [disabled]="taskService.states()[row.taskKey]?.saving"
+            [attr.aria-label]="taskEnabledColumnLabel()"
+            (change)="toggleTaskEnabledAsync(row, $event.checked)"
+          ></mat-slide-toggle>
+        }
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef>{{ taskActionsColumnLabel() }}</th>
+      <td mat-cell *matCellDef="let row">
+        <div class="task-actions">
+          @if (!row.readOnly) {
+            <button
+              type="button"
+              mat-icon-button
+              class="material-symbols-outlined"
+              [disabled]="taskService.states()[row.taskKey]?.saving"
+              [attr.aria-label]="taskEditLabel()"
+              (click)="openTaskEditorAsync(row)"
+            >
+              edit
+            </button>
+          }
+          @if (row.canRunManually) {
+            <button
+              type="button"
+              mat-icon-button
+              class="material-symbols-outlined"
+              [disabled]="taskService.states()[row.taskKey]?.saving || taskService.states()[row.taskKey]?.running"
+              [attr.aria-label]="taskRunNowLabel()"
+              (click)="runTaskNowAsync(row)"
+            >
+              play_arrow
+            </button>
+          }
+          @if (!row.readOnly || row.canRunManually) {
+            <app-feedback-icon
+              [state]="taskFeedback(row)"
+              variant="inline"
+              [tooltipText]="taskService.states()[row.taskKey]?.error ?? null"
+            />
+          } @else {
+            <app-info-icon [messageText]="taskInfoMessage(row)" [size]="'big'" />
+          }
+          @if (taskService.states()[row.taskKey]?.error; as error) {
+            <span class="feedback error" role="alert">{{ error }}</span>
+          }
+        </div>
+      </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="taskColumns"></tr>
+    <tr mat-row *matRowDef="let _; columns: taskColumns"></tr>
+  </table>
+</section>

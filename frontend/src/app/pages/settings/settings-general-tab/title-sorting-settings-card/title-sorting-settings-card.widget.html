@@ -1,0 +1,26 @@
+<section class="card">
+  <div class="card-header">{{ t('settings.titleSorting.title') }}</div>
+  <div class="card-content title-sorting-settings" [formGroup]="form">
+    <div class="field">
+      <div class="field-label-row">
+        <label for="title-sorting-words">{{ t('settings.titleSorting.wordList') }}</label>
+        <app-info-icon [messageText]="t('settings.titleSorting.help')" />
+      </div>
+      <div class="field-control-wrap">
+        <input
+          matInput
+          id="title-sorting-words"
+          formControlName="ignoredLeadingWords"
+          [attr.aria-invalid]="wordError() !== null"
+          [class.has-error]="wordError() !== null"
+          aria-describedby="title-sorting-word-error"
+          (input)="onWordsInput()"
+          (blur)="save()"
+          (keydown.enter)="$event.preventDefault(); save()"
+        />
+        <app-feedback-icon [state]="saving() ? 'loading' : feedbackState()" variant="overlay" [tooltipText]="wordError() ?? feedback()" />
+      </div>
+      <p id="title-sorting-word-error" class="field-error" role="alert">{{ wordError() }}</p>
+    </div>
+  </div>
+</section>

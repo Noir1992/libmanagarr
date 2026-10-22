@@ -1,0 +1,156 @@
+<main class="page-shell">
+  <section class="page-header">
+    <div class="page-title-row">
+      <h1 class="page-title">
+        {{ title() }}
+        <span class="visible-item-count">({{ visibleItemCount() }})</span>
+      </h1>
+    </div>
+    <p class="page-description">{{ description() }}</p>
+  </section>
+
+  <section class="page-content">
+    @if (loadSettingsError(); as error) {
+      <app-loading-error-section [error]="error" />
+    } @else {
+      @if (noInstancesConfigured()) {
+        <app-no-arr-instances-configured-section />
+      } @else {
+        <div class="list-controls">
+          <div class="title-search">
+            <span class="material-symbols-outlined" aria-hidden="true">search</span>
+            <input
+              matInput
+              type="search"
+              [placeholder]="searchLabel()"
+              [attr.aria-label]="searchLabel()"
+              [value]="titleSearch()"
+              (input)="onTitleSearchChanged($event)"
+            />
+          </div>
+
+          <app-page-filter
+            [filters]="filterOptions()"
+            [storagePrefix]="'library'"
+            [bubblesBelow]="true"
+            (activeFilterCountChange)="activeFilterCount.set($event)"
+          />
+
+          <app-sort-control
+            [sortField]="sortField()"
+            [sortDirection]="sortDirection()"
+            (sortFieldChange)="onSortFieldChanged($event)"
+            (sortDirectionChange)="onSortDirectionChanged($event)"
+          />
+
+          <button
+            type="button"
+            mat-icon-button
+            class="view-toggle-button"
+            [attr.aria-label]="viewToggleLabel()"
+            [title]="viewMode() === 'table' ? viewGridLabel() : viewListLabel()"
+            (click)="toggleViewMode()"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">{{ viewMode() === 'table' ? 'grid_view' : 'view_list' }}</span>
+          </button>
+        </div>
+
+        @if (loading()) {
+          <app-loading-section />
+        } @else if (loadError(); as error) {
+          <app-loading-error-section [error]="error" />
+        }
+
+        @if (initialLoadComplete()) {
+          @if (noDataAvailable()) {
+            <app-no-data-section [isFiltered]="isFiltered()" />
+          } @else if (viewMode() === 'grid') {
+            <app-media-grid [items]="gridItems()" />
+          } @else {
+            @for (table of visibleRadarrTables(); track table.instanceId) {
+              @if (table.movies.length > 0) {
+                <section>
+                  <app-radarr-table [table]="table">
+                    @for (column of radarrColumns(); track column.key) {
+                      <ng-template appTableColumn [appTableColumnConfig]="column" let-row>
+                        @if ('title' === column.key && row.url) {
+                          <a [href]="row.url" class="text-link" target="_blank" rel="noopener" (click)="$event.stopPropagation()">
+                            {{ row[column.key] }}
+                          </a>
+                        } @else if ('airDateUtc' === column.key) {
+                          {{ row.airDateUtc | appDate: 'mediumDate' }}
+                        } @else if ('hasFile' === column.key) {
+                          {{ fileStatusLabel(row.hasFile) }}
+                        } @else if ('customFormatScore' === column.key) {
+                          {{ row.customFormatScore ?? naLabel() }}
+                        } @else if ('upgradeUntilCustomFormatScore' === column.key) {
+                          {{ row.upgradeUntilCustomFormatScore ?? naLabel() }}
+                        } @else {
+                          {{ row[column.key] }}
+                        }
+                      </ng-template>
+                    }
+                  </app-radarr-table>
+                </section>
+              }
+            }
+
+            @for (table of visibleSonarrTables(); track table.instanceId) {
+              @if (table.series.length > 0) {
+                <section>
+                  <app-sonarr-table [table]="table">
+                    @for (column of sonarrSeriesColumns(); track column.key) {
+                      <ng-template appTableColumn [appTableColumnConfig]="column" let-row>
+                        @if ('title' === column.key && row.url) {
+                          <a [href]="row.url" class="text-link" target="_blank" rel="noopener" (click)="$event.stopPropagation()">
+                            {{ row[column.key] }}
+                          </a>
+                        } @else if ('hasFile' === column.key) {
+                          {{ fileStatusLabel(row.hasFile) }}
+                        } @else if ('customFormatScore' === column.key) {
+                          {{ row.customFormatScore ?? naLabel() }}
+                        } @else if ('upgradeUntilCustomFormatScore' === column.key) {
+                          {{ row.upgradeUntilCustomFormatScore ?? naLabel() }}
+                        } @else {
+                          {{ row[column.key] }}
+                        }
+                      </ng-template>
+                    }
+
+                    @for (column of sonarrSeasonColumns(); track column.key) {
+                      <ng-template appTableColumn [appTableColumnConfig]="column" let-season>
+                        @if (column.key === 'number') {
+                          {{ seasonNumberLabel(season.number) }}
+                        } @else {
+                          {{ season[column.key] }}
+                        }
+                      </ng-template>
+                    }
+
+                    @for (column of sonarrEpisodeColumns(); track column.key) {
+                      <ng-template appTableColumn [appTableColumnConfig]="column" let-episode>
+                        @if ('title' === column.key) {
+                          {{ episode.title }}
+                        } @else if ('hasFile' === column.key) {
+                          {{ fileStatusLabel(episode.hasFile) }}
+                        } @else if ('monitored' === column.key) {
+                          {{ monitoredLabel(episode.monitored) }}
+                        } @else if ('customFormatScore' === column.key) {
+                          {{ episode.customFormatScore ?? naLabel() }}
+                        } @else if ('airDateUtc' === column.key) {
+                          {{ episode.airDateUtc | appDate: 'mediumDate' }}
+                        } @else {
+                          {{ episode[column.key] }}
+                        }
+                      </ng-template>
+                    }
+                  </app-sonarr-table>
+                </section>
+              }
+            }
+          }
+        }
+      }
+    }
+  </section>
+</main>

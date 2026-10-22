@@ -1,0 +1,10 @@
+<div class="feedback-toast-content">
+  <span
+    class="material-symbols-outlined feedback-toast-icon"
+    [class.is-success]="data.type === 'success'"
+    [class.is-error]="data.type === 'error'"
+  >
+    {{ data.type === 'success' ? 'check_circle' : 'error' }}
+  </span>
+  <span class="feedback-toast-message">{{ data.message }}</span>
+</div>

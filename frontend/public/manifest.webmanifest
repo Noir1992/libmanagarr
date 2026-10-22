@@ -1,0 +1,26 @@
+{
+  "name": "libmanagarr",
+  "short_name": "libmanagarr",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#eef3f7",
+  "theme_color": "#1f6feb",
+  "description": "Dashboard for Sonarr and Radarr low custom score analysis.",
+  "icons": [
+    {
+      "src": "icons/icon-512.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

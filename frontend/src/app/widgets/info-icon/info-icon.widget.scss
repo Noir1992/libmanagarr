@@ -1,0 +1,60 @@
+.info-popover,
+.info-popover-ghost {
+  position: relative;
+  min-width: 200px;
+  max-width: 280px;
+  padding: var(--theme-default-gap-small) var(--theme-default-gap);
+  background: var(--theme-panel-bg);
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  box-shadow: var(--theme-elevated-shadow);
+
+  p {
+    margin: 0;
+    color: var(--theme-muted);
+    font-size: 13px;
+  }
+}
+
+/* Offscreen twin used to measure the panel box before the overlay opens. */
+.info-popover-ghost {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  visibility: hidden;
+}
+
+.info-popover-arrow {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--theme-panel-bg);
+}
+
+.info-popover--right .info-popover-arrow {
+  left: -6px;
+  border-left: 1px solid var(--theme-border-color);
+  border-bottom: 1px solid var(--theme-border-color);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.info-popover--left .info-popover-arrow {
+  right: -6px;
+  border-right: 1px solid var(--theme-border-color);
+  border-top: 1px solid var(--theme-border-color);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.info-popover--below .info-popover-arrow {
+  top: -6px;
+  border-left: 1px solid var(--theme-border-color);
+  border-top: 1px solid var(--theme-border-color);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.info-popover--above .info-popover-arrow {
+  bottom: -6px;
+  border-right: 1px solid var(--theme-border-color);
+  border-bottom: 1px solid var(--theme-border-color);
+  transform: translateX(-50%) rotate(45deg);
+}

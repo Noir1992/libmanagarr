@@ -1,0 +1,121 @@
+<section class="card" aria-label="{{ table().instanceName }}">
+  <div class="card-header">
+    <h2 class="card-title">{{ table().instanceName }}</h2>
+
+    @if (table().syncedAt) {
+      <span class="card-subtitle">
+        ({{ table().series.length }} {{ getSeriesCountLabel(table().series.length) }} - {{ updatedLabel() }}:
+        {{ table().syncedAt | appDate: 'medium' }})
+      </span>
+    }
+
+    <div class="card-header-actions">
+      <button type="button" mat-icon-button (click)="toggleCollapsed()">
+        <span class="material-symbols-outlined collapse-icon" [class.is-collapsed]="collapsed()"> expand_more </span>
+      </button>
+    </div>
+  </div>
+
+  @if (!collapsed()) {
+    <div class="card-content" animate.enter="expand-in" animate.leave="expand-out">
+      <table mat-table [dataSource]="table().series" [trackBy]="trackBySeriesId" multiTemplateDataRows>
+        @for (column of seriesColumns(); track column.appTableColumnConfig().key) {
+          <ng-container [matColumnDef]="column.appTableColumnConfig().key">
+            <th mat-header-cell *matHeaderCellDef>
+              {{ column.appTableColumnConfig().header }}
+            </th>
+
+            <td mat-cell *matCellDef="let row">
+              @if (column.appTableColumnConfig().showExpandIcon) {
+                <span class="material-symbols-outlined collapse-icon in-table" [class.is-collapsed]="!isExpanded(row.id.toString())">
+                  expand_more
+                </span>
+              }
+              <ng-container [ngTemplateOutlet]="column.templateRef" [ngTemplateOutletContext]="{ $implicit: row }" />
+            </td>
+          </ng-container>
+        }
+
+        <ng-container matColumnDef="expandedDetail">
+          <td mat-cell *matCellDef="let row" [attr.colspan]="seriesColumnIds().length">
+            <table class="detail-table">
+              <thead>
+                <tr>
+                  @for (seasonColumn of seasonColumns(); track seasonColumn.appTableColumnConfig().key) {
+                    <th scope="col">{{ seasonColumn.appTableColumnConfig().header }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (season of getSeasonSummaries(row); track season.number) {
+                  <tr class="clickable-row" (click)="toggleExpandedKey(row.id + '' + season.number)">
+                    @for (seasonColumn of seasonColumns(); track seasonColumn.appTableColumnConfig().key) {
+                      <td>
+                        @if (seasonColumn.appTableColumnConfig().key === 'number') {
+                          <span
+                            class="material-symbols-outlined collapse-icon in-table"
+                            [class.is-collapsed]="!isExpanded(row.id + '' + season.number)"
+                          >
+                            expand_more
+                          </span>
+                        }
+                        <ng-container [ngTemplateOutlet]="seasonColumn.templateRef" [ngTemplateOutletContext]="{ $implicit: season }" />
+                      </td>
+                    }
+                  </tr>
+                  @if (isExpanded(row.id + '' + season.number)) {
+                    <tr>
+                      <td [attr.colspan]="seasonColumnIds().length || 1" class="mat-column-expandedDetail">
+                        <table class="detail-table">
+                          <thead>
+                            <tr>
+                              @for (episodeColumn of episodeColumns(); track episodeColumn.appTableColumnConfig().key) {
+                                <th scope="col">
+                                  {{ episodeColumn.appTableColumnConfig().header }}
+                                </th>
+                              }
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (episode of season.episodes; track episode.number) {
+                              <tr
+                                class="hover-row clickable-row episode-detail-row"
+                                tabindex="0"
+                                (click)="openEpisodeDetails(row, season, episode, $event)"
+                                (keydown.enter)="openEpisodeDetails(row, season, episode, $event)"
+                                (keydown.space)="openEpisodeDetails(row, season, episode, $event)"
+                              >
+                                @for (episodeColumn of episodeColumns(); track episodeColumn.appTableColumnConfig().key) {
+                                  <td>
+                                    <ng-container
+                                      [ngTemplateOutlet]="episodeColumn.templateRef"
+                                      [ngTemplateOutletContext]="{ $implicit: episode }"
+                                    />
+                                  </td>
+                                }
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="seriesColumnIds()"></tr>
+        <tr
+          mat-row
+          *matRowDef="let row; columns: seriesColumnIds()"
+          class="series-row"
+          [class.is-expanded]="isExpanded(row.id.toString())"
+          (click)="toggleExpandedKey(row.id.toString())"
+        ></tr>
+        <tr mat-row *matRowDef="let _; columns: detailColumn; when: isDetailRow"></tr>
+      </table>
+    </div>
+  }
+</section>

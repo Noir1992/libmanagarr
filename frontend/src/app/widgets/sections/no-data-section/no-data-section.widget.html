@@ -1,0 +1,7 @@
+<section class="no-data-state">
+  @if (isFiltered()) {
+    {{ noDataForFilterText() }}
+  } @else {
+    {{ noDataText() }}
+  }
+</section>

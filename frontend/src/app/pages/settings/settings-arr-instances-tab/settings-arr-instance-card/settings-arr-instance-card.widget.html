@@ -1,0 +1,145 @@
+<div
+  class="instance-card"
+  [class.has-error]="hasServerError()"
+  [class.has-success]="connectionFeedbackState() === 'success' && !hasServerError()"
+  [formGroup]="instanceGroup()"
+>
+  <div class="instance-grid">
+    <div class="field">
+      <div class="field-label-row">
+        <label [attr.for]="nameFieldId">{{ instanceNameLabel() }}*</label>
+      </div>
+
+      <div class="field-control-wrap">
+        <input
+          [id]="nameFieldId"
+          matInput
+          type="text"
+          formControlName="name"
+          [class.has-error]="instanceFieldHasError('name')"
+          maxlength="255"
+          spellcheck="false"
+          (blur)="saveNameAsync()"
+        />
+        <app-feedback-icon
+          [state]="isNameSavingState() ? 'loading' : nameFeedbackState()"
+          variant="overlay"
+          [tooltipText]="nameFeedbackMessageState()"
+        />
+      </div>
+
+      @if (instanceFieldErrorMessage('name')) {
+        <p class="field-error">{{ instanceFieldErrorMessage('name') }}</p>
+      }
+    </div>
+
+    <div class="field">
+      <div class="field-label-row">
+        <label [attr.for]="baseUrlFieldId">{{ instanceUrlLabel() }}*</label>
+        <app-info-icon [messageText]="instanceUrlInfoMessage()" />
+      </div>
+
+      <div class="field-control-wrap">
+        <input
+          [id]="baseUrlFieldId"
+          matInput
+          type="url"
+          formControlName="baseUrl"
+          [class.has-error]="instanceFieldHasError('baseUrl')"
+          maxlength="255"
+        />
+      </div>
+
+      @if (instanceFieldErrorMessage('baseUrl')) {
+        <p class="field-error">{{ instanceFieldErrorMessage('baseUrl') }}</p>
+      }
+    </div>
+
+    <div class="field field-wide">
+      <div class="field-label-row">
+        <label [attr.for]="apiKeyFieldId">{{ instanceApiKeyLabel() }}*</label>
+        <app-info-icon [messageText]="instanceApiKeyInfoMessage()" />
+      </div>
+
+      <span class="field-control-wrap password-wrap">
+        <input
+          [id]="apiKeyFieldId"
+          matInput
+          [type]="isApiKeyVisibleState() ? 'text' : 'password'"
+          formControlName="apiKey"
+          [class.has-error]="instanceFieldHasError('apiKey')"
+          maxlength="255"
+        />
+
+        <button
+          type="button"
+          mat-icon-button
+          class="material-symbols-outlined"
+          [attr.aria-label]="isApiKeyVisibleState() ? 'Hide API key' : 'Show API key'"
+          (click)="toggleApiKeyVisibility()"
+        >
+          <span class="visibility-icon-stack">
+            <span class="visibility-icon" [class.is-active]="!isApiKeyVisibleState()">visibility</span>
+            <span class="visibility-icon" [class.is-active]="isApiKeyVisibleState()">visibility_off</span>
+          </span>
+        </button>
+      </span>
+
+      @if (instanceFieldErrorMessage('apiKey')) {
+        <p class="field-error">{{ instanceFieldErrorMessage('apiKey') }}</p>
+      }
+    </div>
+  </div>
+
+  <div class="instance-actions">
+    <button
+      type="button"
+      mat-stroked-button
+      class="secondary-button"
+      [disabled]="isTestingState() || isSyncingThisInstance()"
+      (click)="testConnectionAsync()"
+    >
+      <span class="button-content">
+        <span>{{ testConnectionLabel() }}</span>
+        <app-feedback-icon
+          [state]="isTestingState() ? 'loading' : connectionFeedbackState()"
+          variant="inline"
+          [tooltipText]="connectionFeedbackMessage()"
+        />
+      </span>
+    </button>
+
+    <button type="button" mat-stroked-button class="secondary-button" [disabled]="!canSync()" (click)="syncInstanceAsync()">
+      <span class="button-content">
+        <span>{{ syncLabel() }}</span>
+        <app-feedback-icon
+          [state]="isSyncingThisInstance() ? 'loading' : syncFeedbackState()"
+          variant="inline"
+          [tooltipText]="syncFeedbackMessageState()"
+        />
+      </span>
+    </button>
+
+    <button
+      type="button"
+      mat-flat-button
+      class="danger-button"
+      [disabled]="isDeletingState() || isSyncingThisInstance()"
+      (click)="removeInstance.emit()"
+    >
+      <mat-icon class="material-symbols-outlined">delete</mat-icon>
+
+      <span class="button-content">
+        <span>{{ removeLabel() }}</span>
+        <app-feedback-icon [state]="isDeletingState() ? 'loading' : null" variant="inline" />
+      </span>
+    </button>
+  </div>
+
+  @if (connectionFeedbackMessage()) {
+    <div class="connection-test-required-message">
+      <mat-icon class="material-symbols-outlined">info_circle</mat-icon>
+      {{ connectionFeedbackMessage() }}
+    </div>
+  }
+</div>

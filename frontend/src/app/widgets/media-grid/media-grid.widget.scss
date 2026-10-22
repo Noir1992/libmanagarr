@@ -1,0 +1,17 @@
+.media-grid-window {
+  position: relative;
+
+  &.is-windowed .media-grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+  }
+}
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+  gap: var(--theme-default-gap);
+  padding-bottom: var(--theme-default-gap);
+}

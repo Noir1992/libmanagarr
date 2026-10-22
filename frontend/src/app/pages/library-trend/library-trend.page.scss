@@ -1,0 +1,65 @@
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: var(--theme-default-gap);
+}
+
+.trend-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 0.75rem;
+
+  .trend-overview-item-label {
+    color: var(--theme-muted);
+  }
+
+  .trend-overview-item-value {
+    color: var(--theme-text);
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+}
+
+.trend-history-card {
+  margin-top: var(--theme-default-gap);
+}
+
+.history-viewport {
+  width: 100%;
+  height: min(60vh, 32rem);
+  overflow: auto;
+
+  // Without this, the browser's scroll anchoring repeatedly "corrects" scrollTop while the
+  // CDK virtual scroll swaps rows above the viewport, causing an up/down jitter loop.
+  overflow-anchor: none;
+}
+
+.history-empty-state {
+  padding: 1rem 0.85rem;
+  color: var(--theme-muted);
+}
+
+.mat-mdc-cell {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mat-mdc-row {
+  --mat-table-row-item-container-height: auto;
+}
+
+.history-entry-highlight {
+  background-color: color-mix(in srgb, var(--theme-accent) 22%, transparent);
+}
+
+.history-series-title {
+  color: var(--theme-muted);
+  font-weight: 400;
+  font-size: 0.9em;
+}
+
+@media (max-width: 720px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}

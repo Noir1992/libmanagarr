@@ -1,0 +1,553 @@
+/**
+ * Angular Material CSS Custom Property Overrides
+ *
+ * Uses the official --mat-* CSS custom properties wherever available.
+ * Layout-only overrides (display, width, overflow, margin) remain as CSS
+ * since no CSS custom property exists for them.
+ *
+ * Reference: https://material.angular.io/guide/css-custom-properties
+ */
+
+/* ------------------------------------------------------------------ */
+/*  Global theme-aware overrides (light + dark)                       */
+/* ------------------------------------------------------------------ */
+
+:root {
+  /* Dialog */
+  --mat-dialog-container-color: var(--theme-panel-bg);
+  --mat-dialog-subhead-color: var(--theme-text);
+  --mat-dialog-supporting-text-color: var(--theme-text);
+  --mat-dialog-subhead-font: var(--app-font-family);
+  --mat-dialog-supporting-text-font: var(--app-font-family);
+
+  /* Tabs */
+  --mat-tab-label-text-font: var(--app-font-family);
+  --mat-tab-inactive-label-text-color: var(--theme-text);
+  --mat-tab-inactive-focus-label-text-color: var(--theme-text);
+  --mat-tab-active-label-text-color: var(--theme-text);
+  --mat-tab-active-focus-label-text-color: var(--theme-text);
+  --mat-tab-inactive-hover-label-text-color: var(--theme-text);
+  --mat-tab-active-hover-label-text-color: var(--theme-text);
+  --mat-tab-active-indicator-color: var(--theme-accent);
+  --mat-tab-active-hover-indicator-color: var(--theme-accent);
+  --mat-tab-active-focus-indicator-color: var(--theme-accent);
+  --mat-tab-pagination-icon-color: var(--theme-text);
+
+  /* Badge */
+  --mat-badge-text-color: var(--theme-text);
+  --mat-badge-background-color: var(--theme-badge-bg);
+  --mat-badge-text-font: var(--app-font-family);
+
+  /* Buttons */
+  --mat-button-text-label-text-font: var(--app-font-family);
+  --mat-button-outlined-label-text-font: var(--app-font-family);
+  --mat-button-filled-label-text-font: var(--app-font-family);
+  --mat-button-tonal-label-text-font: var(--app-font-family);
+  --mat-button-protected-label-text-font: var(--app-font-family);
+
+  /* Checkbox */
+  --mat-checkbox-label-text-font: var(--app-font-family);
+  --mat-checkbox-label-text-color: var(--theme-text);
+  --mat-checkbox-disabled-label-color: var(--theme-muted);
+  --mat-checkbox-selected-checkmark-color: #ffffff;
+  --mat-checkbox-selected-icon-color: var(--theme-accent);
+  --mat-checkbox-selected-hover-icon-color: var(--theme-accent);
+  --mat-checkbox-selected-focus-icon-color: var(--theme-accent);
+  --mat-checkbox-unselected-icon-color: var(--theme-border-color);
+  --mat-checkbox-unselected-hover-icon-color: var(--theme-border-color);
+  --mat-checkbox-unselected-focus-icon-color: var(--theme-border-color);
+
+  /* Datepicker / Calendar */
+  --mat-datepicker-calendar-container-background-color: var(--theme-input);
+  --mat-datepicker-calendar-container-text-color: var(--theme-text);
+  --mat-datepicker-calendar-date-text-color: var(--theme-text);
+  --mat-datepicker-calendar-date-selected-state-background-color: var(--theme-accent);
+  --mat-datepicker-calendar-date-selected-state-text-color: #ffffff;
+  --mat-datepicker-calendar-date-in-range-state-background-color: var(--theme-accent-soft);
+  --mat-datepicker-calendar-date-hover-state-background-color: var(--theme-interactive-hover-bg);
+  --mat-datepicker-calendar-date-today-outline-color: var(--theme-text);
+  --mat-datepicker-calendar-header-text-color: var(--theme-text);
+  --mat-datepicker-calendar-body-label-text-color: var(--theme-text);
+  --mat-datepicker-calendar-period-button-text-color: var(--theme-text);
+  --mat-datepicker-calendar-period-button-icon-color: var(--theme-text);
+  --mat-datepicker-calendar-navigation-button-icon-color: var(--theme-text);
+  --mat-datepicker-toggle-icon-color: var(--theme-text);
+  --mat-datepicker-calendar-text-font: var(--app-font-family);
+  --mat-datepicker-toggle-active-state-icon-color: var(--theme-text);
+  --mat-datepicker-range-input-separator-color: var(--theme-text);
+  --mat-datepicker-calendar-container-shape: var(--theme-default-gap-small);
+
+  /* Time Picker */
+  --mat-timepicker-container-background-color: var(--theme-input);
+  --mat-timepicker-container-shape: var(--theme-default-gap-small);
+
+  /* Menu */
+  --mat-menu-container-color: var(--theme-panel-bg);
+  --mat-menu-container-shape: var(--theme-border-radius);
+  --mat-menu-item-label-text-color: var(--theme-text);
+  --mat-menu-item-icon-color: var(--theme-text);
+  --mat-menu-item-label-text-font: var(--app-font-family);
+
+  /* Select */
+  --mat-select-enabled-trigger-text-color: var(--theme-text);
+  --mat-select-panel-background-color: var(--theme-input);
+  --mat-select-trigger-text-font: var(--app-font-family);
+  --mat-select-enabled-arrow-color: var(--theme-text);
+  --mat-select-trigger-text-line-height: 33px;
+
+  /* Select-Option */
+  --mat-option-label-text-color: var(--theme-text);
+  --mat-option-selected-state-layer-color: var(--theme-input-hover);
+  --mat-option-hover-state-layer-color: var(--theme-input-hover);
+  --mat-option-label-text-font: var(--app-font-family);
+  --mat-option-selected-state-label-text-color: var(--theme-text);
+  --mat-option-focus-state-layer-color: var(--theme-input-selected);
+
+  /* Form Field (outlined) */
+  --mat-form-field-outlined-input-text-color: var(--theme-text);
+  --mat-form-field-outlined-label-text-color: var(--theme-text);
+  --mat-form-field-outlined-hover-label-text-color: var(--theme-text);
+  --mat-form-field-container-text-font: var(--app-font-family);
+  --mat-form-field-outlined-label-text-font: var(--app-font-family);
+
+  /* Table */
+  --mat-table-background-color: var(--theme-panel-bg);
+  --mat-table-header-headline-font: var(--app-font-family);
+  --mat-table-header-headline-color: var(--theme-text);
+  --mat-table-header-container-height: 41px;
+  --mat-table-header-headline-tracking: 0.04em;
+  --mat-table-row-item-label-text-color: var(--theme-text);
+  --mat-table-row-item-outline-color: var(--theme-table-rule);
+  --mat-table-row-item-label-text-font: var(--app-font-family);
+
+  /* Snackbar */
+  --mat-snack-bar-container-color: var(--theme-panel-bg);
+  --mat-snack-bar-supporting-text-color: var(--theme-text);
+  --mat-snack-bar-supporting-text-font: var(--app-font-family);
+
+  /* Icon Button */
+  --mat-icon-button-icon-color: var(--theme-text);
+  --mat-icon-button-disabled-icon-color: none;
+
+  /* Slide Toggle */
+  --mat-slide-toggle-track-width: 40px;
+  --mat-slide-toggle-track-height: 24px;
+  --mat-slide-toggle-state-layer-size: 24px;
+  --mat-slide-toggle-selected-handle-size: 16px;
+  --mat-slide-toggle-unselected-handle-size: 16px;
+  --mat-slide-toggle-selected-with-icon-handle-horizontal-margin: 0 18px;
+  --mat-slide-toggle-unselected-with-icon-handle-horizontal-margin: 0 2px;
+  --mat-slide-toggle-with-icon-handle-size: 20px;
+  --mat-slide-toggle-selected-handle-horizontal-margin: 0 18px;
+  --mat-slide-toggle-unselected-handle-horizontal-margin: 0 4px;
+  --mat-slide-toggle-pressed-handle-size: 19px;
+  --mat-slide-toggle-selected-pressed-handle-horizontal-margin: 0 18px;
+  --mat-slide-toggle-unselected-pressed-handle-horizontal-margin: 0 4px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Dialog – layout overrides (no CSS vars for border / border-radius) */
+/* ------------------------------------------------------------------ */
+
+.mat-mdc-dialog-container .mdc-dialog__surface {
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius) !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Select – layout overrides                                         */
+/* ------------------------------------------------------------------ */
+
+mat-select {
+  box-sizing: border-box;
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  padding: 0 10px;
+  background: var(--theme-input);
+  overflow: hidden;
+
+  &:hover {
+    background-color: var(--theme-input-hover);
+  }
+
+  &.mat-select-open {
+    border-radius: var(--theme-border-radius) var(--theme-border-radius) 0 0;
+  }
+
+  div.mat-mdc-select-panel {
+    border: 1px solid var(--theme-border-color);
+    border-radius: 0 0 var(--theme-border-radius) var(--theme-border-radius);
+    margin-left: -11px;
+    padding: 0;
+
+    .mdc-list-item--selected {
+      background-color: var(--theme-input-selected);
+    }
+
+    .mat-mdc-option {
+      min-height: 33px;
+    }
+
+    .mat-mdc-option-active:hover {
+      background-color: var(--theme-input-hover);
+    }
+
+    .mdc-list-item__primary-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+}
+
+.filter-option-with-count .mdc-list-item__primary-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-option-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.filter-option-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-option-count {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--theme-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+input.mat-mdc-input-element,
+textarea.mat-mdc-input-element {
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  padding: 5px 10px;
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-input);
+  color: var(--theme-text);
+  font: var(--app-font-family);
+
+  &:disabled {
+    background-color: var(--theme-input-disabled);
+    color: var(--theme-muted);
+  }
+
+  &:hover:not(:disabled) {
+    background-color: var(--theme-input-hover);
+  }
+
+  &:focus {
+    outline: 0;
+  }
+
+  &:-webkit-autofill,
+  &:-webkit-autofill:hover,
+  &:-webkit-autofill:focus,
+  &:-webkit-autofill:active,
+  &.cdk-text-field-autofilled,
+  &.cdk-text-field-autofilled:hover,
+  &.cdk-text-field-autofilled:focus,
+  &.cdk-text-field-autofilled:active {
+    box-shadow: 0 0 0 1000px var(--theme-input) inset !important;
+    -webkit-box-shadow: 0 0 0 1000px var(--theme-input) inset !important;
+    background-color: var(--theme-input) !important;
+    color: var(--theme-text) !important;
+    -webkit-text-fill-color: var(--theme-text) !important;
+    caret-color: var(--theme-text);
+    transition: background-color 9999s ease-out 0s;
+  }
+
+  &:focus:-webkit-autofill,
+  &:focus.cdk-text-field-autofilled {
+    background-color: var(--theme-input) !important;
+    color: var(--theme-text) !important;
+    -webkit-text-fill-color: var(--theme-text) !important;
+  }
+
+  &.no-spinners {
+    appearance: textfield;
+    -moz-appearance: textfield;
+
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+      appearance: none;
+      margin: 0;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Snackbar – layout + color overrides                               */
+/* ------------------------------------------------------------------ */
+
+.mat-mdc-snack-bar-container.codec-snackbar {
+  --mat-snack-bar-container-shape: 12px;
+  --mat-snack-bar-container-color: var(--theme-panel-bg);
+  --mat-snack-bar-supporting-text-color: var(--theme-text);
+
+  .mat-mdc-snackbar-surface {
+    min-width: 0;
+    padding: 0;
+  }
+
+  .mdc-snackbar__label {
+    padding: 0;
+  }
+}
+
+.mat-mdc-snack-bar-container.codec-snackbar-success {
+  --mat-snack-bar-container-color: color-mix(in srgb, #2e7d32 26%, var(--theme-panel-bg));
+  --mat-snack-bar-supporting-text-color: var(--theme-text);
+  --mat-snack-bar-button-color: #2e7d32;
+
+  .mat-mdc-snackbar-surface {
+    box-shadow: 0 8px 24px rgb(46 125 50 / 20%);
+    outline: 1px solid color-mix(in srgb, #2e7d32 28%, transparent);
+  }
+}
+
+.mat-mdc-snack-bar-container.codec-snackbar-error {
+  --mat-snack-bar-container-color: color-mix(in srgb, #c62828 26%, var(--theme-panel-bg));
+  --mat-snack-bar-supporting-text-color: var(--theme-text);
+  --mat-snack-bar-button-color: #c62828;
+
+  .mat-mdc-snackbar-surface {
+    box-shadow: 0 8px 24px rgb(198 40 40 / 20%);
+    outline: 1px solid color-mix(in srgb, #c62828 28%, transparent);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Table – row background override                                   */
+/* ------------------------------------------------------------------ */
+
+.mat-mdc-table {
+  border: 1px solid var(--theme-border-color) !important;
+
+  border-radius: var(--theme-border-radius);
+
+  .mat-mdc-header-cell {
+    background: var(--theme-table-head) !important;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 0 var(--theme-default-gap-small);
+
+    &:first-child {
+      border-top-left-radius: var(--theme-border-radius);
+    }
+
+    &:last-child {
+      border-top-right-radius: var(--theme-border-radius);
+    }
+  }
+
+  .mat-mdc-header-cell,
+  .mat-mdc-cell,
+  .mat-mdc-footer-cell {
+    border-color: var(--theme-border-color);
+  }
+
+  .mat-mdc-cell {
+    padding: 4px var(--theme-default-gap-small);
+  }
+
+  .mat-mdc-row:last-child {
+    > td:first-child {
+      border-bottom-left-radius: var(--theme-border-radius);
+    }
+
+    > td:last-child {
+      border-bottom-right-radius: var(--theme-border-radius);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Icon Button                                                       */
+/* ------------------------------------------------------------------ */
+
+.mat-mdc-icon-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  --mat-icon-button-icon-size: 24px;
+  --mat-icon-button-state-layer-size: 32px;
+  --mat-icon-button-touch-target-size: 32px;
+
+  &:hover {
+    color: var(--theme-accent);
+    background: var(--theme-interactive-hover-bg);
+  }
+
+  &.small {
+    --mat-icon-button-icon-size: 12px;
+    --mat-icon-button-state-layer-size: 18px;
+    --mat-icon-button-touch-target-size: 18px;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Buttons – MDC overrides (no --mat-outlined-button-* in AM 21.x)   */
+/* ------------------------------------------------------------------ */
+
+button.secondary-button.mat-mdc-outlined-button {
+  --mat-outlined-button-container-shape: var(--theme-default-gap-small);
+  --mdc-outlined-button-container-shape: var(--theme-default-gap-small);
+  --mdc-outlined-button-container-height: 30px;
+  border-color: var(--theme-border-color);
+  color: var(--theme-accent);
+  background: var(--theme-accent-soft);
+  border-radius: var(--theme-border-radius) !important;
+}
+
+button.secondary-button.mat-mdc-outlined-button .mat-mdc-button-persistent-ripple,
+button.secondary-button.mat-mdc-outlined-button .mdc-button__ripple {
+  border-radius: inherit;
+}
+
+button.danger-button.mat-mdc-unelevated-button {
+  --mat-filled-button-container-shape: var(--theme-default-gap-small);
+  --mdc-filled-button-container-shape: var(--theme-default-gap-small);
+  color: var(--theme-danger-color);
+  background: var(--theme-danger-surface);
+  box-shadow: none;
+  border-radius: var(--theme-border-radius) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Menu Panel                                                        */
+/* ------------------------------------------------------------------ */
+
+.mat-mdc-menu-panel {
+  min-width: 0;
+  border: 1px solid var(--theme-border-color);
+}
+
+.mat-mdc-menu-panel .mat-mdc-menu-item {
+  &:hover:not([disabled]) {
+    background-color: var(--theme-interactive-hover-bg);
+    color: var(--theme-text);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Date Range Picker                                                 */
+/* ------------------------------------------------------------------ */
+
+.date-range-form-field {
+  .mat-mdc-text-field-wrapper {
+    height: 40px;
+    background-color: var(--theme-input);
+    border-radius: var(--theme-border-radius);
+
+    --mat-form-field-outlined-container-shape: var(--theme-default-gap-small);
+    --mat-form-field-outlined-outline-color: var(--theme-border-color);
+    --mat-form-field-outlined-hover-outline-color: var(--theme-border-color);
+    --mat-form-field-outlined-focus-outline-color: var(--theme-border-color);
+    --mat-form-field-outlined-focus-label-text-color: var(--theme-text);
+    --mat-form-field-outlined-focus-outline-width: 1px;
+    --mat-form-field-outlined-caret-color: var(--theme-text);
+    --mat-form-field-container-vertical-padding: var(--theme-default-gap-small);
+    --mat-form-field-container-height: 40px;
+
+    &:hover {
+      background-color: var(--theme-input-hover);
+    }
+
+    .mat-mdc-form-field-icon-suffix {
+      padding-right: 2px;
+    }
+  }
+}
+
+.mat-datepicker-content {
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Time Picker                                                       */
+/* ------------------------------------------------------------------ */
+
+.time-picker-form-field {
+  .mat-mdc-text-field-wrapper {
+    height: 40px;
+    background-color: var(--theme-input);
+    border-radius: var(--theme-border-radius);
+
+    --mat-form-field-outlined-container-shape: var(--theme-default-gap-small);
+    --mat-form-field-outlined-outline-color: var(--theme-border-color);
+    --mat-form-field-outlined-hover-outline-color: var(--theme-border-color);
+    --mat-form-field-outlined-focus-outline-color: var(--theme-border-color);
+    --mat-form-field-outlined-focus-label-text-color: var(--theme-text);
+    --mat-form-field-outlined-focus-outline-width: 1px;
+    --mat-form-field-trailing-icon-color: var(--theme-text);
+    --mat-form-field-outlined-caret-color: var(--theme-text);
+    --mat-form-field-container-vertical-padding: var(--theme-default-gap-small);
+    --mat-form-field-container-height: 40px;
+
+    &:hover {
+      background-color: var(--theme-input-hover);
+    }
+
+    .mat-mdc-form-field-icon-suffix {
+      padding-right: 2px;
+    }
+  }
+
+  .mat-timepicker-panel {
+    border: 1px solid var(--theme-border-color);
+    border-top: none;
+    border-radius: 0 0 var(--theme-border-radius) var(--theme-border-radius);
+
+    .mat-pseudo-checkbox {
+      display: none;
+    }
+
+    .mat-mdc-option-active:hover {
+      background-color: var(--theme-input-hover);
+    }
+  }
+
+  &:has(.cdk-overlay-popover) {
+    .mat-mdc-text-field-wrapper {
+      border-radius: var(--theme-border-radius) var(--theme-border-radius) 0 0;
+
+      .mdc-notched-outline__leading {
+        border-bottom-left-radius: 0;
+      }
+
+      .mdc-notched-outline__trailing {
+        border-bottom-right-radius: 0;
+      }
+    }
+  }
+
+  .mat-timepicker-input {
+    padding: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tabs                                                              */
+/* ------------------------------------------------------------------ */
+
+.mat-mdc-tab {
+  padding: 0 20px !important;
+  --mat-tab-container-height: 40px;
+
+  &:hover {
+    background-color: var(--theme-input-hover);
+  }
+}

@@ -1,0 +1,360 @@
+<section class="tab-header">{{ descriptionLabel() }}</section>
+
+<section class="tab-content">
+  @if (accountError()) {
+    <p class="field-error">{{ accountError() }}</p>
+    <button type="button" mat-stroked-button class="secondary-button" (click)="retryAccountLoadAsync()">{{ retryLabel() }}</button>
+  } @else if (accountLoading()) {
+    <p class="account-loading">{{ loadingLabel() }}</p>
+  } @else {
+    <section class="card">
+      <div class="card-content account-grid">
+        <div class="field">
+          <div class="field-label-row">
+            <label for="account-username">{{ usernameLabel() }}</label>
+          </div>
+          <div class="field-control-wrap">
+            <input matInput id="account-username" type="text" disabled [value]="account()?.username ?? ''" />
+          </div>
+        </div>
+
+        @if (twoFactorEnabled()) {
+          <div class="account-status">
+            <span class="account-status-detail">{{ recoveryCodesRemainingLabel() }}</span>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">{{ passwordTitleLabel() }}</div>
+      <div class="card-content settings-account-stack" [formGroup]="passwordForm">
+        @if (passwordChanged()) {
+          <p class="account-notice">{{ passwordChangedLabel() }}</p>
+          <div>
+            <button type="button" mat-stroked-button class="secondary-button" (click)="startReloginAsync()">{{ reloginLabel() }}</button>
+          </div>
+        } @else {
+          <div class="field">
+            <div class="field-label-row">
+              <label for="account-current-password">{{ currentPasswordLabel() }}</label>
+            </div>
+            <div class="field-control-wrap">
+              <input
+                matInput
+                id="account-current-password"
+                type="password"
+                formControlName="currentPassword"
+                autocomplete="current-password"
+                [disabled]="passwordBusy()"
+              />
+            </div>
+            @if (passwordFieldErrors().currentPassword) {
+              <p class="field-error">{{ passwordFieldErrors().currentPassword }}</p>
+            }
+          </div>
+
+          <div class="field">
+            <div class="field-label-row">
+              <label for="account-new-password">{{ newPasswordLabel() }}</label>
+              <app-info-icon [messageText]="passwordRequirements()" />
+            </div>
+            <div class="field-control-wrap">
+              <input
+                matInput
+                id="account-new-password"
+                type="password"
+                formControlName="newPassword"
+                autocomplete="new-password"
+                [disabled]="passwordBusy()"
+              />
+            </div>
+            @if (
+              passwordForm.controls.newPassword.dirty &&
+              (passwordForm.controls.newPassword.hasError('minlength') || passwordForm.controls.newPassword.hasError('maxlength'))
+            ) {
+              <p class="field-error" aria-live="polite">{{ passwordLengthMessage() }}</p>
+            } @else if (passwordFieldErrors().newPassword) {
+              <p class="field-error">{{ passwordFieldErrors().newPassword }}</p>
+            }
+          </div>
+
+          <div class="field">
+            <div class="field-label-row">
+              <label for="account-confirm-password">{{ confirmPasswordLabel() }}</label>
+            </div>
+            <div class="field-control-wrap">
+              <input
+                matInput
+                id="account-confirm-password"
+                type="password"
+                formControlName="confirmPassword"
+                autocomplete="new-password"
+                [disabled]="passwordBusy()"
+              />
+            </div>
+            @if (passwordFieldErrors().confirmPassword) {
+              <p class="field-error">{{ passwordFieldErrors().confirmPassword }}</p>
+            }
+          </div>
+
+          @if (twoFactorEnabled()) {
+            <div class="field">
+              <div class="field-label-row">
+                <label for="account-password-code">{{ passwordUseRecovery() ? recoveryCodeLabel() : codeLabel() }}</label>
+              </div>
+              <div class="field-control-wrap">
+                <input
+                  matInput
+                  id="account-password-code"
+                  type="text"
+                  formControlName="code"
+                  autocomplete="one-time-code"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  [disabled]="passwordBusy()"
+                />
+              </div>
+            </div>
+
+            <div>
+              <button type="button" mat-button (click)="togglePasswordRecoveryUsage()">
+                {{ passwordUseRecovery() ? useAuthenticatorLabel() : useRecoveryLabel() }}
+              </button>
+            </div>
+          }
+
+          @if (passwordError()) {
+            <p class="field-error">{{ passwordError() }}</p>
+          }
+
+          <div>
+            <button
+              type="button"
+              mat-stroked-button
+              class="secondary-button"
+              (click)="changePasswordAsync()"
+              [disabled]="passwordBusy() || passwordForm.invalid"
+            >
+              {{ changePasswordLabel() }}
+            </button>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">{{ twoFactorTitleLabel() }}</div>
+      <div class="card-content settings-account-stack">
+        @if (issuedRecoveryCodes(); as codes) {
+          <p class="account-notice">{{ recoveryCodesTitleLabel() }}</p>
+          <p class="account-warning">{{ recoveryCodesWarningLabel() }}</p>
+          <ul class="recovery-code-list">
+            @for (code of codes; track code) {
+              <li>{{ code }}</li>
+            }
+          </ul>
+          <div class="account-actions">
+            <button type="button" mat-stroked-button class="secondary-button" (click)="copyRecoveryCodesAsync()">
+              {{ copyCodesLabel() }}
+            </button>
+            <button type="button" mat-stroked-button class="secondary-button" (click)="downloadRecoveryCodes()">
+              {{ downloadCodesLabel() }}
+            </button>
+            <button type="button" mat-stroked-button class="secondary-button" (click)="acknowledgeRecoveryCodes()">
+              {{ codesSavedLabel() }}
+            </button>
+          </div>
+        } @else if (!twoFactorEnabled()) {
+          <div class="settings-account-stack" [formGroup]="enableForm">
+            @if (enableStep() === 'idle') {
+              @if (enableError()) {
+                <p class="field-error">{{ enableError() }}</p>
+              }
+
+              <div>
+                <button
+                  type="button"
+                  mat-stroked-button
+                  class="secondary-button"
+                  (click)="startTwoFactorSetupAsync()"
+                  [disabled]="enableBusy()"
+                >
+                  {{ enableTwoFactorLabel() }}
+                </button>
+              </div>
+            } @else {
+              <p class="account-hint">{{ scanInstructionLabel() }}</p>
+              <div class="account-qr">
+                <img [src]="qrCodeUrl()" [alt]="scanInstructionLabel()" width="180" height="180" />
+              </div>
+              <p class="account-shared-key">
+                {{ sharedKeyLabel() }}: <code>{{ setup()?.sharedKey }}</code>
+              </p>
+
+              <div class="field">
+                <div class="field-label-row">
+                  <label for="account-setup-code">{{ codeLabel() }}</label>
+                </div>
+                <div class="field-control-wrap">
+                  <input
+                    matInput
+                    id="account-setup-code"
+                    type="text"
+                    formControlName="code"
+                    (keydown.enter)="$event.preventDefault(); confirmTwoFactorSetupAsync()"
+                    autocomplete="one-time-code"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    [disabled]="enableBusy()"
+                  />
+                </div>
+              </div>
+
+              @if (enableError()) {
+                <p class="field-error">{{ enableError() }}</p>
+              }
+
+              <div class="account-actions">
+                <button
+                  type="button"
+                  mat-stroked-button
+                  class="secondary-button"
+                  (click)="confirmTwoFactorSetupAsync()"
+                  [disabled]="enableBusy() || enableForm.controls.code.invalid"
+                >
+                  {{ confirmSetupLabel() }}
+                </button>
+                <button
+                  type="button"
+                  mat-stroked-button
+                  class="secondary-button"
+                  (click)="cancelTwoFactorSetupAsync()"
+                  [disabled]="enableBusy()"
+                >
+                  {{ cancelSetupLabel() }}
+                </button>
+              </div>
+            }
+          </div>
+        } @else {
+          <div [formGroup]="disableForm">
+            <div class="field">
+              <div class="field-label-row">
+                <label for="account-disable-password">{{ currentPasswordLabel() }}</label>
+              </div>
+              <div class="field-control-wrap">
+                <input
+                  matInput
+                  id="account-disable-password"
+                  type="password"
+                  formControlName="currentPassword"
+                  autocomplete="current-password"
+                  [disabled]="disableBusy()"
+                />
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-label-row">
+                <label for="account-disable-code">{{ disableUseRecovery() ? recoveryCodeLabel() : codeLabel() }}</label>
+              </div>
+              <div class="field-control-wrap">
+                <input
+                  matInput
+                  id="account-disable-code"
+                  type="text"
+                  formControlName="code"
+                  autocomplete="one-time-code"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  [disabled]="disableBusy()"
+                />
+              </div>
+            </div>
+
+            <div>
+              <button type="button" mat-button (click)="toggleDisableRecoveryUsage()">
+                {{ disableUseRecovery() ? useAuthenticatorLabel() : useRecoveryLabel() }}
+              </button>
+            </div>
+
+            @if (disableError()) {
+              <p class="field-error">{{ disableError() }}</p>
+            }
+
+            <div>
+              <button
+                type="button"
+                mat-stroked-button
+                class="secondary-button"
+                (click)="disableTwoFactorAsync()"
+                [disabled]="disableBusy() || disableForm.invalid"
+              >
+                {{ disableTwoFactorLabel() }}
+              </button>
+            </div>
+          </div>
+
+          <div [formGroup]="rotateForm">
+            <div class="field">
+              <div class="field-label-row">
+                <label for="account-rotate-password">{{ currentPasswordLabel() }}</label>
+              </div>
+              <div class="field-control-wrap">
+                <input
+                  matInput
+                  id="account-rotate-password"
+                  type="password"
+                  formControlName="currentPassword"
+                  autocomplete="current-password"
+                  [disabled]="rotateBusy()"
+                />
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-label-row">
+                <label for="account-rotate-code">{{ rotateUseRecovery() ? recoveryCodeLabel() : codeLabel() }}</label>
+              </div>
+              <div class="field-control-wrap">
+                <input
+                  matInput
+                  id="account-rotate-code"
+                  type="text"
+                  formControlName="code"
+                  autocomplete="one-time-code"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  [disabled]="rotateBusy()"
+                />
+              </div>
+            </div>
+
+            <div>
+              <button type="button" mat-button (click)="toggleRotateRecoveryUsage()">
+                {{ rotateUseRecovery() ? useAuthenticatorLabel() : useRecoveryLabel() }}
+              </button>
+            </div>
+
+            @if (rotateError()) {
+              <p class="field-error">{{ rotateError() }}</p>
+            }
+
+            <div>
+              <button
+                type="button"
+                mat-stroked-button
+                class="secondary-button"
+                (click)="rotateRecoveryCodesAsync()"
+                [disabled]="rotateBusy() || rotateForm.invalid"
+              >
+                {{ rotateRecoveryCodesLabel() }}
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+    </section>
+  }
+</section>

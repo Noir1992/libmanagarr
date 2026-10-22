@@ -1,0 +1,46 @@
+:host {
+  display: block;
+}
+
+.auth-page {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: var(--theme-default-gap);
+}
+
+.auth-card {
+  max-width: 26rem;
+  width: 100%;
+}
+
+.auth-title {
+  font-size: 1.1rem;
+  margin: 0;
+  white-space: normal;
+}
+
+.auth-description {
+  color: var(--theme-muted);
+  margin: 0 0 var(--theme-default-gap);
+}
+
+.auth-submit {
+  margin-top: var(--theme-default-gap);
+  width: 100%;
+}
+
+.auth-actions {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-default-gap-small);
+  margin-top: var(--theme-default-gap);
+}
+
+.forgot-password-button {
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+}
