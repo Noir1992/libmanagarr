@@ -285,6 +285,7 @@ export const i18nDe: Record<TranslationKey, string> = {
   'settings.remove': 'Entfernen',
   'settings.save': 'Einstellungen speichern',
   'settings.saveError': 'Die Einstellungen konnten nicht gespeichert werden.',
+  'settings.seerr': 'Seerr',
   'settings.sonarr': 'Sonarr-Instanzen',
   'settings.sync': 'Daten synchronisieren',
   'settings.sync.error': 'Synchronisierung konnte nicht abgeschlossen werden.',

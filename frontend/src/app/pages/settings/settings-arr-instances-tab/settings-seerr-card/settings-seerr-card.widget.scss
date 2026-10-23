@@ -1,0 +1,76 @@
+.instance-card {
+  display: grid;
+  gap: var(--theme-default-gap);
+  padding: var(--theme-default-gap);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-body-bg);
+  border: 1px solid var(--theme-border-color);
+  transition: border-color 180ms ease;
+
+  .instance-grid {
+    display: grid;
+    gap: var(--theme-default-gap);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field-wide {
+    grid-column: 1 / -1;
+  }
+
+  .password-wrap {
+    display: flex;
+    align-items: center;
+    gap: var(--theme-default-gap-small);
+
+    .visibility-icon-stack {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+
+      .visibility-icon {
+        position: absolute;
+        opacity: 0;
+        transition: opacity 300ms ease;
+
+        &.is-active {
+          opacity: 0.86;
+        }
+      }
+    }
+  }
+
+  .instance-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--theme-default-gap-small);
+  }
+
+  .connection-test-required-message {
+    display: flex;
+    align-items: center;
+    gap: var(--theme-default-gap-small);
+    font-size: 14px;
+
+    mat-icon {
+      font-size: 16px;
+      width: 15px;
+      height: 15px;
+    }
+  }
+}
+
+@media (max-width: 520px) {
+  // Needs the full selector: the nested `.instance-card .instance-grid` rule above sets
+  // grid-template-columns, so a bare `.instance-grid` here would lose on specificity.
+  .instance-card .instance-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .instance-actions {
+    flex-direction: column;
+  }
+}

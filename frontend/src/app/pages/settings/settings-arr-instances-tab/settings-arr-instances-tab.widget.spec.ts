@@ -24,6 +24,11 @@ describe('SettingsInstancesTabWidget', () => {
       apiKey: string;
     }[]
   >;
+  let seerrInstanceSignal: WritableSignal<{
+    id: string;
+    baseUrl: string;
+    apiKey: string;
+  } | null>;
 
   const sonarrInstances = [
     {
@@ -50,6 +55,7 @@ describe('SettingsInstancesTabWidget', () => {
         'settings.instancesTab.description': 'Instance settings',
         'settings.sonarr': 'Sonarr',
         'settings.radarr': 'Radarr',
+        'settings.seerr': 'Seerr',
         'settings.addInstance': 'Add instance',
         'common.noInstanceConfigured': 'No instance configured',
         'settings.instanceName': 'Name',
@@ -66,22 +72,36 @@ describe('SettingsInstancesTabWidget', () => {
 
   let settingsServiceStub: Pick<
     AppSettingsService,
-    'loadInstances' | 'deleteSonarrInstance' | 'deleteRadarrInstance' | 'sonarrInstances' | 'radarrInstances' | 'isSyncing'
+    | 'loadInstances'
+    | 'loadSeerrInstance'
+    | 'deleteSonarrInstance'
+    | 'deleteRadarrInstance'
+    | 'deleteSeerrInstance'
+    | 'sonarrInstances'
+    | 'radarrInstances'
+    | 'seerrInstance'
+    | 'isSyncing'
   >;
 
   beforeEach(async () => {
     sonarrInstancesSignal = signal([...sonarrInstances]);
     radarrInstancesSignal = signal([...radarrInstances]);
+    seerrInstanceSignal = signal(null);
     settingsServiceStub = {
       loadInstances: jasmine.createSpy('loadInstances').and.resolveTo(),
+      loadSeerrInstance: jasmine.createSpy('loadSeerrInstance').and.resolveTo(),
       deleteSonarrInstance: jasmine.createSpy('deleteSonarrInstance').and.callFake(async (index: number) => {
         sonarrInstancesSignal.update((current) => current.filter((_, currentIndex) => currentIndex !== index));
       }),
       deleteRadarrInstance: jasmine.createSpy('deleteRadarrInstance').and.callFake(async (index: number) => {
         radarrInstancesSignal.update((current) => current.filter((_, currentIndex) => currentIndex !== index));
       }),
+      deleteSeerrInstance: jasmine.createSpy('deleteSeerrInstance').and.callFake(async () => {
+        seerrInstanceSignal.set(null);
+      }),
       sonarrInstances: sonarrInstancesSignal,
       radarrInstances: radarrInstancesSignal,
+      seerrInstance: seerrInstanceSignal,
       isSyncing: () => false,
     };
 
@@ -172,5 +192,24 @@ describe('SettingsInstancesTabWidget', () => {
     expect(fixture.componentInstance.canDeactivate()).toBeTrue();
     expect(fixture.componentInstance['sonarrInstancesForm'].at(0).controls.name.getRawValue()).toBe('Instance');
     expect(fixture.componentInstance['sonarrInstancesForm'].dirty).toBeFalse();
+  });
+
+  it('renders the Seerr section with its own configuration card', () => {
+    const compiled: HTMLElement = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.textContent).toContain('Seerr');
+    expect(compiled.querySelectorAll('app-settings-seerr-card')).toHaveSize(1);
+  });
+
+  it('removes the Seerr configuration through the backend service', async () => {
+    seerrInstanceSignal.set({ id: 'seerr-1', baseUrl: 'http://localhost:5055', apiKey: 'secret' });
+
+    await fixture.componentInstance['removeSeerrInstanceAsync']();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(settingsServiceStub.deleteSeerrInstance).toHaveBeenCalledTimes(1);
+    expect(snackBarOpenFromComponentSpy).toHaveBeenCalled();
+    expect(fixture.componentInstance['seerrFormState']().controls.id.getRawValue()).toBe('');
   });
 });

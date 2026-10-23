@@ -278,6 +278,7 @@ export type TranslationKey =
   | 'settings.remove'
   | 'settings.save'
   | 'settings.saveError'
+  | 'settings.seerr'
   | 'settings.sonarr'
   | 'settings.sync'
   | 'settings.sync.error'

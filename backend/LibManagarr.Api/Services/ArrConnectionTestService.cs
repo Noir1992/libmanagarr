@@ -7,9 +7,20 @@ namespace LibManagarr.Api.Services;
 public sealed class ArrConnectionTestService(
     SonarrClient sonarrClient,
     RadarrClient radarrClient,
+    SeerrClient seerrClient,
     ILogger<ArrConnectionTestService> logger)
 {
     private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromSeconds(5);
+
+    private static SeerrInstanceSettings MapSeerrInstance(ArrInstanceSettings instance)
+    {
+        return new SeerrInstanceSettings
+        {
+            Id = instance.Id,
+            BaseUrl = instance.BaseUrl,
+            ApiKey = instance.ApiKey
+        };
+    }
 
     public async Task<TestConnectionResult> TestAsync(
         TestConnectionRequest request,
@@ -27,6 +38,9 @@ public sealed class ArrConnectionTestService(
                     break;
                 case ArrApplicationKind.Radarr:
                     await radarrClient.TestConnectionAsync(request.Instance, timeoutSource.Token);
+                    break;
+                case ArrApplicationKind.Seerr:
+                    await seerrClient.TestConnectionAsync(MapSeerrInstance(request.Instance), timeoutSource.Token);
                     break;
                 default:
                     throw new ApiProblemException(

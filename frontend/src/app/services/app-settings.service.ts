@@ -12,6 +12,7 @@ import { GeneralSettingsBackend } from '../interfaces/settings/general-settings-
 import { InstancesSettingsBackend } from '../interfaces/settings/instances-settings-backend';
 import { LoggingSettings } from '../interfaces/settings/logging-settings';
 import { LoggingSettingsUpdateRequestBackend } from '../interfaces/settings/logging-settings-update-request-backend';
+import { SeerrInstanceSettings } from '../interfaces/settings/seerr-instance-settings';
 import { SyncArrInstanceResult } from '../interfaces/settings/sync-arr-instance-result';
 import { TestArrInstanceConnectionResult } from '../interfaces/settings/test-arr-instance-connection-result';
 import { AppTheme } from '../interfaces/general/app-theme';
@@ -70,9 +71,6 @@ type SyncInstanceResponseDto = Partial<{
   itemCount: number;
 }>;
 
-/** Identifies one running synchronization; several instances may run at the same time. */
-type SyncingArrInstanceKey = string;
-
 @Injectable({ providedIn: 'root' })
 export class AppSettingsService {
   private readonly http: HttpClient = inject(HttpClient);
@@ -80,14 +78,13 @@ export class AppSettingsService {
   private readonly i18n: AppI18nService = inject(AppI18nService);
   private readonly loadErrorState: WritableSignal<string | null> = signal<string | null>(null);
   private readonly loadedState: WritableSignal<boolean> = signal<boolean>(false);
-  private readonly syncingArrInstanceKeys: WritableSignal<ReadonlySet<SyncingArrInstanceKey>> = signal<ReadonlySet<SyncingArrInstanceKey>>(
-    new Set<SyncingArrInstanceKey>(),
-  );
+  private readonly syncingArrInstanceKeys: WritableSignal<ReadonlySet<string>> = signal<ReadonlySet<string>>(new Set<string>());
   private readonly languageState: WritableSignal<AppLanguage> = signal<AppLanguage>(DEFAULT_LANGUAGE);
   private readonly themeState: WritableSignal<AppTheme> = signal<AppTheme>(DEFAULT_THEME);
   private readonly titleSortingState = signal<TitleSortingSettings>({ enabled: false, ignoredLeadingWords: [] });
   private readonly sonarrInstancesState: WritableSignal<ArrInstanceSettings[]> = signal<ArrInstanceSettings[]>(DEFAULT_SONARR_INSTANCES);
   private readonly radarrInstancesState: WritableSignal<ArrInstanceSettings[]> = signal<ArrInstanceSettings[]>(DEFAULT_RADARR_INSTANCES);
+  private readonly seerrInstanceState: WritableSignal<SeerrInstanceSettings | null> = signal<SeerrInstanceSettings | null>(null);
   private readonly loggingState: WritableSignal<LoggingSettings> = signal<LoggingSettings>(DEFAULT_LOGGING);
   private loadingPromise?: Promise<void>;
   private readonly apiUrl: string = '/api/settings/';
@@ -96,6 +93,7 @@ export class AppSettingsService {
   readonly titleSorting = this.titleSortingState.asReadonly();
   readonly sonarrInstances: Signal<ArrInstanceSettings[]> = computed((): ArrInstanceSettings[] => this.sonarrInstancesState());
   readonly radarrInstances: Signal<ArrInstanceSettings[]> = computed((): ArrInstanceSettings[] => this.radarrInstancesState());
+  readonly seerrInstance: Signal<SeerrInstanceSettings | null> = computed((): SeerrInstanceSettings | null => this.seerrInstanceState());
   readonly logging: Signal<LoggingSettings> = computed((): LoggingSettings => this.loggingState());
   readonly loadError: Signal<string | null> = computed((): string | null => this.loadErrorState());
 
@@ -140,6 +138,18 @@ export class AppSettingsService {
 
       this.sonarrInstancesState.set(backendSettings.sonarrInstances);
       this.radarrInstancesState.set(backendSettings.radarrInstances);
+    } catch (error) {
+      throw this.mapHttpError(error, this.i18n.t('settings.loadError'));
+    }
+  }
+
+  async loadSeerrInstance(): Promise<void> {
+    try {
+      const instance: SeerrInstanceSettings | null = await firstValueFrom(
+        this.http.get<SeerrInstanceSettings | null>(`${this.apiUrl}seerr`),
+      );
+
+      this.seerrInstanceState.set(instance ?? null);
     } catch (error) {
       throw this.mapHttpError(error, this.i18n.t('settings.loadError'));
     }
@@ -205,6 +215,26 @@ export class AppSettingsService {
     await this.deleteInstanceScopedAsync(ARR_APPLICATION_KINDS.RADARR, index);
   }
 
+  async saveSeerrInstance(instance: SeerrInstanceSettings): Promise<void> {
+    try {
+      await firstValueFrom(this.http.put<void>(`${this.apiUrl}seerr`, instance));
+      this.seerrInstanceState.set(instance);
+      this.loadErrorState.set(null);
+    } catch (error) {
+      throw this.mapHttpError(error, this.i18n.t('settings.saveError'));
+    }
+  }
+
+  async deleteSeerrInstance(): Promise<void> {
+    try {
+      await firstValueFrom(this.http.delete<void>(`${this.apiUrl}seerr`));
+      this.seerrInstanceState.set(null);
+      this.loadErrorState.set(null);
+    } catch (error) {
+      throw this.mapHttpError(error, this.i18n.t('settings.saveError'));
+    }
+  }
+
   async saveLoggingSettings(logging: LoggingSettings): Promise<void> {
     try {
       const payload: LoggingSettingsUpdateRequestBackend = {
@@ -218,7 +248,12 @@ export class AppSettingsService {
     }
   }
 
-  async testConnection(kind: ArrApplicationKind, instance: ArrInstanceSettings): Promise<TestArrInstanceConnectionResult> {
+  // The instance payload is validated per kind on the backend; Seerr connections are
+  // identified without an instance name, so the name is optional here.
+  async testConnection(
+    kind: ArrApplicationKind,
+    instance: { id: string; name?: string; baseUrl: string; apiKey: string },
+  ): Promise<TestArrInstanceConnectionResult> {
     try {
       return await firstValueFrom(
         this.http.post<TestArrInstanceConnectionResult>(`${this.apiUrl}test-connection`, {
@@ -236,10 +271,8 @@ export class AppSettingsService {
   }
 
   async syncInstance(kind: ArrApplicationKind, instanceId: string): Promise<SyncArrInstanceResult> {
-    const key: SyncingArrInstanceKey = AppSettingsService.syncingKey(kind, instanceId);
-    this.syncingArrInstanceKeys.update(
-      (keys: ReadonlySet<SyncingArrInstanceKey>): ReadonlySet<SyncingArrInstanceKey> => new Set<SyncingArrInstanceKey>([...keys, key]),
-    );
+    const key: string = AppSettingsService.syncingKey(kind, instanceId);
+    this.syncingArrInstanceKeys.update((keys: ReadonlySet<string>): ReadonlySet<string> => new Set<string>([...keys, key]));
     try {
       const result: SyncInstanceResponseDto = await firstValueFrom(
         this.http.post<SyncInstanceResponseDto>(`${this.apiUrl}sync`, {
@@ -256,15 +289,15 @@ export class AppSettingsService {
     } catch (error) {
       throw this.mapHttpError(error, this.i18n.t('settings.sync.error'));
     } finally {
-      this.syncingArrInstanceKeys.update((keys: ReadonlySet<SyncingArrInstanceKey>): ReadonlySet<SyncingArrInstanceKey> => {
-        const remaining: Set<SyncingArrInstanceKey> = new Set<SyncingArrInstanceKey>(keys);
+      this.syncingArrInstanceKeys.update((keys: ReadonlySet<string>): ReadonlySet<string> => {
+        const remaining: Set<string> = new Set<string>(keys);
         remaining.delete(key);
         return remaining;
       });
     }
   }
 
-  private static syncingKey(kind: ArrApplicationKind, instanceId: string): SyncingArrInstanceKey {
+  private static syncingKey(kind: ArrApplicationKind, instanceId: string): string {
     return `${kind}:${instanceId}`;
   }
 

@@ -7,17 +7,20 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ARR_APPLICATION_KINDS, ArrApplicationKind } from '../../../interfaces/general/arr-application-kind';
 import { ArrInstanceFormGroup } from '../../../interfaces/settings/arr-instance-form-group';
 import { ArrInstanceSettings } from '../../../interfaces/settings/arr-instance-settings';
+import { SeerrInstanceFormGroup } from '../../../interfaces/settings/seerr-instance-form-group';
+import { SeerrInstanceSettings } from '../../../interfaces/settings/seerr-instance-settings';
 import { AppSettingsService } from '../../../services/app-settings.service';
 import { openErrorToast, openSuccessToast } from '../../../utils/feedback-toast-utils';
 import { createUuidV7 } from '../../../utils/uuid-v7-utils';
 import { SettingsUnsavedChangesBase } from '../settings-unsaved-changes.base';
 import { SettingsArrInstanceCardWidget } from './settings-arr-instance-card/settings-arr-instance-card.widget';
+import { SettingsSeerrCardWidget } from './settings-seerr-card/settings-seerr-card.widget';
 
 const MAX_INSTANCE_FIELD_LENGTH: number = 255;
 
 @Component({
   selector: 'app-settings-arr-instances-tab-widget',
-  imports: [MatButtonModule, MatIconModule, MatSnackBarModule, SettingsArrInstanceCardWidget, NgOptimizedImage],
+  imports: [MatButtonModule, MatIconModule, MatSnackBarModule, SettingsArrInstanceCardWidget, SettingsSeerrCardWidget, NgOptimizedImage],
   templateUrl: './settings-arr-instances-tab.widget.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './settings-arr-instances-tab.widget.scss',
@@ -27,10 +30,12 @@ export class SettingsArrInstancesTabWidget extends SettingsUnsavedChangesBase im
   private readonly formBuilder: NonNullableFormBuilder = inject(NonNullableFormBuilder);
   private readonly snackBar: MatSnackBar = inject(MatSnackBar);
   private instanceKeyCounter: number = 0;
+  private static readonly seerrClientKey: string = 'seerr';
 
   readonly instancesDescription: Signal<string> = computed((): string => this.i18n.t('settings.instancesTab.description'));
   readonly sonarrHeading: Signal<string> = computed((): string => this.i18n.t('settings.sonarr'));
   readonly radarrHeading: Signal<string> = computed((): string => this.i18n.t('settings.radarr'));
+  readonly seerrHeading: Signal<string> = computed((): string => this.i18n.t('settings.seerr'));
   readonly addInstanceLabel: Signal<string> = computed((): string => this.i18n.t('settings.addInstance'));
   readonly noInstanceConfiguredLabel: Signal<string> = computed((): string => this.i18n.t('common.noInstanceConfigured'));
   readonly sonarrApplicationKind: ArrApplicationKind = ARR_APPLICATION_KINDS.SONARR;
@@ -38,6 +43,7 @@ export class SettingsArrInstancesTabWidget extends SettingsUnsavedChangesBase im
 
   protected readonly sonarrInstancesForm: FormArray<ArrInstanceFormGroup> = this.formBuilder.array<ArrInstanceFormGroup>([]);
   protected readonly radarrInstancesForm: FormArray<ArrInstanceFormGroup> = this.formBuilder.array<ArrInstanceFormGroup>([]);
+  protected readonly seerrFormState: WritableSignal<SeerrInstanceFormGroup> = signal<SeerrInstanceFormGroup>(this.createSeerrFormGroup());
   protected readonly deletingState: WritableSignal<Record<string, boolean>> = signal<Record<string, boolean>>({});
   protected readonly instancesLoadedState: WritableSignal<boolean> = signal<boolean>(false);
 
@@ -46,6 +52,10 @@ export class SettingsArrInstancesTabWidget extends SettingsUnsavedChangesBase im
   }
 
   protected instanceLogoPath(kind: ArrApplicationKind): string {
+    if (kind === ARR_APPLICATION_KINDS.SEERR) {
+      return '/icons/logo_seerr.svg';
+    }
+
     return kind === ARR_APPLICATION_KINDS.SONARR ? '/icons/logo_sonarr.svg' : '/icons/logo_radarr.svg';
   }
 
@@ -53,11 +63,11 @@ export class SettingsArrInstancesTabWidget extends SettingsUnsavedChangesBase im
     return this.deletingState()[instanceGroup.controls.clientKey.getRawValue()] ?? false;
   }
 
-  protected async addSonarrInstanceAsync(): Promise<void> {
+  protected addSonarrInstanceAsync(): void {
     this.addInstanceAsync(ARR_APPLICATION_KINDS.SONARR);
   }
 
-  protected async addRadarrInstanceAsync(): Promise<void> {
+  protected addRadarrInstanceAsync(): void {
     this.addInstanceAsync(ARR_APPLICATION_KINDS.RADARR);
   }
 
@@ -69,20 +79,60 @@ export class SettingsArrInstancesTabWidget extends SettingsUnsavedChangesBase im
     await this.removeInstanceAsync(ARR_APPLICATION_KINDS.RADARR, index);
   }
 
-  private async initializeInstancesAsync(): Promise<void> {
+  protected isSeerrConfigured(): boolean {
+    return this.appSettingsService.seerrInstance() !== null;
+  }
+
+  protected isSeerrDeleting(): boolean {
+    return this.deletingState()[SettingsArrInstancesTabWidget.seerrClientKey] ?? false;
+  }
+
+  protected async removeSeerrInstanceAsync(): Promise<void> {
+    if (this.appSettingsService.seerrInstance() === null) {
+      this.syncSeerrFromService();
+      return;
+    }
+
+    this.deletingState.update((current) => ({ ...current, [SettingsArrInstancesTabWidget.seerrClientKey]: true }));
+
     try {
-      await this.appSettingsService.loadInstances();
-      this.syncInstancesFromService();
-      queueMicrotask(() => {
-        this.instancesLoadedState.set(true);
-      });
-    } catch {
-      // Keep the existing/default instance list until the next successful load.
-      this.instancesLoadedState.set(true);
+      await this.appSettingsService.deleteSeerrInstance();
+      this.syncSeerrFromService();
+      openSuccessToast(this.snackBar, this.i18n.t('settings.deleteSuccess'));
+    } catch (error) {
+      const message: string =
+        error instanceof Error && error.message.trim().length > 0 ? error.message.trim() : this.i18n.t('settings.deleteError');
+      openErrorToast(this.snackBar, message);
+    } finally {
+      this.deletingState.update((current) => ({ ...current, [SettingsArrInstancesTabWidget.seerrClientKey]: false }));
     }
   }
 
-  private async addInstanceAsync(kind: ArrApplicationKind): Promise<void> {
+  private async initializeInstancesAsync(): Promise<void> {
+    void this.initializeSeerrAsync();
+
+    try {
+      await this.appSettingsService.loadInstances();
+      this.syncInstancesFromService();
+    } catch {
+      // Keep the existing/default instance list until the next successful load.
+    }
+
+    queueMicrotask(() => {
+      this.instancesLoadedState.set(true);
+    });
+  }
+
+  private async initializeSeerrAsync(): Promise<void> {
+    try {
+      await this.appSettingsService.loadSeerrInstance();
+      this.syncSeerrFromService();
+    } catch {
+      // Keep the existing/default Seerr form state until the next successful load.
+    }
+  }
+
+  private addInstanceAsync(kind: ArrApplicationKind): void {
     const instances: FormArray<ArrInstanceFormGroup> =
       kind === ARR_APPLICATION_KINDS.SONARR ? this.sonarrInstancesForm : this.radarrInstancesForm;
 
@@ -173,7 +223,29 @@ export class SettingsArrInstancesTabWidget extends SettingsUnsavedChangesBase im
     return clientKey;
   }
 
-  private buildFingerprint(instance: { name: string; baseUrl: string; apiKey: string }): string {
+  private createSeerrFormGroup(instance?: SeerrInstanceSettings): SeerrInstanceFormGroup {
+    return this.formBuilder.group({
+      clientKey: this.formBuilder.control<string>(SettingsArrInstancesTabWidget.seerrClientKey),
+      id: this.formBuilder.control<string>(instance?.id ?? ''),
+      baseUrl: this.formBuilder.control<string>(instance?.baseUrl ?? '', [
+        Validators.required,
+        Validators.maxLength(MAX_INSTANCE_FIELD_LENGTH),
+      ]),
+      apiKey: this.formBuilder.control<string>(instance?.apiKey ?? '', [
+        Validators.required,
+        Validators.maxLength(MAX_INSTANCE_FIELD_LENGTH),
+      ]),
+      testSucceeded: this.formBuilder.control<boolean>(instance !== undefined),
+      testMessage: this.formBuilder.control<string>(''),
+      lastTestedFingerprint: this.formBuilder.control<string>(instance === undefined ? '' : this.buildFingerprint(instance)),
+    });
+  }
+
+  private syncSeerrFromService(): void {
+    this.seerrFormState.set(this.createSeerrFormGroup(this.appSettingsService.seerrInstance() ?? undefined));
+  }
+
+  private buildFingerprint(instance: { name?: string; baseUrl: string; apiKey: string }): string {
     return JSON.stringify({
       name: instance.name,
       baseUrl: instance.baseUrl,
@@ -186,8 +258,10 @@ export class SettingsArrInstancesTabWidget extends SettingsUnsavedChangesBase im
   }
 
   protected override hasUnsavedChanges(): boolean {
-    return [...this.sonarrInstancesForm.controls, ...this.radarrInstancesForm.controls].some(
-      (instanceGroup) => instanceGroup.dirty || instanceGroup.controls.id.getRawValue().trim().length === 0,
+    return (
+      [...this.sonarrInstancesForm.controls, ...this.radarrInstancesForm.controls].some(
+        (instanceGroup) => instanceGroup.dirty || instanceGroup.controls.id.getRawValue().trim().length === 0,
+      ) || this.seerrFormState().dirty
     );
   }
 
@@ -197,6 +271,7 @@ export class SettingsArrInstancesTabWidget extends SettingsUnsavedChangesBase im
 
   protected override discardUnsavedChanges(): void {
     this.syncInstancesFromService();
+    this.syncSeerrFromService();
     this.sonarrInstancesForm.markAsPristine();
     this.radarrInstancesForm.markAsPristine();
   }
@@ -233,6 +308,11 @@ export class SettingsArrInstancesTabWidget extends SettingsUnsavedChangesBase im
       }
     }
 
+    const seerrDescription: string | null = this.buildSeerrUnsavedChangeDescription();
+    if (seerrDescription !== null) {
+      descriptions.push(seerrDescription);
+    }
+
     return descriptions;
   }
 
@@ -249,11 +329,37 @@ export class SettingsArrInstancesTabWidget extends SettingsUnsavedChangesBase im
     return `${label} ${index + 1}: ${changedFields.join(', ')}`;
   }
 
+  private buildSeerrUnsavedChangeDescription(): string | null {
+    const seerrForm: SeerrInstanceFormGroup = this.seerrFormState();
+    if (!seerrForm.dirty) {
+      return null;
+    }
+
+    if (seerrForm.controls.id.getRawValue().trim().length === 0) {
+      return `${this.i18n.t('settings.seerr')}: ${this.i18n.t('settings.unsavedChangesNewInstance')}`;
+    }
+
+    const changedFields: string[] = this.collectChangedConnectionFields(seerrForm);
+    if (changedFields.length === 0) {
+      return null;
+    }
+
+    return `${this.i18n.t('settings.seerr')}: ${changedFields.join(', ')}`;
+  }
+
   private collectChangedInstanceFields(instanceGroup: ArrInstanceFormGroup): string[] {
     const changedFields: string[] = [];
     if (instanceGroup.controls.name.dirty) {
       changedFields.push(this.i18n.t('settings.instanceName'));
     }
+
+    changedFields.push(...this.collectChangedConnectionFields(instanceGroup));
+
+    return changedFields;
+  }
+
+  private collectChangedConnectionFields(instanceGroup: ArrInstanceFormGroup | SeerrInstanceFormGroup): string[] {
+    const changedFields: string[] = [];
     if (instanceGroup.controls.baseUrl.dirty) {
       changedFields.push(this.i18n.t('settings.instanceUrl'));
     }

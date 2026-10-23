@@ -62,6 +62,7 @@ builder.Services.AddHostedService<ScheduledTaskBackgroundService>();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<SonarrClient>();
 builder.Services.AddHttpClient<RadarrClient>();
+builder.Services.AddHttpClient<SeerrClient>();
 builder.Services.AddHttpClient<PosterCacheService>();
 builder.Services.AddSingleton<IPosterCacheService, PosterCacheService>();
 

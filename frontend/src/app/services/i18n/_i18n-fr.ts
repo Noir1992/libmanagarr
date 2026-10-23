@@ -288,6 +288,7 @@ export const i18nFr: Record<TranslationKey, string> = {
   'settings.remove': 'Supprimer',
   'settings.save': 'Enregistrer les paramètres',
   'settings.saveError': "Les paramètres n'ont pas pu être enregistrés.",
+  'settings.seerr': 'Seerr',
   'settings.sonarr': 'Instances Sonarr',
   'settings.sync': 'Synchroniser les données',
   'settings.sync.error': "La synchronisation n'a pas pu être effectuée.",

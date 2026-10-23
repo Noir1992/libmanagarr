@@ -14,10 +14,26 @@ public static class AppSettingsNormalizer
             Theme = settings.Theme,
             SonarrInstances = NormalizeInstances(settings.SonarrInstances),
             RadarrInstances = NormalizeInstances(settings.RadarrInstances),
+            Seerr = NormalizeSeerrInstance(settings.Seerr),
             SonarrSnapshots = settings.SonarrSnapshots ?? [],
             RadarrSnapshots = settings.RadarrSnapshots ?? [],
             LibraryFilterValues = settings.LibraryFilterValues ?? [],
             Logging = NormalizeLogging(settings.Logging)
+        };
+    }
+
+    private static SeerrInstanceSettings? NormalizeSeerrInstance(SeerrInstanceSettings? instance)
+    {
+        if (instance is null)
+        {
+            return null;
+        }
+
+        return new SeerrInstanceSettings
+        {
+            Id = UuidV7.IsUuidV7(instance.Id) ? instance.Id.Trim() : UuidV7.Create(),
+            BaseUrl = instance.BaseUrl.Trim().TrimEnd('/'),
+            ApiKey = instance.ApiKey.Trim()
         };
     }
 

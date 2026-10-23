@@ -26,6 +26,9 @@ public static class SettingsEndpoints
         group.MapDelete("/sonarr/{index:int}", DeleteSonarrInstanceAsync);
         group.MapPut("/radarr/{index:int}", SaveRadarrInstanceAsync);
         group.MapDelete("/radarr/{index:int}", DeleteRadarrInstanceAsync);
+        group.MapGet("/seerr", GetSeerrInstanceAsync);
+        group.MapPut("/seerr", SaveSeerrInstanceAsync);
+        group.MapDelete("/seerr", DeleteSeerrInstanceAsync);
         group.MapPost("/test-connection", TestConnectionAsync);
         group.MapPost("/sync", SyncInstanceAsync);
 
@@ -332,6 +335,50 @@ public static class SettingsEndpoints
             .Where((snapshot) => currentSettings.RadarrInstances.Any(
                 (savedInstance) => string.Equals(savedInstance.Id?.Trim(), snapshot.InstanceId, StringComparison.OrdinalIgnoreCase)))
             .ToList();
+
+        await settingsService.SaveAsync(currentSettings, cancellationToken);
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<Results<Ok<SeerrInstanceSettings>, NoContent>> GetSeerrInstanceAsync(
+        ISettingsService settingsService,
+        CancellationToken cancellationToken)
+    {
+        AppSettings settings = await settingsService.GetSnapshotAsync(cancellationToken);
+        if (settings.Seerr is not SeerrInstanceSettings seerrInstance)
+        {
+            return TypedResults.NoContent();
+        }
+
+        return TypedResults.Ok(seerrInstance);
+    }
+
+    private static async Task<Results<NoContent, ValidationProblem>> SaveSeerrInstanceAsync(
+        SeerrInstanceSettings instance,
+        ISettingsService settingsService,
+        CancellationToken cancellationToken)
+    {
+        using IDisposable updateLease = await settingsService.BeginUpdateAsync(cancellationToken);
+        AppSettings currentSettings = await settingsService.GetAsync(cancellationToken);
+        currentSettings.Seerr = instance;
+
+        Dictionary<string, string[]> validationErrors = AppSettingsValidator.ValidateSeerr(instance);
+        if (validationErrors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(validationErrors);
+        }
+
+        await settingsService.SaveAsync(currentSettings, cancellationToken);
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<NoContent> DeleteSeerrInstanceAsync(
+        ISettingsService settingsService,
+        CancellationToken cancellationToken)
+    {
+        using IDisposable updateLease = await settingsService.BeginUpdateAsync(cancellationToken);
+        AppSettings currentSettings = await settingsService.GetAsync(cancellationToken);
+        currentSettings.Seerr = null;
 
         await settingsService.SaveAsync(currentSettings, cancellationToken);
         return TypedResults.NoContent();
