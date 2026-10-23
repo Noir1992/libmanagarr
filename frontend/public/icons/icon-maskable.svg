@@ -1,23 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="mask-bg" x1="0%" x2="100%" y1="0%" y2="100%">
-      <stop offset="0%" stop-color="#16202a" />
-      <stop offset="100%" stop-color="#1f6feb" />
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" fill="url(#mask-bg)" />
-  <circle cx="256" cy="256" r="154" fill="rgba(255,255,255,0.08)" />
-  <path d="M146 336h220" fill="none" stroke="#7cc4ff" stroke-linecap="round" stroke-width="24" />
-  <path
-    d="M162 292l58-72 48 42 84-100"
-    fill="none"
-    stroke="#f8fbff"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    stroke-width="30"
-  />
-  <circle cx="162" cy="292" r="16" fill="#f4efe6" />
-  <circle cx="220" cy="220" r="16" fill="#f4efe6" />
-  <circle cx="268" cy="262" r="16" fill="#f4efe6" />
-  <circle cx="352" cy="162" r="16" fill="#f4efe6" />
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LibManagarr Logo" viewBox="40 28 432 456">
+  <g id="badge">
+    <path d="M256 28 Q268 28 280 35 L458 139 Q472 148 472 165 L472 347 Q472 364 458 373 L280 477 Q268 484 256 484 Q244 484 232 477 L54 373 Q40 364 40 347 L40 165 Q40 148 54 139 L232 35 Q244 28 256 28 Z"
+          fill="#4BB8FA"></path>
+    <path d="M256 52 Q266 52 276 58 L435 151 Q448 159 448 173 L448 339 Q448 353 435 361 L276 454 Q266 460 256 460 Q246 460 236 454 L77 361 Q64 353 64 339 L64 173 Q64 159 77 151 L236 58 Q246 52 256 52 Z"
+          fill="#53BCFA"
+          stroke="#09294A"
+          stroke-width="15"
+          stroke-linejoin="round"></path>
+    <path d="M 119 166 L 163 192 L 163 307 L 249 307 L 249 353 L 140 353 L 119 335 Z" fill="#09294A" stroke="#000" stroke-width="8"></path>
+    <path d="M 221 177 L 296 245 L 395 168 L 395 352 L 351 352 L 351 260 L 294 309 L 221 245 Z" fill="#09294A" stroke="#000" stroke-width="8"></path>
+  </g>
 </svg>

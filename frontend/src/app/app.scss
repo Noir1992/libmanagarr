@@ -22,6 +22,12 @@
     background: var(--theme-panel-bg);
     box-sizing: border-box;
 
+    .app-logo {
+      margin-left: var(--theme-default-gap-small);
+      width: 26px;
+      height: 26px;
+    }
+
     .app-title {
       margin-left: var(--theme-default-gap-small);
       color: var(--theme-text);
