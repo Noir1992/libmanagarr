@@ -1,0 +1,185 @@
+<h2 mat-dialog-title class="dialog-title">{{ title() }}</h2>
+
+<mat-dialog-content class="dialog-content">
+  @if (taskSaveErrorState(); as taskSaveError) {
+    <section class="feedback error">{{ taskSaveError }}</section>
+  }
+
+  <div [formGroup]="scheduledTasksForm">
+    <div class="task-grid" formGroupName="task">
+      <div class="field task-toggle">
+        <label for="task-enabled">{{ taskEnabledLabel() }}</label>
+        <mat-slide-toggle formControlName="enabled" id="task-enabled"></mat-slide-toggle>
+      </div>
+
+      <div class="field">
+        <div class="field-label-row">
+          <label for="task-schedule-mode">{{ taskScheduleModeHeading() }}</label>
+          <app-info-icon [messageText]="taskScheduleModeInfoMessage()" />
+        </div>
+
+        <div class="field-control-wrap">
+          <mat-select id="task-schedule-mode" formControlName="scheduleMode">
+            @for (mode of taskScheduleModes; track mode) {
+              <mat-option [value]="mode">{{ taskScheduleModeLabels()[mode] }}</mat-option>
+            }
+          </mat-select>
+        </div>
+      </div>
+
+      @switch (taskForm.controls.scheduleMode.getRawValue()) {
+        @case ('Interval') {
+          <div class="field">
+            <div class="field-label-row">
+              <label for="task-interval-value">{{ taskIntervalValueLabel() }}*</label>
+              <app-info-icon [messageText]="taskIntervalValueInfoMessage()" />
+            </div>
+
+            <div class="field-control-wrap">
+              <input
+                matInput
+                class="no-spinners"
+                id="task-interval-value"
+                type="number"
+                [class.has-error]="taskControlError(taskForm.controls.intervalValue) !== null"
+                formControlName="intervalValue"
+                min="1"
+                max="1000"
+              />
+            </div>
+
+            @if (taskControlError(taskForm.controls.intervalValue); as error) {
+              <p class="field-error">{{ error }}</p>
+            }
+          </div>
+
+          <div class="field">
+            <div class="field-label-row">
+              <label for="task-interval-unit">{{ taskIntervalUnitHeading() }}</label>
+              <app-info-icon [messageText]="taskIntervalUnitInfoMessage()" />
+            </div>
+
+            <div class="field-control-wrap">
+              <mat-select id="task-interval-unit" formControlName="intervalUnit">
+                @for (unit of taskIntervalUnits; track unit) {
+                  <mat-option [value]="unit">{{ taskIntervalUnitLabels()[unit] }}</mat-option>
+                }
+              </mat-select>
+            </div>
+          </div>
+        }
+        @case ('DailyAtTime') {
+          <ng-container
+            [ngTemplateOutlet]="timeNumberField"
+            [ngTemplateOutletContext]="{
+              control: taskForm.controls.timeHour,
+              id: 'task-time-hour',
+              label: taskTimeHourLabel(),
+              infoMessage: taskTimeHourInfoMessage(),
+              min: 0,
+              max: 23,
+            }"
+          />
+
+          <ng-container
+            [ngTemplateOutlet]="timeNumberField"
+            [ngTemplateOutletContext]="{
+              control: taskForm.controls.timeMinute,
+              id: 'task-time-minute',
+              label: taskTimeMinuteLabel(),
+              infoMessage: taskTimeMinuteInfoMessage(),
+              min: 0,
+              max: 59,
+            }"
+          />
+        }
+        @case ('EveryNDaysAtTime') {
+          <div class="field">
+            <div class="field-label-row">
+              <label for="task-every-ndays">{{ taskEveryNDaysLabel() }}*</label>
+              <app-info-icon [messageText]="taskEveryNDaysInfoMessage()" />
+            </div>
+
+            <div class="field-control-wrap">
+              <input
+                matInput
+                class="no-spinners"
+                id="task-every-ndays"
+                type="number"
+                [class.has-error]="taskControlError(taskForm.controls.everyNDays) !== null"
+                formControlName="everyNDays"
+                min="1"
+                max="3650"
+              />
+            </div>
+
+            @if (taskControlError(taskForm.controls.everyNDays); as error) {
+              <p class="field-error">{{ error }}</p>
+            }
+          </div>
+
+          <ng-container
+            [ngTemplateOutlet]="timeNumberField"
+            [ngTemplateOutletContext]="{
+              control: taskForm.controls.timeHour,
+              id: 'task-time-hour-every',
+              label: taskTimeHourLabel(),
+              infoMessage: taskTimeHourInfoMessage(),
+              min: 0,
+              max: 23,
+            }"
+          />
+
+          <ng-container
+            [ngTemplateOutlet]="timeNumberField"
+            [ngTemplateOutletContext]="{
+              control: taskForm.controls.timeMinute,
+              id: 'task-time-minute-every',
+              label: taskTimeMinuteLabel(),
+              infoMessage: taskTimeMinuteInfoMessage(),
+              min: 0,
+              max: 59,
+            }"
+          />
+        }
+      }
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" mat-button class="cancel-button" (click)="cancel()">
+    {{ cancelLabel() }}
+  </button>
+  <button type="button" mat-stroked-button class="secondary-button" [disabled]="savingState()" (click)="save()">
+    <span class="button-content">
+      <span>{{ savingState() ? savingLabel() : saveLabel() }}</span>
+    </span>
+  </button>
+</mat-dialog-actions>
+
+<ng-template #timeNumberField let-control="control" let-id="id" let-label="label" let-infoMessage="infoMessage" let-min="min" let-max="max">
+  <div class="field">
+    <div class="field-label-row">
+      <label [for]="id">{{ label }}*</label>
+      <app-info-icon [messageText]="infoMessage" />
+    </div>
+
+    <div class="field-control-wrap">
+      <input
+        matInput
+        class="no-spinners"
+        [id]="id"
+        type="number"
+        [class.has-error]="taskControlError(control) !== null"
+        [formControl]="control"
+        [min]="min"
+        [max]="max"
+      />
+    </div>
+
+    @if (taskControlError(control); as error) {
+      <p class="field-error">{{ error }}</p>
+    }
+  </div>
+</ng-template>

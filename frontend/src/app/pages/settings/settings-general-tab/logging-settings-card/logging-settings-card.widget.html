@@ -1,0 +1,63 @@
+<section class="card">
+  <div class="card-header">{{ loggingTitle() }}</div>
+  <form class="card-content logging-settings-form" [formGroup]="loggingForm">
+    <div class="field">
+      <div class="field-label-row">
+        <label for="logging-retention">{{ loggingRetentionLabel() }}*</label>
+        <app-info-icon [messageText]="loggingRetentionInfoMessage()" />
+      </div>
+
+      <div class="field-control-wrap">
+        <input
+          id="logging-retention"
+          matInput
+          class="no-spinners"
+          type="number"
+          formControlName="retentionDays"
+          [class.has-error]="loggingFieldError('retentionDays') !== null"
+          min="1"
+          max="3650"
+          (blur)="onSaveLoggingFieldAsync('retentionDays')"
+        />
+        <app-feedback-icon
+          [state]="loggingFieldSavingFor('retentionDays') ? 'loading' : loggingFieldFeedback('retentionDays')"
+          variant="overlay"
+          [tooltipText]="loggingFieldFeedbackMessage('retentionDays')"
+        />
+      </div>
+
+      @if (loggingFieldError('retentionDays')) {
+        <p class="field-error">{{ loggingFieldError('retentionDays') }}</p>
+      }
+    </div>
+
+    <div class="field">
+      <div class="field-label-row">
+        <label for="logging-level">{{ loggingMinimumLevelLabel() }}</label>
+        <app-info-icon [messageText]="loggingMinimumLevelInfoMessage()" />
+      </div>
+
+      <div class="field-control-wrap">
+        <mat-select
+          id="logging-level"
+          formControlName="minimumLevel"
+          [class.has-error]="loggingFieldError('minimumLevel') !== null"
+          (selectionChange)="onSaveLoggingFieldAsync('minimumLevel')"
+        >
+          @for (level of loggingLevelOptions(); track level) {
+            <mat-option [value]="level">{{ level }}</mat-option>
+          }
+        </mat-select>
+        <app-feedback-icon
+          [state]="loggingFieldSavingFor('minimumLevel') ? 'loading' : loggingFieldFeedback('minimumLevel')"
+          variant="overlay-space"
+          [tooltipText]="loggingFieldFeedbackMessage('minimumLevel')"
+        />
+      </div>
+
+      @if (loggingFieldError('minimumLevel')) {
+        <p class="field-error">{{ loggingFieldError('minimumLevel') }}</p>
+      }
+    </div>
+  </form>
+</section>

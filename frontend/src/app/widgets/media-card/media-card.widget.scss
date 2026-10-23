@@ -1,0 +1,112 @@
+.media-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  transition:
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+  background: var(--theme-accent-soft);
+
+  &.clickable {
+    cursor: pointer;
+
+    &.is-pressed {
+      box-shadow: 0 0 10px 0 var(--theme-accent);
+      transform: scale(0.99);
+    }
+  }
+
+  &:hover {
+    box-shadow: 0 0 15px 0 var(--theme-accent);
+    border-color: color-mix(in srgb, var(--theme-accent) 75%, transparent);
+  }
+
+  .media-card-title {
+    padding: 3px 6px 5px 8px;
+    text-align: center;
+    color: var(--theme-text);
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .media-card-poster {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 2 / 3;
+    border-top: 1px solid var(--theme-border-color);
+    border-bottom: 1px solid var(--theme-border-color);
+  }
+
+  .media-card-fallback {
+    width: 100%;
+    height: 100%;
+    background: var(--card-header-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .media-card-initials {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.15);
+      letter-spacing: 0.05em;
+    }
+  }
+
+  .media-card-details {
+    padding: var(--theme-default-gap-small);
+    backdrop-filter: blur(4px);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    .media-card-detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 0.78rem;
+      line-height: 1.4;
+
+      .media-card-detail-row-label {
+        color: var(--theme-muted);
+        flex-shrink: 0;
+      }
+
+      .media-card-detail-row-value {
+        color: var(--theme-text);
+        font-weight: 500;
+        text-align: right;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+
+        &.tone-success {
+          color: var(--theme-success-color);
+        }
+
+        &.tone-warning {
+          color: var(--theme-warning-color);
+        }
+
+        &.tone-danger {
+          color: var(--theme-danger-color);
+        }
+
+        &.tone-info {
+          color: var(--theme-info-color);
+        }
+      }
+    }
+  }
+}
+.media-card:focus-visible,
+.media-card-title a:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}

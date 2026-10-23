@@ -1,0 +1,258 @@
+.series-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+
+  .series-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--theme-border-color);
+    padding: var(--theme-default-gap-small) var(--theme-default-gap);
+
+    .series-dialog-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--theme-text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+    }
+
+    button {
+      flex-shrink: 0;
+    }
+  }
+
+  .series-dialog-content {
+    padding: var(--theme-default-gap);
+    overflow: auto;
+
+    .series-dialog-top {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--theme-default-gap);
+      margin-bottom: var(--theme-default-gap);
+    }
+
+    .series-dialog-poster {
+      width: 160px;
+      flex: 0 0 auto;
+      border-radius: var(--theme-border-radius);
+    }
+
+    .series-dialog-info {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+
+      .series-dialog-info-row {
+        display: grid;
+        grid-template-columns: minmax(130px, 2fr) minmax(0, 3fr);
+        gap: 16px;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--theme-table-rule);
+
+        .series-dialog-info-label {
+          font-weight: 600;
+          color: var(--theme-muted);
+          font-size: 0.85rem;
+        }
+
+        .series-dialog-info-value {
+          margin: 0;
+          overflow-wrap: anywhere;
+          color: var(--theme-text);
+          font-size: 0.85rem;
+
+          &.tone-success {
+            color: var(--theme-success-color);
+          }
+
+          &.tone-warning {
+            color: var(--theme-warning-color);
+          }
+
+          &.tone-danger {
+            color: var(--theme-danger-color);
+          }
+
+          &.tone-info {
+            color: var(--theme-info-color);
+          }
+
+          .instance-link {
+            display: inline-flex;
+            margin-left: 4px;
+            vertical-align: middle;
+            color: var(--theme-accent);
+            text-decoration: none;
+
+            .material-symbols-outlined {
+              font-size: 1.05rem;
+            }
+
+            &:hover,
+            &:focus-visible {
+              opacity: 0.75;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+.series-dialog-season {
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+
+  &:not(:last-child) {
+    margin-bottom: var(--theme-default-gap);
+  }
+}
+
+.series-dialog-season-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 10px;
+  background: var(--theme-accent-soft);
+  border-bottom: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+
+  &.expanded {
+    border-radius: var(--theme-border-radius) var(--theme-border-radius) 0 0;
+  }
+}
+
+.series-dialog-season-label {
+  font-weight: 600;
+  color: var(--theme-text);
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.series-dialog-count {
+  margin-left: 4px;
+  color: var(--theme-muted);
+  font-size: 0.74rem;
+  font-weight: 400;
+}
+
+.series-dialog-table-wrapper {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+.series-dialog-episodes-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  table-layout: fixed;
+  max-width: none;
+
+  thead th {
+    text-align: left;
+    padding: 6px 8px;
+    font-weight: 600;
+    color: var(--theme-muted);
+    border-bottom: 1px solid var(--theme-border-color);
+    background: var(--theme-table-head);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: none;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--theme-border-color);
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &:hover {
+      background: var(--theme-accent-soft);
+    }
+  }
+
+  tbody td {
+    padding: 4px 8px;
+    color: var(--theme-text);
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Episode number: narrow */
+  tbody td:first-child,
+  thead th:first-child {
+    width: 48px;
+  }
+
+  /* Monitored checkbox: narrow, centered */
+  .series-dialog-monitored-cell {
+    width: 40px;
+    text-align: center;
+
+    .series-dialog-monitored {
+      display: inline-flex;
+      align-items: center;
+
+      &.checked {
+        color: var(--theme-accent);
+      }
+
+      &.unchecked {
+        color: var(--theme-muted);
+      }
+
+      .material-symbols-outlined {
+        font-size: 18px;
+      }
+    }
+  }
+}
+
+.episode-clickable {
+  cursor: pointer;
+}
+
+@media (max-width: 480px) {
+  .series-dialog .series-dialog-content .series-dialog-info .series-dialog-info-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .series-dialog .series-dialog-content .series-dialog-top {
+    flex-direction: column;
+  }
+
+  .series-dialog .series-dialog-content .series-dialog-poster {
+    align-self: center;
+  }
+}
+
+.episode-details-button {
+  border: 0;
+  background: transparent;
+  color: var(--theme-danger-color);
+  font: inherit;
+  padding: 4px;
+  cursor: pointer;
+
+  &.available {
+    color: var(--theme-success-color);
+  }
+}

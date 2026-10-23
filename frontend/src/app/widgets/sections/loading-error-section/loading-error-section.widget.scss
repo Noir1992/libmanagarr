@@ -1,0 +1,30 @@
+.loading-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--theme-default-gap);
+  padding: var(--theme-default-gap);
+  border: 1px dashed var(--theme-danger-color);
+  border-radius: var(--theme-border-radius);
+  color: var(--theme-danger-color);
+  background: color-mix(in srgb, var(--theme-surface) 90%, var(--theme-danger-color));
+
+  .loading-error-state-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--theme-default-gap-small);
+  }
+
+  mat-icon {
+    height: 20px;
+    width: 20px;
+    min-width: 20px;
+    font-size: 20px;
+  }
+
+  .loading-error-state-message {
+    color: var(--theme-muted);
+  }
+}

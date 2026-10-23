@@ -1,0 +1,27 @@
+# Keep secrets and build noise out of the image build context.
+.git
+.github
+.idea
+.codex
+.agents
+.qwen
+tmp
+Stories
+
+# Frontend artifacts / dependencies (rebuilt inside the image)
+**/node_modules
+frontend/dist
+frontend/.angular
+
+# Backend artifacts (rebuilt inside the image)
+**/bin
+**/obj
+
+# NEVER ship the live data directory: settings.json contains the Arr API keys.
+backend/LibManagarr.Api/data
+
+# Misc
+**/*.user
+karma-*.log
+build-prod.log
+Fehler.txt

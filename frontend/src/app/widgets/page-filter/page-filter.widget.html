@@ -1,0 +1,195 @@
+﻿<section class="filter-bar" (keydown.escape)="expanded.set(false)">
+  @if (!bubblesBelow()) {
+    <div class="filter-summary">
+      <ng-container *ngTemplateOutlet="bubblesTpl" />
+    </div>
+  }
+  <button
+    mat-icon-button
+    type="button"
+    class="filter-toggle-button"
+    [matBadge]="activeFilterCount()"
+    [matBadgeHidden]="!activeFilterCount()"
+    [attr.aria-expanded]="expanded()"
+    [attr.aria-controls]="storagePrefix() + '-filter-editor'"
+    [attr.aria-label]="filterTitle()"
+    [title]="filterTitle()"
+    (click)="expanded.set(!expanded())"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">filter_list</span>
+  </button>
+</section>
+@if (bubblesBelow() && activeFilters().length > 0) {
+  <div class="filter-summary">
+    <ng-container *ngTemplateOutlet="bubblesTpl" />
+  </div>
+}
+@if (expanded()) {
+  <div class="filter-popover-backdrop" (click)="expanded.set(false)"></div>
+  <div class="filter-popover">
+    <div class="filter-editor" [id]="storagePrefix() + '-filter-editor'">
+      <div class="filter-editor-toolbar">
+        <p>{{ labels().hint }}</p>
+        <div class="filter-search">
+          <span class="material-symbols-outlined" aria-hidden="true">search</span>
+          <input
+            matInput
+            type="search"
+            [placeholder]="labels().search"
+            [attr.aria-label]="labels().search"
+            [value]="search()"
+            (input)="onSearchChanged($event)"
+          />
+        </div>
+      </div>
+      <div class="filter-grid">
+        @for (filter of visibleFilters(); track filter.id) {
+          <section class="filter-card" [class.filter-card-excluded]="filter.exclude">
+            <div class="filter-card-header">
+              <span class="filter-option-label">{{ filter.label }}</span>
+              @if (filter.supportsExclusion) {
+                <div class="filter-mode" role="group" [attr.aria-label]="filter.label">
+                  <button type="button" [attr.aria-pressed]="!filter.exclude" (click)="onPolarityChanged(filter, false)">
+                    {{ labels().include }}
+                  </button>
+                  <button type="button" [attr.aria-pressed]="!!filter.exclude" (click)="onPolarityChanged(filter, true)">
+                    {{ labels().exclude }}
+                  </button>
+                </div>
+              }
+            </div>
+            <ng-container *ngTemplateOutlet="filterControl; context: { $implicit: filter }" />
+          </section>
+        } @empty {
+          <p class="filter-no-results">{{ labels().noResults }}</p>
+        }
+      </div>
+    </div>
+  </div>
+}
+<ng-template #bubblesTpl>
+  @for (filter of activeFilters(); track filter.id) {
+    <span class="filter-bubble" [class.filter-bubble-excluded]="filter.exclude">
+      @if (filter.supportsExclusion) {
+        <button
+          type="button"
+          class="filter-bubble-mode"
+          [attr.aria-label]="changeModeLabel(filter)"
+          [title]="changeModeLabel(filter)"
+          (click)="onPolarityChanged(filter, !filter.exclude)"
+        >
+          <span aria-hidden="true">{{ filter.exclude ? '−' : '+' }}</span>
+        </button>
+      }
+      @let value = filterValueLabel(filter);
+      <span class="filter-bubble-label"
+        ><span class="filter-bubble-name">{{ filter.label }}</span
+        >{{ value ? ': ' : '' }}{{ filter.exclude ? labels().not + ' ' : '' }}{{ value }}</span
+      >
+      <button
+        type="button"
+        class="filter-bubble-remove"
+        [attr.aria-label]="removeFilterLabel(filter)"
+        [title]="removeFilterLabel(filter)"
+        (click)="removeFilter(filter)"
+      >
+        <span class="material-symbols-outlined" aria-hidden="true">close</span>
+      </button>
+    </span>
+  }
+</ng-template>
+<ng-template #filterControl let-filter>
+  @if (filter.type === 'SWITCH') {
+    <mat-slide-toggle [aria-label]="filter.label" [checked]="filter.value" (change)="onToggleChanged(filter, $event)" />
+  } @else if (filter.type === 'NUMBER_RANGE') {
+    <div class="filter-range-inputs">
+      <input
+        type="number"
+        matInput
+        class="filter-range-input"
+        [attr.min]="filter.minimum ?? null"
+        [attr.step]="filter.step ?? 1"
+        [placeholder]="labels().min"
+        [attr.aria-label]="filter.label + ': ' + labels().min"
+        [value]="filter.minValue ?? ''"
+        (input)="onRangeMinChanged(filter, $event)"
+      />
+      <span aria-hidden="true">–</span>
+      <input
+        type="number"
+        matInput
+        class="filter-range-input"
+        [attr.min]="filter.minimum ?? null"
+        [attr.step]="filter.step ?? 1"
+        [placeholder]="labels().max"
+        [attr.aria-label]="filter.label + ': ' + labels().max"
+        [value]="filter.maxValue ?? ''"
+        (input)="onRangeMaxChanged(filter, $event)"
+      />
+    </div>
+  } @else if (filter.type === 'SELECT') {
+    <div class="filter-select-field">
+      <mat-select
+        hideSingleSelectionIndicator
+        [aria-label]="filter.label"
+        [value]="filter.selectedValue"
+        (selectionChange)="onSelectChanged(filter, $event)"
+      >
+        <mat-select-trigger>
+          @for (option of filter.options; track option.value) {
+            @if (option.value === filter.selectedValue) {
+              {{ option.label }}
+            }
+          }
+        </mat-select-trigger>
+        @for (option of filter.options; track option.value) {
+          <mat-option [value]="option.value" [class.filter-option-with-count]="option.count !== undefined">
+            <span class="filter-option-content">
+              <span class="filter-option-text">{{ option.label }}</span>
+              @if (option.count !== undefined) {
+                <span class="filter-option-count">({{ option.count }})</span>
+              }
+            </span>
+          </mat-option>
+        }
+      </mat-select>
+    </div>
+  } @else if (filter.type === 'MULTISELECT') {
+    <div class="filter-select-field">
+      <app-multiselect
+        [ariaLabel]="filter.label"
+        [totalCount]="filter.totalCount"
+        [options]="filter.options"
+        [selectedValues]="filter.selectedValues"
+        (selectedValuesChange)="onMultiSelectChanged(filter, $event)"
+      />
+    </div>
+  } @else if (filter.type === 'DATE_TIME_RANGE') {
+    <app-date-range-time-picker
+      [label]="''"
+      [startDate]="filter.startDate"
+      [endDate]="filter.endDate"
+      (rangeChange)="onDateTimeRangeChanged(filter, $event)"
+    />
+  } @else if (filter.type === 'DATE_RANGE') {
+    <div class="filter-date-only-inputs">
+      <input
+        type="date"
+        class="filter-date-input"
+        [class.filter-date-input-empty]="!filter.startDate"
+        [attr.aria-label]="filter.label + ': ' + labels().from"
+        [value]="filter.startDate"
+        (input)="onDateOnlyStartChanged(filter, $event)"
+      />
+      <span aria-hidden="true">–</span>
+      <input
+        type="date"
+        class="filter-date-input"
+        [class.filter-date-input-empty]="!filter.endDate"
+        [attr.aria-label]="filter.label + ': ' + labels().to"
+        [value]="filter.endDate"
+        (input)="onDateOnlyEndChanged(filter, $event)"
+      />
+    </div>
+  }
+</ng-template>

@@ -1,0 +1,31 @@
+@if (label()) {
+  <div class="date-range-label-row">
+    <span class="date-range-label">{{ label() }}</span>
+  </div>
+}
+
+<mat-form-field class="date-range-form-field" appearance="outline">
+  <mat-label>{{ dateLabel() }}</mat-label>
+  <mat-date-range-input [rangePicker]="dateRangePicker">
+    <input matStartDate [value]="startDateValue()" (dateChange)="onDateChanged('start', $event.value)" />
+    <input matEndDate [value]="endDateValue()" (dateChange)="onDateChanged('end', $event.value)" />
+  </mat-date-range-input>
+  <mat-datepicker-toggle matSuffix [for]="dateRangePicker"></mat-datepicker-toggle>
+  <mat-date-range-picker #dateRangePicker></mat-date-range-picker>
+</mat-form-field>
+
+<div class="date-range-time-grid">
+  <mat-form-field class="time-picker-form-field" appearance="outline" [floatLabel]="'always'">
+    <mat-label>{{ timeFromLabel() }}</mat-label>
+    <input matInput [matTimepicker]="fromTimePicker" [value]="startTimeValue()" (valueChange)="onTimeChanged('start', $event)" />
+    <mat-timepicker-toggle matIconSuffix [for]="fromTimePicker" />
+    <mat-timepicker #fromTimePicker />
+  </mat-form-field>
+
+  <mat-form-field class="time-picker-form-field" appearance="outline" [floatLabel]="'always'">
+    <mat-label>{{ timeToLabel() }}</mat-label>
+    <input matInput [matTimepicker]="toTimePicker" [value]="endTimeValue()" (valueChange)="onTimeChanged('end', $event)" />
+    <mat-timepicker-toggle matIconSuffix [for]="toTimePicker" />
+    <mat-timepicker #toTimePicker />
+  </mat-form-field>
+</div>

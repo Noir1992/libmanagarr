@@ -1,0 +1,8 @@
+<section class="no-arr-instances-configured-state" routerLink="/settings" [queryParams]="{ tab: 'arr-instances' }">
+  <div class="no-arr-instances-configured-state-header">
+    <mat-icon class="material-symbols-outlined" aria-hidden="true">info</mat-icon>
+    <span>{{ noArrInstancesText() }}</span>
+  </div>
+
+  <span class="no-arr-instances-configured-state-info-text">{{ goToArrInstanceSettingsText() }}</span>
+</section>

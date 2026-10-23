@@ -1,0 +1,140 @@
+<main class="page-shell">
+  <section class="page-header">
+    <div class="page-title-row">
+      <h1 class="page-title">{{ title() }}</h1>
+    </div>
+    <p class="page-description">{{ description() }}</p>
+  </section>
+
+  <section class="page-content">
+    @if (noInstancesConfigured()) {
+      <app-no-arr-instances-configured-section />
+    } @else {
+      <app-page-filter
+        [filters]="filterOptions()"
+        [storagePrefix]="'library-trend'"
+        (activeFilterCountChange)="onFilterActiveCountChange($event)"
+      />
+
+      @if (loading()) {
+        <app-loading-section />
+      } @else if (loadError(); as error) {
+        <app-loading-error-section [error]="error" />
+      }
+
+      @if (stats()) {
+        @if (noDataAvailable()) {
+          <app-no-data-section [isFiltered]="isFiltered()" />
+        } @else {
+          <section class="trend-overview-grid">
+            <div class="card">
+              <div class="card-content">
+                <div class="trend-overview-item-label">{{ totalMediaFilesLabel() }}</div>
+                <div class="trend-overview-item-value">{{ formatNumber(stats()!.totalMediaFileCount) }}</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-content">
+                <div class="trend-overview-item-label">{{ totalStorageLabel() }}</div>
+                <div class="trend-overview-item-value">{{ formatBytes(stats()!.totalSizeBytes) }}</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="charts-grid">
+            <app-trend-chart-widget
+              [chartId]="'media'"
+              [title]="mediaChartLabel()"
+              [chart]="mediaChartModel()"
+              [chartAccentColor]="chartAccentColor"
+              (pointSelected)="onChartPointSelected($event)"
+            />
+
+            <app-trend-chart-widget
+              [chartId]="'storage'"
+              [title]="storageChartLabel()"
+              [chart]="storageChartModel()"
+              [chartAccentColor]="chartAccentColor"
+              (pointSelected)="onChartPointSelected($event)"
+            />
+          </section>
+
+          <section class="card trend-history-card">
+            <div class="card-header">
+              <h2 class="card-title">{{ historyLabel() }}</h2>
+            </div>
+
+            <div class="card-content">
+              @if (historyEntries().length > 0) {
+                <cdk-virtual-scroll-viewport class="history-viewport" [itemSize]="historyItemSize">
+                  <table mat-table fixedLayout [dataSource]="historyEntries()">
+                    <ng-container matColumnDef="occurredAt">
+                      <th mat-header-cell *matHeaderCellDef>{{ timeLabel() }}</th>
+                      <td mat-cell *matCellDef="let entry">{{ entry.occurredAt | date: 'medium' }}</td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="instanceName">
+                      <th mat-header-cell *matHeaderCellDef>{{ instanceLabel() }}</th>
+                      <td mat-cell *matCellDef="let entry">{{ entry.instanceName }}</td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="changeType">
+                      <th mat-header-cell *matHeaderCellDef>{{ changeLabel() }}</th>
+                      <td mat-cell *matCellDef="let entry">
+                        @switch (entry.changeType) {
+                          @case ('Added') {
+                            {{ addedLabel() }}
+                          }
+                          @case ('Changed') {
+                            {{ changedLabel() }}
+                          }
+                          @case ('Deleted') {
+                            {{ deletedLabel() }}
+                          }
+                          @case ('Updated') {
+                            {{ updatedLabel() }}
+                          }
+                        }
+                      </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="entityTitle">
+                      <th mat-header-cell *matHeaderCellDef>{{ mediaFilesLabel() }}</th>
+                      <td mat-cell *matCellDef="let entry">
+                        {{ entry.entityTitle }}
+                        @if (entry.seriesTitle) {
+                          <span class="history-series-title">({{ entry.seriesTitle }})</span>
+                        }
+                      </td>
+                    </ng-container>
+
+                    <ng-container matColumnDef="deltaSizeBytes">
+                      <th mat-header-cell *matHeaderCellDef>{{ storageLabel() }}</th>
+                      <td mat-cell *matCellDef="let entry">
+                        @if (entry.deltaSizeBytes === 0) {
+                          {{ noChangeLabel() }}
+                        } @else {
+                          {{ entry.deltaSizeBytes > 0 ? '+' : '-' }}{{ formatBytes(absolute(entry.deltaSizeBytes)) }}
+                        }
+                      </td>
+                    </ng-container>
+
+                    <tr mat-header-row *matHeaderRowDef="historyColumns; sticky: true"></tr>
+                    <tr
+                      mat-row
+                      *matRowDef="let entry; columns: historyColumns"
+                      [class.history-entry-highlight]="highlightedHistoryEntries().has(entry)"
+                    ></tr>
+                  </table>
+                </cdk-virtual-scroll-viewport>
+              } @else {
+                <div class="history-empty-state">{{ emptyStateText() }}</div>
+              }
+            </div>
+          </section>
+        }
+      }
+    }
+  </section>
+</main>

@@ -1,0 +1,46 @@
+<section class="card" aria-label="{{ table().instanceName }}">
+  <div class="card-header">
+    <h2 class="card-title">{{ table().instanceName }}</h2>
+
+    @if (table().syncedAt) {
+      <span class="card-subtitle">
+        ({{ table().movies.length }} {{ getMovieCountLabel(table().movies.length) }} - {{ updatedLabel() }}:
+        {{ table().syncedAt | appDate: 'medium' }})
+      </span>
+    }
+
+    <div class="card-header-actions">
+      <button type="button" mat-icon-button (click)="toggleCollapsed()">
+        <span class="material-symbols-outlined collapse-icon" [class.is-collapsed]="collapsed()"> expand_more </span>
+      </button>
+    </div>
+  </div>
+
+  @if (!collapsed()) {
+    <div class="card-content" animate.enter="expand-in" animate.leave="expand-out">
+      <table mat-table [dataSource]="table().movies" [trackBy]="trackByMovieId">
+        @for (column of movieColumns(); track column.appTableColumnConfig().key) {
+          <ng-container [matColumnDef]="column.appTableColumnConfig().key">
+            <th mat-header-cell *matHeaderCellDef>
+              {{ column.appTableColumnConfig().header }}
+            </th>
+            <td mat-cell *matCellDef="let row">
+              <ng-container [ngTemplateOutlet]="column.templateRef" [ngTemplateOutletContext]="{ $implicit: row }" />
+            </td>
+          </ng-container>
+        }
+
+        <tr mat-header-row *matHeaderRowDef="movieColumnIds()"></tr>
+        <tr
+          mat-row
+          *matRowDef="let row; columns: movieColumnIds()"
+          class="movie-detail-row"
+          tabindex="0"
+          (click)="openMovieDetails(row, $event)"
+          (keydown.enter)="openMovieDetails(row, $event)"
+          (keydown.space)="openMovieDetails(row, $event)"
+        ></tr>
+      </table>
+    </div>
+  }
+</section>

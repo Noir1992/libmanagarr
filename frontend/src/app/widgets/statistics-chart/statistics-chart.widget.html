@@ -1,0 +1,52 @@
+<article class="chart-panel">
+  <h3>{{ category.title }}</h3>
+  <div class="pie-wrap">
+    <svg class="pie" viewBox="0 0 120 120" aria-hidden="true">
+      <circle class="pie-track" cx="60" cy="60" [attr.r]="radius"></circle>
+      @for (item of category.items; track item.label) {
+        <circle
+          class="pie-segment"
+          cx="60"
+          cy="60"
+          [attr.r]="radius"
+          [attr.stroke]="item.color"
+          [style.stroke-dasharray]="item.dashArray"
+          [style.stroke-dashoffset]="item.dashOffset"
+          (mouseenter)="hoverStart($event, item)"
+          (mousemove)="hoverMove($event)"
+          (mouseleave)="hoverEnd()"
+          (click)="selectSegment(item)"
+        ></circle>
+      }
+    </svg>
+  </div>
+
+  <button
+    type="button"
+    class="chart-values-toggle"
+    [attr.aria-expanded]="rowsExpanded()"
+    [attr.aria-controls]="category.key + '-values'"
+    (click)="toggleRows()"
+  >
+    {{ rowsToggleLabel() }}
+    <span class="chart-values-count">({{ category.items.length }})</span>
+    <span class="material-symbols-outlined collapse-icon" [class.is-collapsed]="!rowsExpanded()" aria-hidden="true">expand_more</span>
+  </button>
+  <div [id]="category.key + '-values'" [hidden]="!rowsExpanded()">
+    @if (rowsExpanded()) {
+      <app-statistics-chart-rows
+        [categoryKey]="category.key"
+        [items]="category.items"
+        [expandedItems]="expandedItems()"
+        (itemToggle)="toggleItem($event)"
+        (treeInteraction)="hideTooltip()"
+      />
+    }
+  </div>
+
+  @if (hoverTooltip(); as tooltip) {
+    <div class="chart-tooltip" [style.left.px]="tooltip.x + 12" [style.top.px]="tooltip.y + 12">
+      {{ tooltip.text }}
+    </div>
+  }
+</article>

@@ -1,0 +1,50 @@
+<article
+  class="media-card"
+  [class.clickable]="clickable()"
+  [attr.tabindex]="clickable() ? 0 : null"
+  (keydown.enter)="onCardKeydown($event)"
+  (keydown.space)="onCardKeydown($event)"
+  [class.is-pressed]="isPressed()"
+  (mousedown)="onMousedown()"
+  (mouseup)="onMouseup()"
+  (mouseleave)="onMouseup()"
+  (click)="onCardClick()"
+>
+  <div class="media-card-title">
+    <a
+      [href]="item().url"
+      target="_blank"
+      rel="noopener"
+      class="text-link"
+      [title]="item().title"
+      (click)="$event.stopPropagation()"
+      (mousedown)="$event.stopPropagation()"
+      (mouseup)="$event.stopPropagation()"
+      >{{ item().title }}</a
+    >
+  </div>
+
+  @if (hasPoster() && posterUrl()) {
+    <img [src]="posterUrl()!" alt="" class="media-card-poster" loading="lazy" />
+  } @else {
+    <div class="media-card-fallback" [style.--card-header-bg]="headerBg()">
+      <span class="media-card-initials">{{ initials() }}</span>
+    </div>
+  }
+
+  <div class="media-card-details">
+    @for (row of item().detailRows; track row.label) {
+      <div class="media-card-detail-row">
+        <span class="media-card-detail-row-label">{{ row.label }}</span>
+        <span
+          class="media-card-detail-row-value"
+          [class.tone-success]="row.tone === 'success'"
+          [class.tone-warning]="row.tone === 'warning'"
+          [class.tone-danger]="row.tone === 'danger'"
+          [class.tone-info]="row.tone === 'info'"
+          >{{ row.value }}</span
+        >
+      </div>
+    }
+  </div>
+</article>

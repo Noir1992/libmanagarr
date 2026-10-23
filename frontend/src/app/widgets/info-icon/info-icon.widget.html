@@ -1,0 +1,39 @@
+<button
+  type="button"
+  mat-icon-button
+  class="material-symbols-outlined {{ size() }}"
+  cdkOverlayOrigin
+  #origin="cdkOverlayOrigin"
+  [attr.aria-expanded]="isOpen()"
+  (click)="toggle()"
+>
+  info
+</button>
+
+<div class="info-popover-ghost" #measurePanel>
+  <p>{{ messageText() }}</p>
+</div>
+
+<ng-template
+  cdkConnectedOverlay
+  [cdkConnectedOverlayOrigin]="origin"
+  [cdkConnectedOverlayOpen]="isOpen()"
+  [cdkConnectedOverlayPositions]="positions()"
+  [cdkConnectedOverlayFlexibleDimensions]="false"
+  [cdkConnectedOverlayHasBackdrop]="true"
+  cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
+  (backdropClick)="close()"
+  (overlayKeydown)="onOverlayKeydown($event)"
+>
+  <div
+    class="info-popover"
+    role="tooltip"
+    [class.info-popover--right]="placement() === 'right'"
+    [class.info-popover--left]="placement() === 'left'"
+    [class.info-popover--below]="placement() === 'below'"
+    [class.info-popover--above]="placement() === 'above'"
+  >
+    <span class="info-popover-arrow" aria-hidden="true" [style.top.px]="arrowTop()" [style.left.px]="arrowLeft()"></span>
+    <p>{{ messageText() }}</p>
+  </div>
+</ng-template>

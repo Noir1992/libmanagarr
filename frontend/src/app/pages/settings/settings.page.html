@@ -1,0 +1,45 @@
+<main class="page-shell">
+  <section class="page-header">
+    <div class="page-title-row">
+      <h1 class="page-title">{{ pageTitle() }}</h1>
+    </div>
+    <p class="page-description">{{ pageDescription() }}</p>
+  </section>
+
+  <section class="page-content">
+    @if (settingsLoadError(); as loadError) {
+      <section class="feedback error">{{ loadError }}</section>
+    }
+
+    <mat-tab-group
+      animationDuration="180ms"
+      [mat-stretch-tabs]="false"
+      [selectedIndex]="selectedTabIndex()"
+      (selectedIndexChange)="handleTabSelectionChange($event)"
+    >
+      <mat-tab [label]="generalTabLabel()">
+        <ng-template matTabContent>
+          <app-settings-general-tab-widget />
+        </ng-template>
+      </mat-tab>
+
+      <mat-tab [label]="instancesTabLabel()">
+        <ng-template matTabContent>
+          <app-settings-arr-instances-tab-widget />
+        </ng-template>
+      </mat-tab>
+
+      <mat-tab [label]="tasksTabLabel()">
+        <ng-template matTabContent>
+          <app-settings-tasks-tab-widget />
+        </ng-template>
+      </mat-tab>
+
+      <mat-tab [label]="accountTabLabel()">
+        <ng-template matTabContent>
+          <app-settings-account-tab-widget />
+        </ng-template>
+      </mat-tab>
+    </mat-tab-group>
+  </section>
+</main>

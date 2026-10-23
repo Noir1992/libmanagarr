@@ -1,0 +1,27 @@
+.feedback-toast-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--theme-default-gap);
+  padding: 8px 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+
+  .feedback-toast-icon {
+    font-size: 18px;
+    line-height: 1;
+    flex: 0 0 auto;
+
+    &.is-success {
+      color: #2e7d32;
+    }
+
+    &.is-error {
+      color: #c62828;
+    }
+  }
+
+  .feedback-toast-message {
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+}

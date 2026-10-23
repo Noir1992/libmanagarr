@@ -1,0 +1,15 @@
+services:
+  libmanagarr:
+    image: ghcr.io/noir1992/libmanagarr:latest
+    container_name: libmanagarr
+    ports:
+      - '${LIBMANAGARR_PORT:-8080}:${LIBMANAGARR_PORT:-8080}'
+    environment:
+      # Default 8080; LIBMANAGARR_PORT (.env or shell env) moves host and container port together.
+      - HTTP_PORTS=${LIBMANAGARR_PORT:-8080}
+    volumes:
+      # settings.json, libmanagarr.db and log files (LIBMANAGARR_CONFIG_DIR=/config in the image)
+      - ./libmanagarr-config:/config
+      # poster cache
+      - ./libmanagarr-data:/app/data
+    restart: unless-stopped

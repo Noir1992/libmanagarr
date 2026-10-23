@@ -1,0 +1,44 @@
+<div class="detail-header">
+  <h2 mat-dialog-title [title]="data.title">{{ data.title }}</h2>
+  <button type="button" mat-icon-button (click)="close()" [attr.aria-label]="closeLabel()">
+    <span class="material-symbols-outlined" aria-hidden="true">close</span>
+  </button>
+</div>
+<mat-dialog-content>
+  @if (data.posterUrl) {
+    <div class="detail-poster-wrapper">
+      <img class="detail-poster" [src]="data.posterUrl" alt="" loading="lazy" />
+    </div>
+  }
+  <dl class="detail-list">
+    @for (row of rows(); track row.label) {
+      <div class="detail-row">
+        <dt>{{ row.label }}</dt>
+        <dd
+          [class.score-reached]="row.key === 'common.column.score' && scoreTone() === 'reached'"
+          [class.score-below]="row.key === 'common.column.score' && scoreTone() === 'below'"
+          [class.tone-success]="row.tone === 'success'"
+          [class.tone-warning]="row.tone === 'warning'"
+          [class.tone-danger]="row.tone === 'danger'"
+          [class.tone-info]="row.tone === 'info'"
+        >
+          @if (row.key === 'common.column.instance' && data.url) {
+            {{ row.value }}
+            <a
+              class="instance-link"
+              [href]="data.url"
+              target="_blank"
+              rel="noopener"
+              [title]="instanceLinkLabel(row.value)"
+              [attr.aria-label]="instanceLinkLabel(row.value)"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">link</span>
+            </a>
+          } @else {
+            {{ row.value }}
+          }
+        </dd>
+      </div>
+    }
+  </dl>
+</mat-dialog-content>

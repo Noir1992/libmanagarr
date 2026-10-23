@@ -1,0 +1,18 @@
+.no-data-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--theme-default-gap-small);
+  padding: var(--theme-default-gap);
+  border: 1px dashed var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  color: var(--theme-muted);
+  background: var(--theme-surface);
+
+  mat-icon {
+    height: 20px;
+    width: 20px;
+    min-width: 20px;
+    font-size: 20px;
+  }
+}

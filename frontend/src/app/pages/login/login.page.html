@@ -1,0 +1,117 @@
+<main class="auth-page">
+  <section class="auth-card card">
+    <header class="card-header">
+      <h1 class="auth-title">
+        @if (authState() === 'error') {
+          {{ errorTitle() }}
+        } @else if (mode() === 'credentials') {
+          {{ loginTitle() }}
+        } @else {
+          {{ twoFactorTitle() }}
+        }
+      </h1>
+    </header>
+
+    <div class="card-content">
+      @if (authState() === 'error') {
+        @if (authErrorLabel()) {
+          <p class="field-error">{{ authErrorLabel() }}</p>
+        }
+        <button type="button" mat-stroked-button class="auth-submit secondary-button" (click)="retryStateProbeAsync()">
+          {{ retryLabel() }}
+        </button>
+      } @else if (mode() === 'credentials') {
+        <form [formGroup]="credentialsForm" (ngSubmit)="submitCredentialsAsync()">
+          <div class="field">
+            <div class="field-label-row">
+              <label for="login-username">{{ usernameLabel() }}</label>
+            </div>
+            <div class="field-control-wrap">
+              <input
+                matInput
+                id="login-username"
+                type="text"
+                formControlName="username"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                [disabled]="busy()"
+              />
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label-row">
+              <label for="login-password">{{ passwordLabel() }}</label>
+            </div>
+            <div class="field-control-wrap">
+              <input
+                matInput
+                id="login-password"
+                type="password"
+                formControlName="password"
+                autocomplete="current-password"
+                [disabled]="busy()"
+              />
+            </div>
+          </div>
+
+          <div class="field">
+            <mat-checkbox formControlName="rememberMe" [disabled]="busy()">{{ rememberMeLabel() }}</mat-checkbox>
+          </div>
+
+          @if (formError()) {
+            <p class="field-error">{{ formError() }}</p>
+          }
+
+          <button type="submit" mat-stroked-button class="auth-submit secondary-button" [disabled]="busy() || credentialsForm.invalid">
+            {{ signInLabel() }}
+          </button>
+
+          <div class="auth-actions">
+            <button type="button" mat-button class="forgot-password-button" (click)="openForgotPasswordDialog()">
+              {{ forgotPasswordLabel() }}
+            </button>
+          </div>
+        </form>
+      } @else {
+        <p class="auth-description">{{ useRecoveryCode() ? recoveryDescription() : twoFactorDescription() }}</p>
+
+        <form [formGroup]="codeForm" (ngSubmit)="submitCodeAsync()">
+          <div class="field">
+            <div class="field-label-row">
+              <label for="login-code">{{ useRecoveryCode() ? recoveryCodeLabel() : codeLabel() }}</label>
+            </div>
+            <div class="field-control-wrap">
+              <input
+                matInput
+                id="login-code"
+                type="text"
+                formControlName="code"
+                autocomplete="one-time-code"
+                autocapitalize="none"
+                spellcheck="false"
+                [disabled]="busy()"
+              />
+            </div>
+          </div>
+
+          @if (formError()) {
+            <p class="field-error">{{ formError() }}</p>
+          }
+
+          <button type="submit" mat-stroked-button class="auth-submit secondary-button" [disabled]="busy() || codeForm.invalid">
+            {{ verifyLabel() }}
+          </button>
+        </form>
+
+        <div class="auth-actions">
+          <button type="button" mat-button (click)="toggleRecoveryUsage()">
+            {{ useRecoveryCode() ? useAuthenticatorLabel() : useRecoveryLabel() }}
+          </button>
+          <button type="button" mat-button (click)="backToCredentials()">{{ backToLoginLabel() }}</button>
+        </div>
+      }
+    </div>
+  </section>
+</main>

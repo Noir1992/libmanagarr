@@ -1,0 +1,91 @@
+<div class="app-frame" [class.is-navigation-open]="showShell() && navigationOpen()" [class.is-auth-view]="!showShell()">
+  @if (showShell()) {
+    <header class="app-header">
+      <button
+        type="button"
+        mat-icon-button
+        class="material-symbols-outlined navigation-toggle"
+        [attr.aria-label]="navigationToggleLabel()"
+        [attr.aria-expanded]="navigationOpen()"
+        (click)="toggleNavigation()"
+      >
+        menu
+      </button>
+
+      <span class="app-title">LibManagarr</span>
+
+      <button
+        type="button"
+        mat-icon-button
+        class="material-symbols-outlined user-menu"
+        [matMenuTriggerFor]="userMenu"
+        [attr.aria-label]="userMenuLabel()"
+      >
+        account_circle
+      </button>
+      <mat-menu #userMenu="matMenu" xPosition="before">
+        <a mat-menu-item routerLink="/settings">
+          <span class="material-symbols-outlined user-menu-item-icon" aria-hidden="true">settings</span>
+          <span>{{ settingsLabel() }}</span>
+        </a>
+        <button mat-menu-item type="button" [disabled]="logoutBusy()" (click)="logoutAsync()">
+          <span class="material-symbols-outlined user-menu-item-icon" aria-hidden="true">logout</span>
+          <span>{{ logoutLabel() }}</span>
+        </button>
+      </mat-menu>
+    </header>
+
+    <aside class="app-sidebar" aria-label="Main navigation" [attr.inert]="navigationOpen() ? null : ''">
+      <nav class="main-navigation">
+        <a
+          routerLink="/library"
+          routerLinkActive="is-active"
+          [routerLinkActiveOptions]="{ exact: true }"
+          class="navigation-item"
+          (click)="closeNavigation()"
+        >
+          <mat-icon class="material-symbols-outlined">movie</mat-icon>
+          <span>{{ libraryLabel() }}</span>
+        </a>
+        <a routerLink="/codec-statistics" routerLinkActive="is-active" class="navigation-item" (click)="closeNavigation()">
+          <mat-icon class="material-symbols-outlined">av1</mat-icon>
+          <span>{{ codecStatsLabel() }}</span>
+        </a>
+        <a routerLink="/library-trend" routerLinkActive="is-active" class="navigation-item" (click)="closeNavigation()">
+          <mat-icon class="material-symbols-outlined">timeline</mat-icon>
+          <span>{{ libraryTrendLabel() }}</span>
+        </a>
+        <a routerLink="/logs" routerLinkActive="is-active" class="navigation-item" (click)="closeNavigation()">
+          <mat-icon class="material-symbols-outlined">text_snippet</mat-icon>
+          <span>{{ logsLabel() }}</span>
+        </a>
+      </nav>
+    </aside>
+
+    @if (navigationOpen() && narrowViewport()) {
+      <button type="button" class="navigation-backdrop" [attr.aria-label]="navigationToggleLabel()" (click)="closeNavigation()"></button>
+    }
+  }
+
+  <main class="app-content">
+    <div class="content-scroll" #contentScroll (scroll)="onContentScroll()">
+      @if (logoutError(); as error) {
+        <p class="feedback error" role="alert">{{ error }}</p>
+      }
+      <router-outlet />
+    </div>
+  </main>
+
+  @if (scrollToTopVisible()) {
+    <button
+      type="button"
+      mat-icon-button
+      class="scroll-to-top"
+      [attr.aria-label]="scrollToTopLabel()"
+      [title]="scrollToTopLabel()"
+      (click)="scrollToTop()"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">keyboard_arrow_up</span>
+    </button>
+  }
+</div>

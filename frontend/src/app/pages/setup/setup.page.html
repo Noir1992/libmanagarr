@@ -1,0 +1,69 @@
+<main class="auth-page">
+  <section class="auth-card card">
+    <header class="card-header">
+      <h1 class="auth-title">{{ setupTitle() }}</h1>
+    </header>
+
+    <div class="card-content">
+      <form [formGroup]="setupForm" (ngSubmit)="submitSetupAsync()">
+        <div class="field">
+          <div class="field-label-row">
+            <label for="setup-username">{{ usernameLabel() }}</label>
+          </div>
+          <div class="field-control-wrap">
+            <input
+              matInput
+              id="setup-username"
+              type="text"
+              formControlName="username"
+              autocomplete="username"
+              autocapitalize="none"
+              spellcheck="false"
+            />
+          </div>
+          @if (fieldErrors().username) {
+            <p class="field-error">{{ fieldErrors().username }}</p>
+          }
+        </div>
+
+        <div class="field">
+          <div class="field-label-row">
+            <label for="setup-password">{{ passwordLabel() }}</label>
+            <app-info-icon [messageText]="passwordRequirements()" />
+          </div>
+          <div class="field-control-wrap">
+            <input matInput id="setup-password" type="password" formControlName="password" autocomplete="new-password" />
+          </div>
+          @if (
+            setupForm.controls.password.dirty &&
+            (setupForm.controls.password.hasError('minlength') || setupForm.controls.password.hasError('maxlength'))
+          ) {
+            <p class="field-error" aria-live="polite">{{ passwordLengthMessage() }}</p>
+          } @else if (fieldErrors().password) {
+            <p class="field-error">{{ fieldErrors().password }}</p>
+          }
+        </div>
+
+        <div class="field">
+          <div class="field-label-row">
+            <label for="setup-confirm-password">{{ confirmPasswordLabel() }}</label>
+          </div>
+          <div class="field-control-wrap">
+            <input matInput id="setup-confirm-password" type="password" formControlName="confirmPassword" autocomplete="new-password" />
+          </div>
+          @if (fieldErrors().confirmPassword) {
+            <p class="field-error">{{ fieldErrors().confirmPassword }}</p>
+          }
+        </div>
+
+        @if (formError()) {
+          <p class="field-error">{{ formError() }}</p>
+        }
+
+        <button type="submit" mat-stroked-button class="auth-submit secondary-button" [disabled]="busy() || setupForm.invalid">
+          {{ createAccountLabel() }}
+        </button>
+      </form>
+    </div>
+  </section>
+</main>

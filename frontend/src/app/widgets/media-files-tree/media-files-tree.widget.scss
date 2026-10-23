@@ -1,0 +1,126 @@
+.media-files-tree {
+  padding: 1px var(--theme-default-gap-small) var(--theme-default-gap-small) var(--theme-default-gap-small);
+  border: 1px solid var(--theme-border-color);
+  border-top: 0;
+  border-radius: 0 0 var(--theme-border-radius) var(--theme-border-radius);
+  list-style: none;
+  box-sizing: border-box;
+  overflow-x: clip;
+  overflow-y: visible;
+
+  &.expand-content {
+    overflow: visible;
+  }
+
+  .tree-row {
+    margin: 0;
+    min-width: 0;
+    position: relative;
+
+    &:first-child {
+      margin-top: var(--theme-default-gap-small);
+    }
+
+    &.root-divider {
+      margin-top: 10px;
+      padding-top: var(--theme-default-gap-small);
+      border-top: 1px solid color-mix(in srgb, var(--theme-border-color) 70%, transparent);
+    }
+
+    .tree-row-main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+
+      .tree-toggle {
+        cursor: pointer;
+      }
+
+      .folder-icon,
+      .file-icon {
+        font-size: 18px;
+      }
+
+      .tree-meta {
+        margin-left: auto;
+        opacity: 0.72;
+        white-space: nowrap;
+        font-size: 0.82em;
+        flex: 0 0 auto;
+      }
+
+      .tree-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: inline-block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tree-toggle,
+      .file-row {
+        flex: 1 1 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--theme-default-gap-small);
+        border: 0;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        padding: 6px 4px;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        min-width: 0;
+        box-sizing: border-box;
+
+        &:hover {
+          background: var(--theme-interactive-hover-bg);
+        }
+      }
+
+      .tree-row-actions {
+        display: inline-flex;
+        align-items: center;
+
+        .mdc-icon-button {
+          --mat-icon-button-icon-size: 24px;
+          --mat-icon-button-state-layer-size: 24px;
+          --mat-icon-button-touch-target-size: 24px;
+        }
+
+        .tree-context-menu {
+          position: absolute;
+          top: calc(100% + 4px);
+          right: 0;
+          z-index: 15;
+          min-width: 220px;
+          border: 1px solid var(--theme-border-color);
+          border-radius: 6px;
+          background: var(--theme-panel-bg);
+          box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+          overflow: hidden;
+
+          .tree-context-item {
+            width: 100%;
+            border: 0;
+            background: transparent;
+            color: inherit;
+            text-align: left;
+            padding: 8px 10px;
+            cursor: pointer;
+
+            &:hover {
+              background: var(--theme-interactive-hover-bg);
+            }
+
+            &:disabled {
+              opacity: 0.55;
+              cursor: not-allowed;
+            }
+          }
+        }
+      }
+    }
+  }
+}

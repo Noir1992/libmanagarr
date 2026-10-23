@@ -1,0 +1,259 @@
+﻿:host {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+button {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  &:focus-visible {
+    outline: 2px solid var(--theme-accent);
+    outline-offset: 2px;
+  }
+}
+.filter-toggle-button {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--theme-text);
+  &:hover,
+  &[aria-expanded='true'] {
+    color: var(--theme-accent);
+  }
+}
+.filter-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 3px 2px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--theme-accent) 10%, var(--theme-surface));
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.filter-bubble-excluded {
+  background: color-mix(in srgb, var(--theme-danger-color) 10%, var(--theme-surface));
+}
+.filter-bubble-label {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.filter-bubble-name {
+  font-weight: 600;
+}
+.filter-bubble-remove,
+.filter-bubble-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  &:hover {
+    background: color-mix(in srgb, var(--theme-text) 8%, transparent);
+  }
+  .material-symbols-outlined {
+    font-size: 16px;
+  }
+}
+.filter-bubble-mode {
+  width: 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--theme-accent);
+}
+.filter-bubble-excluded .filter-bubble-mode {
+  color: var(--theme-danger-color);
+}
+// Stays below the CDK overlay container (z-index 1000) so nested mat-select/multiselect/
+// datepicker panels still render on top of the popover.
+.filter-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 800;
+}
+.filter-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 801;
+  // Never wider than the widget's own row: on the library page the row ends at the filter icon
+  // (sort/view icons follow), so a viewport-sized popover would reach over the window edge.
+  width: min(680px, calc(100vw - 24px), 100%);
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-panel-bg);
+  color: var(--theme-text);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
+}
+.filter-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+  p {
+    flex: 1 1 250px;
+    margin: 0;
+    color: var(--theme-muted);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+}
+.filter-search {
+  position: relative;
+  width: 210px;
+  max-width: 100%;
+  .material-symbols-outlined {
+    position: absolute;
+    top: 50%;
+    left: 10px;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 18px;
+    color: var(--theme-muted);
+  }
+  input.mat-mdc-input-element {
+    min-width: 0;
+    padding-left: 34px;
+  }
+}
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 8px;
+}
+.filter-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--theme-border-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--theme-panel-bg) 50%, var(--theme-input));
+}
+.filter-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filter-option-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.filter-mode {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 5px;
+  background: transparent;
+  button {
+    padding: 4px 6px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--theme-muted);
+    font-size: 0.68rem;
+    &[aria-pressed='true'] {
+      color: var(--theme-accent);
+      background: var(--theme-input);
+      box-shadow: 0 1px 3px #00000012;
+      font-weight: 600;
+    }
+  }
+}
+.filter-card-excluded .filter-mode button[aria-pressed='true'] {
+  color: var(--theme-danger-color);
+}
+.filter-select-field {
+  min-width: 0;
+  font-size: 0.82rem;
+}
+.filter-range-inputs,
+.filter-date-only-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--theme-muted);
+}
+.filter-range-input.mat-mdc-input-element,
+.filter-date-input {
+  box-sizing: border-box;
+  width: 0;
+  min-width: 0;
+  flex: 1;
+  height: var(--mat-select-trigger-text-line-height, 38px);
+  padding: 0 10px;
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-input);
+  color: var(--theme-text);
+  font-family: var(--mat-select-trigger-text-font, var(--app-font-family));
+  font-size: var(--mat-select-trigger-text-size, var(--mat-sys-body-large-size, 1rem));
+  font-weight: var(--mat-select-trigger-text-weight, var(--mat-sys-body-large-weight, 400));
+  letter-spacing: var(--mat-select-trigger-text-tracking, var(--mat-sys-body-large-tracking, 0));
+
+  &::placeholder {
+    color: var(--mat-select-placeholder-text-color, var(--mat-sys-on-surface-variant, var(--theme-muted)));
+    opacity: 1;
+  }
+
+  &:hover {
+    background-color: var(--theme-input-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--theme-accent);
+    outline-offset: 2px;
+  }
+}
+.filter-no-results {
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 0.8rem;
+}
+.filter-date-input {
+  color-scheme: var(--theme-color-scheme, light);
+
+  &.filter-date-input-empty {
+    color: var(--mat-select-placeholder-text-color, var(--mat-sys-on-surface-variant, var(--theme-muted)));
+  }
+}
+
+// Split layout (opt-in `bubblesBelow`): the host box dissolves so the filter bar and the bubble
+// row become flex items of the page's own toolbar; the bubble row wraps onto a full-width line of
+// its own below it. The popover then anchors to the nearest positioned ancestor, which the hosting
+// page must provide (position: relative on its control row).
+:host(.page-filter--bubbles-below) {
+  display: contents;
+}
+:host(.page-filter--bubbles-below) .filter-summary {
+  order: 5;
+  flex: 1 0 100%;
+}

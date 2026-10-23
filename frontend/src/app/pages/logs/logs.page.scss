@@ -1,0 +1,24 @@
+.page-shell {
+  height: 100%;
+
+  .page-content {
+    min-height: 0;
+  }
+}
+
+.logs-table-viewport {
+  flex-grow: 1;
+  overflow: auto;
+
+  // Without this, the browser's scroll anchoring repeatedly "corrects" scrollTop while the
+  // CDK virtual scroll swaps rows above the viewport, causing an up/down jitter loop.
+  overflow-anchor: none;
+}
+
+.mat-mdc-cell {
+  white-space: nowrap;
+}
+
+.mat-mdc-row {
+  --mat-table-row-item-container-height: auto;
+}

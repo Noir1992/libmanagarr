@@ -1,0 +1,18 @@
+@if (state() !== null) {
+  <span
+    class="feedback-icon-slot"
+    animate.enter="fade-in"
+    animate.leave="fade-out"
+    [class.overlay-space]="variant() === 'overlay-space'"
+    [class.overlay]="variant() === 'overlay'"
+    [class.inline]="variant() === 'inline'"
+  >
+    @if (state() === 'loading') {
+      <mat-icon class="material-symbols-outlined feedback-icon spinning" aria-hidden="true"> progress_activity </mat-icon>
+    } @else if (state() === 'success') {
+      <mat-icon class="material-symbols-outlined feedback-icon success" aria-hidden="true"> check </mat-icon>
+    } @else if (state() === 'error') {
+      <mat-icon class="material-symbols-outlined feedback-icon error" [title]="tooltipText() ?? ''" aria-hidden="true"> warning </mat-icon>
+    }
+  </span>
+}
