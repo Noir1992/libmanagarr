@@ -181,6 +181,7 @@ app.MapLogsEndpoints();
 app.MapSonarrEndpoints();
 app.MapRadarrEndpoints();
 app.MapStatisticsEndpoints();
+app.MapRequestEndpoints();
 
 // Unknown API paths must answer with a plain 404 problem instead of falling through to the
 // SPA shell with status 200.
