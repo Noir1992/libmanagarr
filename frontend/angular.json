@@ -17,18 +17,11 @@
       "root": "",
       "sourceRoot": "src",
       "prefix": "app",
-      "i18n": {
-        "sourceLocale": "en-US",
-        "locales": {
-          "de": "src/locale/messages.de.xlf"
-        }
-      },
       "architect": {
         "build": {
           "builder": "@angular/build:application",
           "options": {
             "browser": "src/main.ts",
-            "polyfills": ["@angular/localize/init"],
             "serviceWorker": "ngsw-config.json",
             "tsConfig": "tsconfig.app.json",
             "assets": [
@@ -59,9 +52,6 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
-            },
-            "de": {
-              "localize": ["de"]
             }
           },
           "defaultConfiguration": "production"
@@ -77,9 +67,6 @@
             },
             "development": {
               "buildTarget": "libmanagarr:build:development"
-            },
-            "de": {
-              "buildTarget": "libmanagarr:build:development,de"
             }
           },
           "defaultConfiguration": "development"

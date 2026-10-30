@@ -5,9 +5,7 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "start:de": "ng serve --configuration de",
     "build": "ng build",
-    "build:de": "ng build --configuration de",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "test:ci": "ng test --watch=false --browsers=ChromeHeadlessNoSandbox",
@@ -22,7 +20,6 @@
     "@angular/compiler": "^22.0.0",
     "@angular/core": "^22.0.0",
     "@angular/forms": "^22.0.0",
-    "@angular/localize": "^22.0.0",
     "@angular/material": "^22.0.0",
     "@angular/platform-browser": "^22.0.0",
     "@angular/router": "^22.0.0",
