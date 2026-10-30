@@ -55,6 +55,10 @@
     gap: var(--theme-default-gap-small);
     font-size: 14px;
 
+    &.is-error {
+      color: var(--theme-danger-color);
+    }
+
     mat-icon {
       font-size: 16px;
       width: 15px;
