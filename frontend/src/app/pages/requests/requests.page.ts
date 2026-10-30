@@ -1,14 +1,5 @@
 import { DatePipe } from '@angular/common';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  OnInit,
-  Signal,
-  signal,
-  WritableSignal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, Signal, signal, WritableSignal } from '@angular/core';
 import { MatIcon } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatDialog } from '@angular/material/dialog';
@@ -46,13 +37,7 @@ const STATUS_LABEL_KEYS: Record<SeerrRequestStatus, TranslationKey> = {
 
 // Seerr's filter parameter has no "declined" value, so the chip bar omits it even though
 // status 3 rows still render their declined label.
-const FILTERABLE_STATUSES: readonly Exclude<SeerrRequestStatus, 'unknown'>[] = [
-  'pending',
-  'approved',
-  'processing',
-  'available',
-  'failed',
-];
+const FILTERABLE_STATUSES: readonly Exclude<SeerrRequestStatus, 'unknown'>[] = ['pending', 'approved', 'processing', 'available', 'failed'];
 
 @Component({
   selector: 'app-requests-page',
@@ -92,20 +77,18 @@ export class RequestsPage implements OnInit {
   protected readonly loadError = this.requestsService.loadError;
   protected readonly notConfigured = this.requestsService.notConfigured;
   protected readonly statusFilter = this.requestsService.statusFilter;
-  protected readonly statusFilters: Signal<readonly RequestsFilterOption[]> = computed(
-    (): readonly RequestsFilterOption[] => [
-      { value: null, label: this.i18n.t('requests.filter.all') },
-      ...FILTERABLE_STATUSES.map(
-        (status: Exclude<SeerrRequestStatus, 'unknown'>): RequestsFilterOption => ({
-          value: status,
-          label: this.i18n.t(STATUS_LABEL_KEYS[status]),
-        }),
-      ),
-    ],
-  );
+  protected readonly statusFilters: Signal<readonly RequestsFilterOption[]> = computed((): readonly RequestsFilterOption[] => [
+    { value: null, label: this.i18n.t('requests.filter.all') },
+    ...FILTERABLE_STATUSES.map(
+      (status: Exclude<SeerrRequestStatus, 'unknown'>): RequestsFilterOption => ({
+        value: status,
+        label: this.i18n.t(STATUS_LABEL_KEYS[status]),
+      }),
+    ),
+  ]);
   protected readonly isFiltered: Signal<boolean> = computed((): boolean => this.statusFilter() !== null);
-  protected readonly totalPages: Signal<number> = computed(
-    (): number => Math.max(1, Math.ceil(this.requestsService.total() / Math.max(1, this.requestsService.limit()))),
+  protected readonly totalPages: Signal<number> = computed((): number =>
+    Math.max(1, Math.ceil(this.requestsService.total() / Math.max(1, this.requestsService.limit()))),
   );
   protected readonly canGoPrevious: Signal<boolean> = computed((): boolean => this.requestsService.page() > 1);
   protected readonly canGoNext: Signal<boolean> = computed((): boolean => this.requestsService.page() < this.totalPages());
@@ -200,11 +183,13 @@ export class RequestsPage implements OnInit {
     }
 
     const update: SeerrRequestUpdate | undefined = await firstValueFrom(
-      this.dialog.open(RequestEditDialogWidget, {
-        data: { title: request.title, options },
-        width: '480px',
-        maxWidth: '95vw',
-      }).afterClosed(),
+      this.dialog
+        .open(RequestEditDialogWidget, {
+          data: { title: request.title, options },
+          width: '480px',
+          maxWidth: '95vw',
+        })
+        .afterClosed(),
     );
 
     if (update === undefined) {
@@ -212,13 +197,10 @@ export class RequestsPage implements OnInit {
     }
 
     // Saving is not a plain edit: like in Seerr the adjusted request is approved right away.
-    await this.runActionAsync(
-      async (): Promise<void> => {
-        await this.requestsService.updateAsync(Number(request.id), update);
-        await this.requestsService.approveAsync(Number(request.id));
-      },
-      'requests.action.approveSuccess',
-    );
+    await this.runActionAsync(async (): Promise<void> => {
+      await this.requestsService.updateAsync(Number(request.id), update);
+      await this.requestsService.approveAsync(Number(request.id));
+    }, 'requests.action.approveSuccess');
   }
 
   private async runActionAsync(action: () => Promise<void>, successKey: TranslationKey): Promise<void> {
@@ -271,11 +253,7 @@ export class RequestsPage implements OnInit {
 
     // This app's poster cache endpoint and absolute urls render directly; other relative paths
     // belong to a foreign base url and keep the placeholder icon instead.
-    if (
-      posterPath.startsWith('/api/') ||
-      posterPath.startsWith('http://') ||
-      posterPath.startsWith('https://')
-    ) {
+    if (posterPath.startsWith('/api/') || posterPath.startsWith('http://') || posterPath.startsWith('https://')) {
       return posterPath;
     }
 

@@ -57,9 +57,7 @@ export class RequestsService {
         params = params.set('status', statusFilter);
       }
 
-      const response: SeerrRequestsResponse = await firstValueFrom(
-        this.http.get<SeerrRequestsResponse>(this.apiUrl, { params }),
-      );
+      const response: SeerrRequestsResponse = await firstValueFrom(this.http.get<SeerrRequestsResponse>(this.apiUrl, { params }));
 
       this.requestsState.set(response.requests ?? []);
       this.totalState.set(response.total ?? 0);

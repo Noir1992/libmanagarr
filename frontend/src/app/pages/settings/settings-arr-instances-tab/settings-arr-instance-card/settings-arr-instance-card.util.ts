@@ -34,7 +34,11 @@ export function mapInstanceToSettings(instance: { id: string; name: string; base
 }
 
 export function clearServerValidationErrors(instanceGroup: InstanceValidationControls): void {
-  const controls: (FormControl<string> | undefined)[] = [instanceGroup.controls.name, instanceGroup.controls.baseUrl, instanceGroup.controls.apiKey];
+  const controls: (FormControl<string> | undefined)[] = [
+    instanceGroup.controls.name,
+    instanceGroup.controls.baseUrl,
+    instanceGroup.controls.apiKey,
+  ];
   for (const control of controls) {
     if (!control) {
       continue;

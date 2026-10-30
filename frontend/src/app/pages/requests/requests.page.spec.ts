@@ -86,9 +86,7 @@ describe('RequestsPage', () => {
 
   // The overflow trigger is css-hidden on wide viewports, so the tests open it through the dom.
   async function openOverflowMenu(rowIndex: number): Promise<void> {
-    const triggers: NodeListOf<HTMLButtonElement> = (fixture.nativeElement as HTMLElement).querySelectorAll(
-      '.requests-more-trigger',
-    );
+    const triggers: NodeListOf<HTMLButtonElement> = (fixture.nativeElement as HTMLElement).querySelectorAll('.requests-more-trigger');
     triggers[rowIndex].click();
     fixture.detectChanges();
     await fixture.whenStable();
@@ -117,15 +115,13 @@ describe('RequestsPage', () => {
       declineAsync: jasmine.createSpy('declineAsync').and.resolveTo(),
       deleteAsync: jasmine.createSpy('deleteAsync').and.resolveTo(),
       updateAsync: jasmine.createSpy('updateAsync').and.resolveTo(),
-      loadEditOptionsAsync: jasmine
-        .createSpy('loadEditOptionsAsync')
-        .and.resolveTo({
-          qualityProfiles: [],
-          rootFolders: [],
-          seasons: [],
-          profileId: null,
-          rootFolder: null,
-        } satisfies SeerrRequestEditOptions),
+      loadEditOptionsAsync: jasmine.createSpy('loadEditOptionsAsync').and.resolveTo({
+        qualityProfiles: [],
+        rootFolders: [],
+        seasons: [],
+        profileId: null,
+        rootFolder: null,
+      } satisfies SeerrRequestEditOptions),
       describeActionError: jasmine.createSpy('describeActionError').and.returnValue('The request could not be updated.'),
     };
 
@@ -178,9 +174,7 @@ describe('RequestsPage', () => {
     expect(firstRow.querySelector('.requests-status-badge')?.textContent?.trim()).toBe('Pending');
     expect(firstRow.querySelector('.requests-item-requester')?.textContent).toContain('alice');
     expect(firstRow.querySelector('.requests-item-date')?.textContent?.trim()).toContain('Requested:');
-    expect(firstRow.querySelector('img.requests-poster-image')?.getAttribute('src')).toBe(
-      'https://seerr.example/posters/sample.jpg',
-    );
+    expect(firstRow.querySelector('img.requests-poster-image')?.getAttribute('src')).toBe('https://seerr.example/posters/sample.jpg');
 
     const secondRow: Element = rows[1];
     expect(secondRow.querySelector('.requests-item-title')?.textContent?.trim()).toBe('Sample Series');
@@ -205,11 +199,7 @@ describe('RequestsPage', () => {
 
     expect(rows[0].querySelector('.requests-item-seasons-label')?.textContent?.trim()).toBe('Seasons:');
     const seasons: NodeListOf<Element> = rows[0].querySelectorAll('.requests-item-season');
-    expect(Array.from(seasons).map((season: Element): string => season.textContent?.trim() ?? '')).toEqual([
-      'Specials',
-      '1',
-      '2',
-    ]);
+    expect(Array.from(seasons).map((season: Element): string => season.textContent?.trim() ?? '')).toEqual(['Specials', '1', '2']);
     expect(rows[1].querySelector('.requests-item-season')?.textContent?.trim()).toBe('3');
     // Movie requests carry no seasons and must not render the row at all.
     expect(rows[2].querySelector('.requests-item-seasons')).toBeNull();

@@ -64,9 +64,7 @@ export class RequestEditDialogWidget {
 
   // Season 0 carries the specials and is labeled like in the Sonarr dialogs.
   protected seasonLabel(season: SeerrSeasonOption): string {
-    return season.number === 0
-      ? this.i18n.t('filter.episodeSpecial')
-      : `${this.i18n.t('common.column.season')} ${season.number}`;
+    return season.number === 0 ? this.i18n.t('filter.episodeSpecial') : `${this.i18n.t('common.column.season')} ${season.number}`;
   }
 
   protected episodeCountLabel(season: SeerrSeasonOption): string {

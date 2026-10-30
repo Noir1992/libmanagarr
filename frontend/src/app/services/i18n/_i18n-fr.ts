@@ -212,7 +212,7 @@ export const i18nFr: Record<TranslationKey, string> = {
   'requests.action.delete': 'Supprimer',
   'requests.action.deleteSuccess': 'Demande supprimée.',
   'requests.action.decline': 'Refuser',
-  'requests.action.declineSuccess': "Demande refusée.",
+  'requests.action.declineSuccess': 'Demande refusée.',
   'requests.action.edit': 'Modifier',
   'requests.action.more': "Plus d'actions",
   'requests.actionError': "La demande n'a pas pu être mise à jour.",

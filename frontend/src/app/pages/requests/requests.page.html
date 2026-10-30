@@ -79,7 +79,9 @@
 
                 <div class="requests-item-meta">
                   @if (request.requestedBy) {
-                    <span class="requests-item-requester">{{ requestedByLabel() }}: <span class="requests-item-requester-name">{{ request.requestedBy }}</span></span>
+                    <span class="requests-item-requester"
+                      >{{ requestedByLabel() }}: <span class="requests-item-requester-name">{{ request.requestedBy }}</span></span
+                    >
                   }
                 </div>
 

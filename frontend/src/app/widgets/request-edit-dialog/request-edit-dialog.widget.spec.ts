@@ -170,7 +170,9 @@ describe('RequestEditDialogWidget', () => {
     const table: HTMLElement = element.querySelector('.request-seasons')!;
     // The advanced block carries both selects and follows the table, so the choice comes first.
     expect(table.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(heading.compareDocumentPosition(element.querySelector('#request-edit-profile')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      heading.compareDocumentPosition(element.querySelector('#request-edit-profile')!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(element.querySelector('.request-advanced')?.contains(element.querySelector('#request-edit-root-folder')!)).toBeTrue();
   });
 
