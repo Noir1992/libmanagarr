@@ -20,5 +20,6 @@ export interface MediaDetailData {
   airDateUtc?: string | null;
   genres?: string[];
   tags?: string[];
+  size?: number | null;
   mediaDetails?: LibraryMediaDetails | null;
 }

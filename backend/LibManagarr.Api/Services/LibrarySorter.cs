@@ -14,7 +14,7 @@ public static class LibrarySorter
             LibrarySortField.Added => entry.AddedAt,
             LibrarySortField.Aired => entry.AirDateUtc,
             _ => null,
-        }));
+        }, entry.Size));
     }
 
     public static IReadOnlyList<SonarrLibraryEntryResponse> SortSonarr(
@@ -26,7 +26,7 @@ public static class LibrarySorter
             LibrarySortField.Added => entry.AddedAt,
             LibrarySortField.Aired => LatestEpisodeAirDate(entry),
             _ => null,
-        }));
+        }, entry.TotalSize));
     }
 
     private static LibrarySortField ResolveField(LibraryRequestFilter filter) =>
@@ -49,12 +49,14 @@ public static class LibrarySorter
         if (field == LibrarySortField.Alphabetical)
             return CompareTitles(x, y, descending);
 
-        int byDate = CompareDates(x.Date, y.Date, descending);
-        return byDate != 0 ? byDate : CompareTitles(x, y, false);
+        int byValue = field == LibrarySortField.Size
+            ? CompareValues(x.Size, y.Size, descending)
+            : CompareValues(x.Date, y.Date, descending);
+        return byValue != 0 ? byValue : CompareTitles(x, y, false);
     }
 
-    /// <summary>Entries without a date trail in both directions, so unknown entries never crowd out the top.</summary>
-    private static int CompareDates(DateTimeOffset? x, DateTimeOffset? y, bool descending)
+    /// <summary>Entries without a value trail in both directions, so unknown entries never crowd out the top.</summary>
+    private static int CompareValues<T>(T? x, T? y, bool descending) where T : struct, IComparable<T>
     {
         if (x.HasValue != y.HasValue)
             return x.HasValue ? -1 : 1;
@@ -73,5 +75,5 @@ public static class LibrarySorter
     private static DateTimeOffset? LatestEpisodeAirDate(SonarrLibraryEntryResponse entry) =>
         entry.Seasons.SelectMany(season => season.Episodes).Select(episode => episode.AirDateUtc).Max();
 
-    private readonly record struct SortKey(string Title, string SortTitle, DateTimeOffset? Date);
+    private readonly record struct SortKey(string Title, string SortTitle, DateTimeOffset? Date, long? Size);
 }

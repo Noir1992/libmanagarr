@@ -198,6 +198,7 @@ export class LibraryPage implements OnInit, OnDestroy {
           kind: 'movie',
           id: movie.id,
           title: movie.title,
+          size: movie.size,
           url: movie.url,
           posterUrl,
           movieData: { ...movieDetailData(movie, table.instanceName), posterUrl },
@@ -222,6 +223,7 @@ export class LibraryPage implements OnInit, OnDestroy {
           kind: 'series',
           id: series.id,
           title: series.title,
+          size: series.totalSize,
           url: series.url,
           posterUrl,
           seriesData: {
@@ -265,6 +267,7 @@ export class LibraryPage implements OnInit, OnDestroy {
       items,
       (item: MediaGridItem): LibrarySortKey => ({
         title: item.title,
+        size: item.size,
         airedAt: item.kind === 'movie' ? (item.movieData?.airDateUtc ?? null) : latestSeriesAirDate(item),
         addedAt: item.kind === 'movie' ? (item.movieData?.addedAt ?? null) : (item.seriesData?.addedAt ?? null),
       }),
@@ -815,6 +818,7 @@ export class LibraryPage implements OnInit, OnDestroy {
       tags: row.tags,
       status: row.status,
       addedAt: row.addedAt,
+      totalSize: row.totalSize,
       monitored: row.monitored,
       isAvailable: row.isAvailable,
       libraryEpisodeCount: row.libraryEpisodeCount,

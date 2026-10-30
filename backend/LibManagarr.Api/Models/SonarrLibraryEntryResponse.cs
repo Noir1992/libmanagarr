@@ -29,6 +29,8 @@ public sealed class SonarrLibraryEntryResponse
     public int LibraryEpisodeCount { get; init; }
     public int FileCount { get; init; }
 
+    public long? TotalSize { get; init; }
+
     public int TotalEpisodes { get; init; }
 
     public int AiredEpisodes { get; init; }

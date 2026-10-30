@@ -5,6 +5,7 @@ import { buildTitleSortKey } from './title-sort-key-utils';
 
 export interface LibrarySortKey {
   title: string;
+  size?: number | null;
   airedAt?: string | null;
   addedAt?: string | null;
 }
@@ -12,7 +13,7 @@ export interface LibrarySortKey {
 interface PreparedLibrarySortKey {
   title: string;
   sortTitle: string;
-  date: number | null;
+  value: number | null;
 }
 
 /**
@@ -37,7 +38,7 @@ export function sortLibraryEntries<T>(
         key: {
           title: key.title.toUpperCase(),
           sortTitle: buildTitleSortKey(key.title, titleSorting).toUpperCase(),
-          date: field === LibrarySortField.ALPHABETICAL ? null : timeValue(dateOf(key, field)),
+          value: sortValue(key, field),
         },
       };
     })
@@ -86,7 +87,7 @@ function compareKeys(a: PreparedLibrarySortKey, b: PreparedLibrarySortKey, field
     return descending ? -byTitle : byTitle;
   }
 
-  const byValue: number = compareValues(a.date, b.date, descending);
+  const byValue: number = compareValues(a.value, b.value, descending);
 
   return byValue !== 0 ? byValue : byTitle;
 }
@@ -96,8 +97,17 @@ function comparePreparedTitles(a: string, b: string): number {
   return a > b ? 1 : 0;
 }
 
-function dateOf(key: LibrarySortKey, field: LibrarySortField): string | null | undefined {
-  return field === LibrarySortField.ADDED ? key.addedAt : key.airedAt;
+function sortValue(key: LibrarySortKey, field: LibrarySortField): number | null {
+  switch (field) {
+    case LibrarySortField.SIZE:
+      return key.size ?? null;
+    case LibrarySortField.ADDED:
+      return timeValue(key.addedAt);
+    case LibrarySortField.AIRED:
+      return timeValue(key.airedAt);
+    default:
+      return null;
+  }
 }
 
 function compareValues(a: number | null, b: number | null, descending: boolean): number {

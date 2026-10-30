@@ -10,6 +10,7 @@ export interface MediaGridItem {
   title: string;
   url: string;
   posterUrl: string | null;
+  size?: number | null;
   detailRows: { label: string; value: string; tone?: MediaGridDetailTone }[];
   movieData?: MediaDetailData;
   seriesData?: {

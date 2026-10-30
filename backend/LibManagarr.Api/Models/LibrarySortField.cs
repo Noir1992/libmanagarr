@@ -4,5 +4,6 @@ public enum LibrarySortField
 {
     Alphabetical = 0,
     Aired = 1,
-    Added = 2
+    Added = 2,
+    Size = 3
 }

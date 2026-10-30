@@ -31,6 +31,7 @@ export class MediaDetailsDialogWidget {
   protected readonly rows = computed(() => {
     const d = this.data;
     const file = d.hasFile === false ? null : d.mediaDetails;
+    const size = d.hasFile === false ? null : (file?.size ?? d.size);
     const na = this.i18n.t('common.na');
     const value = (v: string | number | null | undefined) => (v == null || v === '' ? na : String(v));
     const list = (v: string[] | undefined) => (v?.length ? v.join(', ') : na);
@@ -64,6 +65,10 @@ export class MediaDetailsDialogWidget {
         flag(d.monitored, 'library.details.yes', 'library.details.no'),
       ),
       row('filter.fileStatus', flag(d.hasFile, 'filter.filePresent', 'filter.fileMissing'), fileStatusTone(d.hasFile)),
+      row(
+        'library.details.size',
+        size == null ? na : `${(size / 1024 ** 3).toLocaleString(this.settings.localeId(), { maximumFractionDigits: 2 })} GiB`,
+      ),
       row('filter.aired', flag(d.hasAired, 'filter.airedYes', 'filter.airedNo')),
       row('common.column.airDate', date(d.airDateUtc)),
       row('common.column.targetScore', value(target)),
@@ -81,10 +86,6 @@ export class MediaDetailsDialogWidget {
       ),
       row('filter.audioLanguages', list(file?.audioLanguages)),
       row('filter.subtitleLanguages', list(file?.subtitleLanguages)),
-      row(
-        'library.details.size',
-        file?.size == null ? na : `${(file.size / 1024 ** 3).toLocaleString(this.settings.localeId(), { maximumFractionDigits: 2 })} GiB`,
-      ),
       row(
         'library.details.duration',
         file?.durationSeconds == null

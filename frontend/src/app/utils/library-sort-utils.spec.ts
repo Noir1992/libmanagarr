@@ -19,6 +19,24 @@ function order(entries: Entry[], field: LibrarySortField, direction: LibrarySort
 }
 
 describe('library sort utils', () => {
+  it('sorts byte sizes numerically in both directions, with title ties and unknown sizes last', () => {
+    const entries = [
+      { title: 'Unknown' },
+      { title: 'Large', size: 9_000_000_000 },
+      { title: 'Bravo', size: 3_000_000_000 },
+      { title: 'Empty', size: 0 },
+      { title: 'Alpha', size: 3_000_000_000 },
+    ];
+    for (const [direction, expected] of [
+      [LibrarySortDirection.ASCENDING, ['Empty', 'Alpha', 'Bravo', 'Large', 'Unknown']],
+      [LibrarySortDirection.DESCENDING, ['Large', 'Alpha', 'Bravo', 'Empty', 'Unknown']],
+    ] as const) {
+      expect(sortLibraryEntries(entries, (item) => item, LibrarySortField.SIZE, direction).map((item) => item.title)).toEqual([
+        ...expected,
+      ]);
+    }
+  });
+
   for (const testCase of titleSortingCases.orderCases) {
     it(`matches the shared ordering reference: ${testCase.name}`, () => {
       const input = testCase.titles.map((title) => entry(title));

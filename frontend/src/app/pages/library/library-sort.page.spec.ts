@@ -180,6 +180,43 @@ describe('LibraryPage sorting', () => {
     expect(titles()).toEqual(['Alpha', 'Mike', 'Zeta', 'Bravo']);
   });
 
+  it('sorts mixed tiles by movie size and the complete series total', () => {
+    page['upsertRadarrInstanceTable']({
+      instanceId: 'r',
+      instanceName: 'Radarr',
+      rows: [
+        { ...movie(1, 'Large movie', null, null), size: 9_000_000_000 },
+        { ...movie(2, 'Small movie', null, null), size: 1_000_000_000 },
+        movie(3, 'Unknown', null, null),
+      ],
+    });
+    page['upsertSonarrInstanceTable']({
+      instanceId: 's',
+      instanceName: 'Sonarr',
+      rows: [
+        { ...series(4, 'Series', null, [null]), totalSize: 12_000_000_000 },
+        { ...series(5, 'Empty series', null, []), totalSize: 0 },
+      ],
+    });
+    page['sortField'].set(LibrarySortField.SIZE);
+    expect(titles()).toEqual(['Empty series', 'Small movie', 'Large movie', 'Series', 'Unknown']);
+    page['sortDirection'].set(LibrarySortDirection.DESCENDING);
+    expect(titles()).toEqual(['Series', 'Large movie', 'Small movie', 'Empty series', 'Unknown']);
+  });
+
+  it('persists and restores size sorting and sends it to both library sources', () => {
+    page['onSortFieldChanged'](LibrarySortField.SIZE);
+    page['onSortDirectionChanged'](LibrarySortDirection.DESCENDING);
+    expect(localStorage.getItem(storageKey)).toBe('size:descending');
+    page['sortField'].set(LibrarySortField.ALPHABETICAL);
+    page['restoreSort']();
+    expect(page['sortField']()).toBe(LibrarySortField.SIZE);
+    page['loadData']();
+    const expected = jasmine.objectContaining({ sortField: LibrarySortField.SIZE, sortDirection: LibrarySortDirection.DESCENDING });
+    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
+    expect(sonarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
+  });
+
   it('reactively sorts mixed media from multiple instances while preserving display titles and direction', () => {
     page['upsertRadarrInstanceTable']({ instanceId: 'r', instanceName: 'Radarr', rows: [movie(1, 'A Quiet Place', null, null)] });
     page['upsertRadarrInstanceTable']({ instanceId: 'r2', instanceName: 'Other Radarr', rows: [movie(2, 'Batman', null, null)] });

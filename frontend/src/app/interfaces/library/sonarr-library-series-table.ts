@@ -8,6 +8,7 @@ export interface SonarrLibrarySeriesTable {
   qualityProfileName: string;
   upgradeUntilCustomFormatScore?: number | null;
   status: string;
+  totalSize?: number | null;
   addedAt?: string | null;
   isAvailable?: boolean;
   monitored: boolean;
