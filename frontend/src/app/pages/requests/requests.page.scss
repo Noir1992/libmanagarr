@@ -72,23 +72,30 @@
 }
 
 .requests-list-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'title title title'
+    'poster summary side';
   align-items: center;
-  gap: var(--theme-default-gap);
-  padding: var(--theme-default-gap-small) var(--theme-default-gap);
+  gap: 0.4rem var(--theme-default-gap);
+  padding: var(--theme-default-gap-small);
   border: 1px solid var(--theme-border-color);
   border-radius: var(--theme-border-radius);
-  background: var(--theme-surface);
+  background: var(--theme-tile-surface);
 }
 
 .requests-poster {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
+  grid-area: poster;
+  align-self: start;
+  box-sizing: border-box;
   width: 46px;
   height: 69px;
   overflow: hidden;
+  border: 1px solid var(--theme-border-color);
   border-radius: calc(var(--theme-border-radius) / 2);
   color: var(--theme-muted);
   background: color-mix(in srgb, var(--theme-surface) 70%, var(--theme-border-color));
@@ -108,14 +115,16 @@
 }
 
 .requests-item-summary {
-  flex: 1;
+  grid-area: summary;
+  align-self: start;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.15rem;
 }
 
 .requests-item-title-row {
+  grid-area: title;
   display: flex;
   align-items: baseline;
   gap: 0.4rem;
@@ -155,40 +164,177 @@
   font-size: 0.85rem;
 }
 
-.requests-status-badge {
-  flex: 0 0 auto;
-  padding: 0.15rem 0.7rem;
+.requests-item-seasons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.requests-item-seasons-label {
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+}
+
+.requests-item-season {
+  padding: 0 0.5rem;
   border: 1px solid var(--theme-border-color);
   border-radius: 999px;
+  color: var(--theme-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.requests-item-status {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.requests-item-status-label {
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+}
+
+.requests-item-type {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 0.5rem;
+  border: 1px solid var(--theme-border-color);
+  border-radius: 999px;
+  background: var(--theme-surface);
+  font-size: 0.75rem;
+  line-height: 1.6;
+
+  &[data-type='movie'] {
+    border-color: color-mix(in srgb, var(--theme-type-movie-color) 45%, transparent);
+    background: color-mix(in srgb, var(--theme-type-movie-color) 12%, transparent);
+    color: var(--theme-type-movie-color);
+  }
+
+  &[data-type='tv'] {
+    border-color: color-mix(in srgb, var(--theme-type-tv-color) 45%, transparent);
+    background: color-mix(in srgb, var(--theme-type-tv-color) 12%, transparent);
+    color: var(--theme-type-tv-color);
+  }
+}
+
+.requests-item-requester-name {
+  font-weight: 600;
+}
+
+.requests-item-date {
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+}
+
+.requests-item-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  grid-area: side;
+  align-self: end;
+  gap: var(--theme-default-gap);
+}
+
+// Test state: plain colored text instead of the pill recipe (border/background/radius removed).
+.requests-status-badge {
   color: var(--theme-muted);
   font-size: 0.8rem;
   font-weight: 600;
 
   &[data-status='pending'] {
-    border-color: color-mix(in srgb, var(--theme-warning-color) 45%, transparent);
-    background: color-mix(in srgb, var(--theme-warning-color) 12%, transparent);
     color: var(--theme-warning-color);
   }
 
   &[data-status='approved'],
   &[data-status='available'] {
-    border-color: color-mix(in srgb, var(--theme-success-color) 45%, transparent);
-    background: color-mix(in srgb, var(--theme-success-color) 12%, transparent);
     color: var(--theme-success-color);
   }
 
   &[data-status='processing'] {
-    border-color: color-mix(in srgb, var(--theme-info-surface) 45%, transparent);
-    background: color-mix(in srgb, var(--theme-info-surface) 12%, transparent);
     color: var(--theme-info-color);
   }
 
   &[data-status='declined'],
   &[data-status='failed'] {
-    border-color: color-mix(in srgb, var(--theme-danger-color) 45%, transparent);
-    background: color-mix(in srgb, var(--theme-danger-color) 12%, transparent);
     color: var(--theme-danger-color);
   }
+}
+
+.requests-item-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-default-gap-small);
+}
+
+.requests-more-trigger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem;
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-surface);
+  color: var(--theme-muted);
+  cursor: pointer;
+
+  mat-icon {
+    height: 18px;
+    width: 18px;
+    min-width: 18px;
+    font-size: 18px;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+.requests-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem;
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-surface);
+  color: var(--theme-muted);
+  cursor: pointer;
+
+  mat-icon {
+    height: 18px;
+    width: 18px;
+    min-width: 18px;
+    font-size: 18px;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+.requests-action-approve:hover:not(:disabled) {
+  border-color: var(--theme-success-color);
+  color: var(--theme-success-color);
+}
+
+.requests-action-decline:hover:not(:disabled) {
+  border-color: var(--theme-warning-color);
+  color: var(--theme-warning-color);
+}
+
+.requests-action-edit:hover:not(:disabled) {
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
+}
+
+.requests-action-delete:hover:not(:disabled) {
+  border-color: var(--theme-danger-color);
+  color: var(--theme-danger-color);
 }
 
 .requests-pagination {
@@ -234,5 +380,13 @@
 
   .requests-item-meta {
     font-size: 0.8rem;
+  }
+
+  .requests-item-actions {
+    display: none;
+  }
+
+  .requests-more-trigger {
+    display: inline-flex;
   }
 }

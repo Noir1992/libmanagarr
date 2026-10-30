@@ -1,4 +1,4 @@
-import { provideHttpClient, withXhr } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient, withXhr } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { RequestsService } from './requests.service';
@@ -133,5 +133,87 @@ describe('RequestsService', () => {
 
     httpMock.expectNone((req) => req.url === '/api/requests/');
     expect(service.page()).toBe(1);
+  });
+
+  it('approves through the approve route and resolves on the no-content answer', async () => {
+    const promise: Promise<void> = service.approveAsync(12);
+
+    const request = httpMock.expectOne('/api/requests/12/approve');
+    expect(request.request.method).toBe('POST');
+    request.flush(null, { status: 204, statusText: 'No Content' });
+
+    await expectAsync(promise).toBeResolved();
+  });
+
+  it('declines with the trimmed reason and omits the body without one', async () => {
+    const withReason: Promise<void> = service.declineAsync(12, '  not now  ');
+    const reasonRequest = httpMock.expectOne('/api/requests/12/decline');
+    expect(reasonRequest.request.method).toBe('POST');
+    expect(reasonRequest.request.body).toEqual({ reason: 'not now' });
+    reasonRequest.flush(null, { status: 204, statusText: 'No Content' });
+    await withReason;
+
+    const withoutReason: Promise<void> = service.declineAsync(12, null);
+    const emptyRequest = httpMock.expectOne('/api/requests/12/decline');
+    expect(emptyRequest.request.body).toBeNull();
+    emptyRequest.flush(null, { status: 204, statusText: 'No Content' });
+    await withoutReason;
+  });
+
+  it('deletes on the request resource with the delete verb', async () => {
+    const promise: Promise<void> = service.deleteAsync(42);
+
+    const request = httpMock.expectOne('/api/requests/42');
+    expect(request.request.method).toBe('DELETE');
+    request.flush(null, { status: 204, statusText: 'No Content' });
+
+    await expectAsync(promise).toBeResolved();
+  });
+
+  it('updates with only the edited fields', async () => {
+    const promise: Promise<void> = service.updateAsync(12, { profileId: 16 });
+
+    const request = httpMock.expectOne('/api/requests/12');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({ profileId: 16 });
+    request.flush(null, { status: 204, statusText: 'No Content' });
+
+    await expectAsync(promise).toBeResolved();
+  });
+
+  it('loads the edit options for one request', async () => {
+    const options = {
+      qualityProfiles: [{ id: 15, name: 'Standard' }],
+      rootFolders: ['/media/videos/movies', '/media/videos/movies (anime)'],
+      seasons: [],
+      profileId: 15,
+      rootFolder: '/media/videos/movies',
+    };
+
+    const promise: Promise<unknown> = service.loadEditOptionsAsync(12);
+    const request = httpMock.expectOne('/api/requests/12/edit-options');
+    expect(request.request.method).toBe('GET');
+    request.flush(options);
+
+    await expectAsync(promise).toBeResolvedTo(options);
+  });
+
+  it('rejects write operations so callers can describe the problem', async () => {
+    const promise: Promise<void> = service.approveAsync(999999999);
+
+    const request = httpMock.expectOne('/api/requests/999999999/approve');
+    request.flush({ detail: 'Request not found.' }, { status: 404, statusText: 'Not Found' });
+
+    await expectAsync(promise).toBeRejected();
+  });
+
+  it('describes action errors from the problem detail, the title or the localized fallback', () => {
+    expect(service.describeActionError(new HttpErrorResponse({ status: 404, error: { detail: 'Request not found.' } }))).toBe(
+      'Request not found.',
+    );
+    expect(service.describeActionError(new HttpErrorResponse({ status: 502, error: { title: 'Seerr is not reachable.' } }))).toBe(
+      'Seerr is not reachable.',
+    );
+    expect(service.describeActionError(new HttpErrorResponse({ status: 500 }))).toBe('The request could not be updated.');
   });
 });

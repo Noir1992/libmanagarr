@@ -12,4 +12,6 @@ export interface SeerrRequest {
   title: string | null;
   posterPath: string | null;
   year: number | null;
+  // Sorted distinct season numbers for tv requests; null for movies and whole-series requests.
+  seasons: number[] | null;
 }

@@ -22,4 +22,22 @@ public sealed class SeerrMediaMetadataResource
 
     [JsonPropertyName("firstAirDate")]
     public string? FirstAirDate { get; set; }
+
+    // Tv metadata lists every season of the show; the edit dialog offers them for selection.
+    [JsonPropertyName("seasons")]
+    public List<SeerrSeasonResource>? Seasons { get; set; }
+
+    // TMDB keywords; the exact keyword "anime" selects the server anime defaults in the edit
+    // dialog. Keyword objects only carry an id and a localized name here.
+    [JsonPropertyName("keywords")]
+    public List<SeerrKeywordResource>? Keywords { get; set; }
+}
+
+public sealed class SeerrKeywordResource
+{
+    [JsonPropertyName("id")]
+    public int? Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
 }

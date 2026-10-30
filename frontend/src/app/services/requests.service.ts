@@ -2,8 +2,11 @@ import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http'
 import { computed, inject, Injectable, Signal, signal, WritableSignal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { SeerrRequest } from '../interfaces/requests/seerr-request';
+import { SeerrRequestEditOptions } from '../interfaces/requests/seerr-request-edit-options';
+import { SeerrRequestUpdate } from '../interfaces/requests/seerr-request-update';
 import { SeerrRequestsResponse } from '../interfaces/requests/seerr-requests-response';
 import { AppI18nService } from './app-i18n.service';
+import { TranslationKey } from './i18n/_i18n-key';
 
 const DEFAULT_PAGE: number = 1;
 const DEFAULT_LIMIT: number = 20;
@@ -69,7 +72,7 @@ export class RequestsService {
       if (this.isNotConfiguredError(error)) {
         this.notConfiguredState.set(true);
       } else {
-        this.loadErrorState.set(this.readErrorMessage(error));
+        this.loadErrorState.set(this.readErrorMessage(error, 'requests.loadError'));
       }
     } finally {
       this.loadingState.set(false);
@@ -91,6 +94,33 @@ export class RequestsService {
     await this.loadAsync();
   }
 
+  async loadEditOptionsAsync(requestId: number): Promise<SeerrRequestEditOptions> {
+    return await firstValueFrom(this.http.get<SeerrRequestEditOptions>(`${this.apiUrl}${requestId}/edit-options`));
+  }
+
+  async approveAsync(requestId: number): Promise<void> {
+    await firstValueFrom(this.http.post<void>(`${this.apiUrl}${requestId}/approve`, null));
+  }
+
+  async declineAsync(requestId: number, reason: string | null): Promise<void> {
+    const trimmedReason: string | null = reason?.trim() ?? null;
+    const body: { reason: string } | null = trimmedReason === null || trimmedReason.length === 0 ? null : { reason: trimmedReason };
+
+    await firstValueFrom(this.http.post<void>(`${this.apiUrl}${requestId}/decline`, body));
+  }
+
+  async deleteAsync(requestId: number): Promise<void> {
+    await firstValueFrom(this.http.delete<void>(`${this.apiUrl}${requestId}`));
+  }
+
+  async updateAsync(requestId: number, update: SeerrRequestUpdate): Promise<void> {
+    await firstValueFrom(this.http.put<void>(`${this.apiUrl}${requestId}`, update));
+  }
+
+  describeActionError(error: unknown): string {
+    return this.readErrorMessage(error, 'requests.actionError');
+  }
+
   private isNotConfiguredError(error: unknown): boolean {
     if (!(error instanceof HttpErrorResponse)) {
       return false;
@@ -101,8 +131,8 @@ export class RequestsService {
     return code === NOT_CONFIGURED_PROBLEM_CODE || error.status === 503;
   }
 
-  private readErrorMessage(error: unknown): string {
-    const fallbackMessage: string = this.i18n.t('requests.loadError');
+  private readErrorMessage(error: unknown, fallbackKey: TranslationKey): string {
+    const fallbackMessage: string = this.i18n.t(fallbackKey);
 
     if (error instanceof HttpErrorResponse) {
       const body: { detail?: unknown; title?: unknown } | null =

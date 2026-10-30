@@ -1,0 +1,21 @@
+<div class="request-dialog">
+  <div class="request-dialog-header">
+    <h2 mat-dialog-title class="request-dialog-title" [title]="titleLabel()">{{ titleLabel() }}</h2>
+    <button type="button" mat-icon-button (click)="cancel()" [attr.aria-label]="closeLabel()">
+      <span class="material-symbols-outlined" aria-hidden="true">close</span>
+    </button>
+  </div>
+
+  <div class="request-dialog-content">
+    @if (data.title) {
+      <p class="request-dialog-media-title" [title]="data.title">{{ data.title }}</p>
+    }
+
+    <p class="request-dialog-confirm-text">{{ confirmText() }}</p>
+  </div>
+
+  <div class="request-dialog-actions">
+    <button type="button" mat-button class="cancel-button request-dialog-cancel" (click)="cancel()">{{ cancelLabel() }}</button>
+    <button type="button" mat-flat-button class="danger-button request-dialog-confirm" (click)="confirm()">{{ confirmLabel() }}</button>
+  </div>
+</div>

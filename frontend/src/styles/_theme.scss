@@ -4,6 +4,7 @@
   --theme-page-bg: linear-gradient(180deg, #fbfcfd 0%, #f5f8fa 100%);
   --theme-panel-bg: rgb(255 255 255);
   --theme-surface: rgb(255 255 255 / 92%);
+  --theme-tile-surface: #e9eff4;
   --theme-border-color: rgb(43 60 74 / 14%);
   --theme-border-radius: var(--theme-default-gap-small);
   --theme-text: #16202a;
@@ -28,6 +29,8 @@
   --theme-warning-color: #7a4b00;
   --theme-danger-color: #b42318;
   --theme-danger-box-shadow-color: rgba(180, 35, 24, 0.2);
+  --theme-type-movie-color: #b25000;
+  --theme-type-tv-color: #1f6feb;
   --theme-scrollbar-track: rgb(22 32 42 / 8%);
   --theme-scrollbar-thumb: rgb(22 32 42 / 26%);
   --theme-scrollbar-thumb-hover: rgb(22 32 42 / 38%);
@@ -44,6 +47,7 @@ html[data-theme='dark'] {
   --theme-page-bg: linear-gradient(180deg, #12181f 0%, #1b2530 100%);
   --theme-panel-bg: rgb(15 21 28);
   --theme-surface: rgb(15 21 28 / 92%);
+  --theme-tile-surface: rgb(15 21 28 / 92%);
   --theme-border-color: rgb(196 210 223 / 14%);
   --theme-input-disabled: color-mix(in srgb, var(--theme-panel-bg) 75%, #686868);
   --theme-text: #f3f6f8;
@@ -64,6 +68,8 @@ html[data-theme='dark'] {
   --theme-danger-color: #ff9a9a;
   --theme-danger-surface: rgb(180 35 24 / 40%);
   --theme-danger-box-shadow-color: rgb(255 107 107 / 35%);
+  --theme-type-movie-color: #ffa94d;
+  --theme-type-tv-color: #7cc4ff;
   --theme-scrollbar-track: rgb(220 232 242 / 8%);
   --theme-scrollbar-thumb: rgb(220 232 242 / 24%);
   --theme-scrollbar-thumb-hover: rgb(220 232 242 / 36%);

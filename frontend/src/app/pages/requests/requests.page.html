@@ -49,31 +49,127 @@
                 }
               </div>
 
+              <div class="requests-item-title-row">
+                <span class="requests-item-title">{{ request.title ?? '—' }}</span>
+                @if (request.year) {
+                  <span class="requests-item-year">({{ request.year }})</span>
+                }
+                @if (request.is4kRequest) {
+                  <span class="requests-item-4k-badge">4K</span>
+                }
+                @if (typeLabel(request.type); as type) {
+                  <span class="requests-item-type" [attr.data-type]="request.type">{{ type }}</span>
+                }
+              </div>
+
               <div class="requests-item-summary">
-                <div class="requests-item-title-row">
-                  <span class="requests-item-title">{{ request.title ?? '—' }}</span>
-                  @if (request.year) {
-                    <span class="requests-item-year">({{ request.year }})</span>
-                  }
-                  @if (request.is4kRequest) {
-                    <span class="requests-item-4k-badge">4K</span>
-                  }
+                @if (request.seasons?.length) {
+                  <div class="requests-item-seasons">
+                    <span class="requests-item-seasons-label">{{ seasonsLabel() }}:</span>
+                    @for (season of request.seasons; track season) {
+                      <span class="requests-item-season">{{ seasonLabel(season) }}</span>
+                    }
+                  </div>
+                }
+
+                <div class="requests-item-status">
+                  <span class="requests-item-status-label">{{ statusHeadingLabel() }}:</span>
+                  <span class="requests-status-badge" [attr.data-status]="request.status">{{ statusLabel(request.status) }}</span>
                 </div>
 
                 <div class="requests-item-meta">
-                  @if (typeLabel(request.type); as type) {
-                    <span class="requests-item-type">{{ type }}</span>
-                  }
                   @if (request.requestedBy) {
-                    <span class="requests-item-requester">{{ requestedByLabel() }}: {{ request.requestedBy }}</span>
-                  }
-                  @if (request.requestedAt) {
-                    <span class="requests-item-date">{{ request.requestedAt | date: 'medium' }}</span>
+                    <span class="requests-item-requester">{{ requestedByLabel() }}: <span class="requests-item-requester-name">{{ request.requestedBy }}</span></span>
                   }
                 </div>
+
+                @if (request.requestedAt) {
+                  <span class="requests-item-date">{{ requestedAtLabel() }}: {{ request.requestedAt | date: 'medium' }}</span>
+                }
               </div>
 
-              <span class="requests-status-badge" [attr.data-status]="request.status">{{ statusLabel(request.status) }}</span>
+              <div class="requests-item-side">
+                <div class="requests-item-actions">
+                  @if (canApproveOrDecline(request)) {
+                    <button
+                      type="button"
+                      class="requests-action-button requests-action-approve"
+                      [disabled]="runningAction()"
+                      [title]="approveLabel()"
+                      [attr.aria-label]="approveLabel()"
+                      (click)="approveAsync(request)"
+                    >
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">check_circle</mat-icon>
+                    </button>
+                    <button
+                      type="button"
+                      class="requests-action-button requests-action-decline"
+                      [disabled]="runningAction()"
+                      [title]="declineLabel()"
+                      [attr.aria-label]="declineLabel()"
+                      (click)="declineWithDialogAsync(request)"
+                    >
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">cancel</mat-icon>
+                    </button>
+                  }
+                  @if (canEdit(request)) {
+                    <button
+                      type="button"
+                      class="requests-action-button requests-action-edit"
+                      [disabled]="runningAction()"
+                      [title]="editLabel()"
+                      [attr.aria-label]="editLabel()"
+                      (click)="editWithDialogAsync(request)"
+                    >
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">edit</mat-icon>
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="requests-action-button requests-action-delete"
+                    [disabled]="runningAction()"
+                    [title]="deleteLabel()"
+                    [attr.aria-label]="deleteLabel()"
+                    (click)="deleteWithDialogAsync(request)"
+                  >
+                    <mat-icon class="material-symbols-outlined" aria-hidden="true">delete</mat-icon>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  class="requests-more-trigger"
+                  [matMenuTriggerFor]="requestsActionsMenu"
+                  [disabled]="runningAction()"
+                  [title]="moreActionsLabel()"
+                  [attr.aria-label]="moreActionsLabel()"
+                >
+                  <mat-icon class="material-symbols-outlined" aria-hidden="true">more_horiz</mat-icon>
+                </button>
+
+                <mat-menu #requestsActionsMenu="matMenu" xPosition="before">
+                  @if (canApproveOrDecline(request)) {
+                    <button type="button" mat-menu-item [disabled]="runningAction()" (click)="approveAsync(request)">
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">check_circle</mat-icon>
+                      <span>{{ approveLabel() }}</span>
+                    </button>
+                    <button type="button" mat-menu-item [disabled]="runningAction()" (click)="declineWithDialogAsync(request)">
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">cancel</mat-icon>
+                      <span>{{ declineLabel() }}</span>
+                    </button>
+                  }
+                  @if (canEdit(request)) {
+                    <button type="button" mat-menu-item [disabled]="runningAction()" (click)="editWithDialogAsync(request)">
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">edit</mat-icon>
+                      <span>{{ editLabel() }}</span>
+                    </button>
+                  }
+                  <button type="button" mat-menu-item [disabled]="runningAction()" (click)="deleteWithDialogAsync(request)">
+                    <mat-icon class="material-symbols-outlined" aria-hidden="true">delete</mat-icon>
+                    <span>{{ deleteLabel() }}</span>
+                  </button>
+                </mat-menu>
+              </div>
             </li>
           }
         </ul>

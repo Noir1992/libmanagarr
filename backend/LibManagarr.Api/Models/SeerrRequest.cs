@@ -23,4 +23,7 @@ public sealed class SeerrRequest
     public string? PosterPath { get; set; }
 
     public int? Year { get; set; }
+
+    // Sorted distinct season numbers of tv requests; null for movies and requests without seasons.
+    public IReadOnlyList<int>? Seasons { get; set; }
 }

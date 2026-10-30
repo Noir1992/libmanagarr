@@ -1,0 +1,90 @@
+.dialog-title {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+
+.dialog-content {
+  display: grid;
+  gap: var(--theme-default-gap);
+  font-family: var(--app-font-family), serif;
+}
+
+.request-dialog-media-title {
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 0.9em;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-fields {
+  display: grid;
+  gap: var(--theme-default-gap);
+}
+
+.request-advanced {
+  display: grid;
+  gap: var(--theme-default-gap);
+}
+
+// The server settings sit below the seasons, so they step back behind the table heading.
+.request-advanced-heading {
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.request-seasons {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+
+  th,
+  td {
+    padding: 0.45rem 0.5rem;
+    text-align: left;
+  }
+
+  th {
+    color: var(--theme-muted);
+    font-size: 0.85em;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+
+  tbody tr + tr td {
+    border-top: 1px solid var(--theme-border-color);
+  }
+}
+
+.request-season-toggle-column {
+  width: 3.25rem;
+}
+
+.request-season-count-column {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.request-season-hidden-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+// A locked row leaves the choice to the other seasons, so it steps back visually.
+.request-season-locked {
+  color: var(--theme-muted);
+}
+

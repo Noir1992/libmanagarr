@@ -64,6 +64,42 @@ public sealed class SeerrRequestResource
 
     [JsonPropertyName("media")]
     public SeerrMediaResource? Media { get; set; }
+
+    // The request detail additionally carries the editable target fields; the list omits them.
+    [JsonPropertyName("serverId")]
+    public int? ServerId { get; set; }
+
+    [JsonPropertyName("profileId")]
+    public int? ProfileId { get; set; }
+
+    [JsonPropertyName("rootFolder")]
+    public string? RootFolder { get; set; }
+
+    // Sent as a number; Seerr's PUT rejects a non-numeric languageProfileId, so it is echoed as int.
+    [JsonPropertyName("languageProfileId")]
+    public int? LanguageProfileId { get; set; }
+
+    // Tv requests list the requested seasons; the mapper keeps only their season numbers.
+    [JsonPropertyName("seasons")]
+    public List<SeerrSeasonResource>? Seasons { get; set; }
+}
+
+// Shared season shape: the request detail sends it twice (the request's own seasons carry the
+// request status, the media object lists every season of the show with its download status) and
+// the tv metadata proxy uses it for the season list including the episode count.
+public sealed class SeerrSeasonResource
+{
+    [JsonPropertyName("seasonNumber")]
+    public int? SeasonNumber { get; set; }
+
+    // Only the tv metadata seasons carry the episode count.
+    [JsonPropertyName("episodeCount")]
+    public int? EpisodeCount { get; set; }
+
+    // Numeric status; media seasons use the download enum (5 = on disk, 2-4 = arriving,
+    // 1 = untouched), the request's own seasons the request enum (1 = pending, 5 = available).
+    [JsonPropertyName("status")]
+    public int? Status { get; set; }
 }
 
 public sealed class SeerrUserResource
@@ -110,4 +146,10 @@ public sealed class SeerrMediaResource
     // human-readable hint, so the mapper humanizes it as the title fallback.
     [JsonPropertyName("externalServiceSlug")]
     public string? ExternalServiceSlug { get; set; }
+
+    // The request detail lists every season of the show together with its download status, so
+    // the edit dialog can tell an already-available season from an untouched one. Pending
+    // requests do not have it yet, so the season list stays empty and the metadata fills the gap.
+    [JsonPropertyName("seasons")]
+    public List<SeerrSeasonResource>? Seasons { get; set; }
 }

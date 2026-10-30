@@ -192,6 +192,67 @@ public sealed class SeerrClientRequestsTests
     }
 
     [Fact]
+    public async Task GetRequests_KeepsSeasonsNullWhenTheRequestCarriesNone()
+    {
+        const string json = """
+            {
+              "results": [
+                {
+                  "id": 3,
+                  "status": 2,
+                  "mediaType": "movie",
+                  "seasons": [],
+                  "media": { "mediaType": "movie", "tmdbId": 603 }
+                },
+                {
+                  "id": 4,
+                  "status": 2,
+                  "type": "tv",
+                  "seasons": [ { "id": 9, "status": 5 } ],
+                  "media": { "mediaType": "tv" }
+                }
+              ]
+            }
+            """;
+        SeerrClient client = new(new HttpClient(new StubJsonHandler(json)));
+
+        SeerrRequestsResponse response = await client.GetRequestsAsync(
+            CreateInstance(), 1, 10, "createdAt", "desc", null, CancellationToken.None);
+
+        // Movies never carry seasons; tv entries without a usable seasonNumber behave alike.
+        Assert.All(response.Requests, (request) => Assert.Null(request.Seasons));
+    }
+
+    [Fact]
+    public async Task GetRequests_MapsSeasonNumbersSortedAndDeduplicated()
+    {
+        const string json = """
+            {
+              "results": [
+                {
+                  "id": 302,
+                  "status": 5,
+                  "type": "tv",
+                  "seasons": [
+                    { "id": 310, "seasonNumber": 2, "status": 5 },
+                    { "id": 309, "seasonNumber": 1, "status": 5 },
+                    { "id": 417, "seasonNumber": 0, "status": 1 },
+                    { "id": 418, "seasonNumber": 2, "status": 5 }
+                  ],
+                  "media": { "mediaType": "tv" }
+                }
+              ]
+            }
+            """;
+        SeerrClient client = new(new HttpClient(new StubJsonHandler(json)));
+
+        SeerrRequestsResponse response = await client.GetRequestsAsync(
+            CreateInstance(), 1, 10, "createdAt", "desc", null, CancellationToken.None);
+
+        Assert.Equal([0, 1, 2], Assert.Single(response.Requests).Seasons);
+    }
+
+    [Fact]
     public async Task GetRequests_SendsSeerrWindowQueryAndApiKeyHeader()
     {
         StubJsonHandler handler = new("""{ "results": [] }""");

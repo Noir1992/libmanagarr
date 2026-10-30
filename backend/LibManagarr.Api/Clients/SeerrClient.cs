@@ -83,6 +83,85 @@ public sealed class SeerrClient(HttpClient httpClient)
         };
     }
 
+    // Write operations verified against the live Seerr instance: approve and decline are POSTs
+    // to a status suffix, deletion uses the DELETE verb, and edits use a PUT whose body must
+    // carry mediaType. All of them answer 404 "Request not found." for unknown request ids.
+    public async Task ApproveRequestAsync(
+        SeerrInstanceSettings instance,
+        int requestId,
+        CancellationToken cancellationToken)
+    {
+        await SendAsync(HttpMethod.Post, instance, $"/api/v1/request/{requestId}/approve", null, cancellationToken);
+    }
+
+    public async Task DeclineRequestAsync(
+        SeerrInstanceSettings instance,
+        int requestId,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        SeerrDeclineResource? body = string.IsNullOrWhiteSpace(reason)
+            ? null
+            : new SeerrDeclineResource { Reason = reason.Trim() };
+
+        await SendAsync(HttpMethod.Post, instance, $"/api/v1/request/{requestId}/decline", body, cancellationToken);
+    }
+
+    public async Task DeleteRequestAsync(
+        SeerrInstanceSettings instance,
+        int requestId,
+        CancellationToken cancellationToken)
+    {
+        await SendAsync(HttpMethod.Delete, instance, $"/api/v1/request/{requestId}", null, cancellationToken);
+    }
+
+    public async Task UpdateRequestAsync(
+        SeerrInstanceSettings instance,
+        int requestId,
+        SeerrRequestUpdateResource body,
+        CancellationToken cancellationToken)
+    {
+        await SendAsync(HttpMethod.Put, instance, $"/api/v1/request/{requestId}", body, cancellationToken);
+    }
+
+    // The detail carries the editable fields (serverId, profileId, rootFolder, languageProfileId)
+    // that the list omits; the edit flow reads it before sending the PUT.
+    public async Task<SeerrRequestResource?> GetRequestDetailAsync(
+        SeerrInstanceSettings instance,
+        int requestId,
+        CancellationToken cancellationToken)
+    {
+        return await GetAsync<SeerrRequestResource>(instance, $"/api/v1/request/{requestId}", cancellationToken);
+    }
+
+    // Server settings embed the arr api keys in plaintext; SeerrServerResource maps only the
+    // display fields, so this projection is all the api ever forwards.
+    public async Task<IReadOnlyList<SeerrServerResource>> GetServersAsync(
+        SeerrInstanceSettings instance,
+        string application,
+        CancellationToken cancellationToken)
+    {
+        return await GetAsync<List<SeerrServerResource>>(
+            instance,
+            $"/api/v1/settings/{application}",
+            cancellationToken) ?? [];
+    }
+
+    // The service route is what Seerr's own dialogs use: it answers the quality profiles of
+    // both applications and the arr's real root folder list for one server, next to the
+    // server's default profile and directory used as the edit preselection.
+    public async Task<SeerrServiceResource?> GetServiceInfoAsync(
+        SeerrInstanceSettings instance,
+        string application,
+        int serverId,
+        CancellationToken cancellationToken)
+    {
+        return await GetAsync<SeerrServiceResource>(
+            instance,
+            $"/api/v1/service/{application}/{serverId}",
+            cancellationToken);
+    }
+
     public async Task<SeerrMediaMetadataResource?> GetMediaMetadataAsync(
         SeerrInstanceSettings instance,
         string type,
@@ -176,7 +255,27 @@ public sealed class SeerrClient(HttpClient httpClient)
             Title = media?.Title ?? HumanizeSlug(media?.ExternalServiceSlug),
             PosterPath = media?.PosterPath ?? media?.CoverPath,
             Year = ResolveYear(media),
+            Seasons = MapSeasons(resource.Seasons),
         };
+    }
+
+    // Tv requests list the seasons they cover; keep sorted distinct numbers and
+    // report "no seasons" as null so movies and whole-series requests look alike.
+    private static IReadOnlyList<int>? MapSeasons(List<SeerrSeasonResource>? seasons)
+    {
+        if (seasons is null || seasons.Count == 0)
+        {
+            return null;
+        }
+
+        int[] numbers = [.. seasons
+            .Select((season) => season.SeasonNumber)
+            .Where((number) => number.HasValue)
+            .Select((number) => number!.Value)
+            .Distinct()
+            .Order()];
+
+        return numbers.Length == 0 ? null : numbers;
     }
 
     // Seerr request lists carry no title, only an external service slug like
@@ -278,6 +377,27 @@ public sealed class SeerrClient(HttpClient httpClient)
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken);
+    }
+
+    // EnsureSuccessStatusCode carries the upstream status on the HttpRequestException, so the
+    // endpoints can map Seerr's 404 "Request not found." to a distinguishable ProblemDetails.
+    private async Task SendAsync(
+        HttpMethod method,
+        SeerrInstanceSettings instance,
+        string relativeUrl,
+        object? body,
+        CancellationToken cancellationToken)
+    {
+        using HttpRequestMessage request = new(method, $"{NormalizeBaseUrl(instance.BaseUrl)}{relativeUrl}");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Add("X-Api-Key", instance.ApiKey);
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
     }
 
     private static string NormalizeBaseUrl(string baseUrl)

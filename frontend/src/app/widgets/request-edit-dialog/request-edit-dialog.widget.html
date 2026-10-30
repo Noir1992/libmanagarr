@@ -1,0 +1,85 @@
+<h2 mat-dialog-title class="dialog-title request-dialog-title" [title]="titleLabel()">{{ titleLabel() }}</h2>
+
+<mat-dialog-content class="dialog-content">
+  @if (data.title) {
+    <p class="request-dialog-media-title" [title]="data.title">{{ data.title }}</p>
+  }
+
+  <div class="request-fields" [formGroup]="form">
+    @if (data.options.seasons.length > 0) {
+      <div class="field" formArrayName="seasons">
+        <label>{{ seasonsLabel() }}</label>
+        <table class="request-seasons">
+          <thead>
+            <tr>
+              <th class="request-season-toggle-column" scope="col">
+                <span class="request-season-hidden-heading">{{ seasonsLabel() }}</span>
+              </th>
+              <th scope="col">{{ seasonColumnLabel() }}</th>
+              <th class="request-season-count-column" scope="col">{{ episodeColumnLabel() }}</th>
+              <th scope="col">{{ statusColumnLabel() }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (season of data.options.seasons; track season.number; let index = $index) {
+              <tr class="request-season-row" [class.request-season-locked]="isSeasonLocked(season)">
+                <td class="request-season-toggle-column">
+                  <mat-slide-toggle
+                    class="request-season-toggle"
+                    [id]="'request-edit-season-' + season.number"
+                    [formControlName]="index"
+                    [aria-label]="seasonLabel(season)"
+                  />
+                </td>
+                <td>{{ seasonLabel(season) }}</td>
+                <td class="request-season-count-column">{{ episodeCountLabel(season) }}</td>
+                <td class="request-season-state">{{ seasonStateLabel(season) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <div class="request-advanced">
+      @if (data.options.seasons.length > 0) {
+        <h3 class="request-advanced-heading">{{ advancedLabel() }}</h3>
+      }
+
+      @if (data.options.qualityProfiles.length > 0) {
+        <div class="field">
+          <label for="request-edit-profile">{{ profileLabel() }}</label>
+          <div class="field-control-wrap">
+            <mat-select id="request-edit-profile" formControlName="profileId">
+              @for (profile of data.options.qualityProfiles; track profile.id) {
+                <mat-option [value]="profile.id">{{ profile.name }}</mat-option>
+              }
+            </mat-select>
+          </div>
+        </div>
+      }
+
+      @if (data.options.rootFolders.length > 0) {
+        <div class="field">
+          <label for="request-edit-root-folder">{{ rootFolderLabel() }}</label>
+          <div class="field-control-wrap">
+            <mat-select id="request-edit-root-folder" formControlName="rootFolder">
+              @for (rootFolder of data.options.rootFolders; track rootFolder) {
+                <mat-option [value]="rootFolder">{{ rootFolder }}</mat-option>
+              }
+            </mat-select>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" mat-button class="cancel-button request-dialog-cancel" (click)="cancel()">
+    {{ cancelLabel() }}
+  </button>
+  <button type="button" mat-stroked-button class="secondary-button request-dialog-save" [disabled]="!canSave()" (click)="save()">
+    {{ saveLabel() }}
+  </button>
+</mat-dialog-actions>
