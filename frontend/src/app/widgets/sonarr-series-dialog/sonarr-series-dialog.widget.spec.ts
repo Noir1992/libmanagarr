@@ -5,6 +5,39 @@ import { AppI18nService } from '../../services/app-i18n.service';
 import { SonarrSeriesDialogWidget } from './sonarr-series-dialog.widget';
 
 describe('SonarrSeriesDialogWidget episode table', () => {
+  for (const [size, expected] of [
+    [2.5 * 1024 ** 3, '2.5 GiB'],
+    [0, '0 GiB'],
+    [null, 'N/A'],
+  ] as const) {
+    it(`shows the complete series size as ${expected}`, async () => {
+      const item: MediaGridItem = {
+        kind: 'series',
+        id: 1,
+        title: 'Series',
+        url: '',
+        posterUrl: null,
+        detailRows: [],
+        size,
+        seriesData: { seasons: [] },
+      };
+      await TestBed.configureTestingModule({
+        imports: [SonarrSeriesDialogWidget],
+        providers: [
+          { provide: MAT_DIALOG_DATA, useValue: item },
+          { provide: MatDialogRef, useValue: { close: () => undefined } },
+        ],
+      }).compileComponents();
+      TestBed.inject(AppI18nService).setLanguage('en');
+      const fixture = TestBed.createComponent(SonarrSeriesDialogWidget);
+      fixture.detectChanges();
+      const row = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.series-dialog-info-row')).find(
+        (row) => row.querySelector('dt')?.textContent?.trim() === 'Total size',
+      );
+      expect(row?.querySelector('dd')?.textContent?.trim()).toBe(expected);
+    });
+  }
+
   it('shows missing for an upcoming series without files', async () => {
     const item: MediaGridItem = {
       kind: 'series',
@@ -114,6 +147,7 @@ describe('SonarrSeriesDialogWidget episode table', () => {
         'Aired status': 'continuing',
         Added: 'N/A',
         Availability: 'Missing',
+        'Total size': 'N/A',
         'Series monitored': 'Yes',
         Genres: 'Drama',
         Tags: 'favorite',

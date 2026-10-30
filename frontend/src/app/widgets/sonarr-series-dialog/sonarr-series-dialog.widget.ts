@@ -58,6 +58,10 @@ export class SonarrSeriesDialogWidget {
       row('filter.airStatus', series?.status, airStatusTone(series?.status)),
       row('filter.addedRange', series?.addedAt ? formatDate(series.addedAt, 'medium', this.locale) : na),
       row('filter.fileStatus', flag(series?.isAvailable, 'filter.filePresent', 'filter.fileMissing'), fileStatusTone(series?.isAvailable)),
+      row(
+        'library.details.totalSize',
+        this.data.size == null ? na : `${(this.data.size / 1024 ** 3).toLocaleString(this.locale, { maximumFractionDigits: 2 })} GiB`,
+      ),
       row('filter.seriesMonitored', flag(series?.monitored, 'library.details.yes', 'library.details.no')),
       row('filter.genres', series?.genres?.join(', ')),
       row('filter.tags', series?.tags?.join(', ')),

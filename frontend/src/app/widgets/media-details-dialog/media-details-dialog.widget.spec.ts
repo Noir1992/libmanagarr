@@ -85,6 +85,29 @@ describe('Media detail dialogs', () => {
     );
   });
 
+  for (const [size, hasFile, expected] of [
+    [2.5 * 1024 ** 3, true, '2.5 GiB'],
+    [0, true, '0 GiB'],
+    [1024 ** 3, false, 'N/A'],
+  ] as const) {
+    it(`shows movie size ${expected} without detailed file metadata`, async () => {
+      await TestBed.configureTestingModule({
+        imports: [MediaDetailsDialogWidget],
+        providers: [
+          { provide: MAT_DIALOG_DATA, useValue: { ...movie, mediaDetails: null, size, hasFile } },
+          { provide: MatDialogRef, useValue: { close: () => undefined } },
+          { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(MediaDetailsDialogWidget);
+      fixture.detectChanges();
+      const row = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.detail-row')).find(
+        (row) => row.querySelector('dt')?.textContent?.trim() === 'File size',
+      );
+      expect(row?.querySelector('dd')?.textContent?.trim()).toBe(expected);
+    });
+  }
+
   it('renders the poster above the details when posterUrl is set', async () => {
     await TestBed.configureTestingModule({
       imports: [MediaDetailsDialogWidget],

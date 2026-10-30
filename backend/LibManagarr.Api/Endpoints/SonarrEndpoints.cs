@@ -203,6 +203,7 @@ public static class SonarrEndpoints
                             FileCount = s.Seasons.Sum(season => season.Episodes.Count(episode => episode.HasFile)),
                             Monitored = s.Monitored,
                             Seasons = filteredSeasons,
+                            TotalSize = LibrarySizeCalculator.SeriesSize(s),
                             TotalEpisodes = filteredSeasons.Sum(season => season.Episodes.Count),
                             AiredEpisodes = filteredSeasons.Sum(season => season.Episodes.Count(e => e.AirDateUtc.HasValue && e.AirDateUtc.Value <= now)),
                         };
@@ -438,6 +439,7 @@ public static class SonarrEndpoints
                         FileCount = s.Seasons.Sum(season => season.Episodes.Count(episode => episode.HasFile)),
                         Monitored = s.Monitored,
                         Seasons = filteredSeasons,
+                        TotalSize = LibrarySizeCalculator.SeriesSize(s),
                         TotalEpisodes = filteredSeasons.Sum(season => season.Episodes.Count),
                         AiredEpisodes = filteredSeasons.Sum(season => season.Episodes.Count(e => e.AirDateUtc.HasValue && e.AirDateUtc.Value <= now)),
                     };

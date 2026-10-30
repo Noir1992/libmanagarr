@@ -201,6 +201,21 @@ public sealed class LibrarySorterTests
         Assert.Equal(expected, titles);
     }
 
+    [Theory]
+    [InlineData(LibrarySortDirection.Ascending, "Empty,Alpha,Bravo,Large,Unknown")]
+    [InlineData(LibrarySortDirection.Descending, "Large,Alpha,Bravo,Empty,Unknown")]
+    public void Size_OrdersMovieSizesAndSeriesTotals_WithUnknownLastAndTitleTieBreak(
+        LibrarySortDirection direction, string expected)
+    {
+        (string Title, long? Size)[] values = [("Unknown", null), ("Large", 9_000_000_000),
+            ("Bravo", 3_000_000_000), ("Empty", 0), ("Alpha", 3_000_000_000)];
+        LibraryRequestFilter filter = new() { SortField = LibrarySortField.Size, SortDirection = direction };
+        Assert.Equal(expected.Split(','), LibrarySorter.SortRadarr(values.Select(value =>
+            new RadarrLibraryEntryResponse { MovieTitle = value.Title, Size = value.Size }), filter).Select(entry => entry.MovieTitle));
+        Assert.Equal(expected.Split(','), LibrarySorter.SortSonarr(values.Select(value =>
+            new SonarrLibraryEntryResponse { SeriesTitle = value.Title, TotalSize = value.Size }), filter).Select(entry => entry.SeriesTitle));
+    }
+
     private static List<RadarrLibraryEntryResponse> Movies() =>
     [
         Movie("Unknown"),

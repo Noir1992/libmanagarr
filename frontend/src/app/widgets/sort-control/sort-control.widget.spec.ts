@@ -37,16 +37,18 @@ describe('SortControlWidget', () => {
     return emits;
   }
 
-  it('lists the three sortable fields and marks the active one with the current direction', async () => {
+  it('lists the four sortable fields and marks the active one with the current direction', async () => {
     const texts = await itemTexts(await openMenu());
 
-    expect(texts).toHaveSize(3);
+    expect(texts).toHaveSize(4);
     expect(texts[0]).toContain('Alphabetical');
     expect(texts[0]).toContain('arrow_upward');
     expect(texts[1]).toContain('Air date');
     expect(texts[1]).not.toContain('arrow_');
     expect(texts[2]).toContain('Added');
     expect(texts[2]).not.toContain('arrow_');
+    expect(texts[3]).toContain('Size');
+    expect(texts[3]).not.toContain('arrow_');
   });
 
   it('emits the picked field and keeps the direction while already sorting ascending', async () => {
@@ -57,6 +59,13 @@ describe('SortControlWidget', () => {
 
     expect(emits.fields).toEqual([LibrarySortField.AIRED]);
     expect(emits.directions).toEqual([]);
+  });
+
+  it('emits size when the size option is picked', async () => {
+    const emits = collectEmits();
+    const items = await (await openMenu()).getItems();
+    await items[3].click();
+    expect(emits.fields).toEqual([LibrarySortField.SIZE]);
   });
 
   it('resets to ascending when another field is picked while sorting descending', async () => {

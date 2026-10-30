@@ -12,6 +12,8 @@ namespace LibManagarr.Api.Tests.Endpoints;
 public sealed class LibrarySortEndpointTests
 {
     [Theory]
+    [InlineData(LibrarySortField.Size, LibrarySortDirection.Ascending, "NoDate,Bravo,Alpha,Charlie")]
+    [InlineData(LibrarySortField.Size, LibrarySortDirection.Descending, "Charlie,Alpha,Bravo,NoDate")]
     [InlineData(null, null, "Alpha,Bravo,Charlie,NoDate")]
     [InlineData(LibrarySortField.Alphabetical, LibrarySortDirection.Descending, "NoDate,Charlie,Bravo,Alpha")]
     [InlineData(LibrarySortField.Aired, LibrarySortDirection.Ascending, "Bravo,Charlie,Alpha,NoDate")]
@@ -27,6 +29,8 @@ public sealed class LibrarySortEndpointTests
     }
 
     [Theory]
+    [InlineData(LibrarySortField.Size, LibrarySortDirection.Ascending, "NoDate,Bravo,Alpha,Charlie")]
+    [InlineData(LibrarySortField.Size, LibrarySortDirection.Descending, "Charlie,Alpha,Bravo,NoDate")]
     [InlineData(null, null, "Alpha,Bravo,Charlie,NoDate")]
     [InlineData(LibrarySortField.Alphabetical, LibrarySortDirection.Descending, "NoDate,Charlie,Bravo,Alpha")]
     [InlineData(LibrarySortField.Aired, LibrarySortDirection.Ascending, "Bravo,Charlie,Alpha,NoDate")]
@@ -51,6 +55,21 @@ public sealed class LibrarySortEndpointTests
         Assert.Equal(["Alpha", "Charlie", "Bravo", "NoDate"], rows.Select(row => row.SeriesTitle));
         Assert.Equal(expected, rows.Select(row => string.Join(',', row.Seasons.SelectMany(season => season.Episodes)
             .Select(episode => episode.Number))));
+    }
+
+    [Fact]
+    public async Task PostSonarrLibrary_TotalSizeIncludesEpisodesHiddenByFilters()
+    {
+        LibraryRequestFilter filter = Filter(LibrarySortField.Size, LibrarySortDirection.Descending);
+        filter.AiredFrom = "2023-01-01";
+        MethodInfo handler = typeof(SonarrEndpoints).GetMethod("PostLibraryAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var task = (Task<Results<Ok<SonarrLibraryBatchResponse>, NotFound<ProblemDetails>>>)handler.Invoke(
+            null, [filter, new StubSettingsService(SonarrSettings()), CancellationToken.None])!;
+        var result = Assert.IsType<Ok<SonarrLibraryBatchResponse>>((await task).Result).Value!;
+        var rows = Assert.Single(result.Instances).Rows;
+        Assert.Equal(["Charlie", "Alpha"], rows.Select(row => row.SeriesTitle));
+        Assert.Equal(new long?[] { 300, 200 }, rows.Select(row => row.TotalSize));
+        Assert.All(rows, row => Assert.Single(Assert.Single(row.Seasons).Episodes));
     }
 
     [Fact]
@@ -118,20 +137,20 @@ public sealed class LibrarySortEndpointTests
     [
         new()
         {
-            MovieId = 1, Title = "Alpha", HasFile = false,
+            MovieId = 1, Title = "Alpha", HasFile = true, File = new() { Size = 200 },
             AirDateUtc = DateTimeOffset.Parse("2023-01-01T00:00:00Z"), AddedAt = DateTimeOffset.Parse("2025-01-01T00:00:00Z"),
         },
         new()
         {
-            MovieId = 2, Title = "Bravo", HasFile = false,
+            MovieId = 2, Title = "Bravo", HasFile = true, File = new() { Size = 100 },
             AirDateUtc = DateTimeOffset.Parse("2021-01-01T00:00:00Z"), AddedAt = DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
         },
         new()
         {
-            MovieId = 3, Title = "Charlie", HasFile = false,
+            MovieId = 3, Title = "Charlie", HasFile = true, File = new() { Size = 300 },
             AirDateUtc = DateTimeOffset.Parse("2022-01-01T00:00:00Z"), AddedAt = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
         },
-        new() { MovieId = 4, Title = "NoDate", HasFile = false },
+        new() { MovieId = 4, Title = "NoDate", HasFile = true, File = new() { Size = 0 } },
     ];
 
     private static AppSettings SonarrSettings() => new()
@@ -151,8 +170,8 @@ public sealed class LibrarySortEndpointTests
                 // Unordered on purpose: numbering has to be restored regardless of the series order.
                 Episodes =
                 [
-                    new() { EpisodeNumber = 3, AirDateUtc = DateTimeOffset.Parse("2024-01-01T00:00:00Z"), HasFile = false },
-                    new() { EpisodeNumber = 1, AirDateUtc = DateTimeOffset.Parse("2020-01-01T00:00:00Z"), HasFile = false },
+                    new() { EpisodeNumber = 3, AirDateUtc = DateTimeOffset.Parse("2024-01-01T00:00:00Z"), HasFile = true, File = new() { Size = 100 } },
+                    new() { EpisodeNumber = 1, AirDateUtc = DateTimeOffset.Parse("2020-01-01T00:00:00Z"), HasFile = true, File = new() { Size = 100 } },
                 ],
             }],
         },
@@ -160,19 +179,19 @@ public sealed class LibrarySortEndpointTests
         {
             SeriesId = 2, Title = "Bravo", AddedAt = DateTimeOffset.Parse("2024-01-01T00:00:00Z"),
             Seasons = [new() { SeasonNumber = 1, Episodes = [
-                new() { EpisodeNumber = 1, AirDateUtc = DateTimeOffset.Parse("2022-01-01T00:00:00Z"), HasFile = false }] }],
+                new() { EpisodeNumber = 1, AirDateUtc = DateTimeOffset.Parse("2022-01-01T00:00:00Z"), HasFile = true, File = new() { Size = 100 } }] }],
         },
         new()
         {
             SeriesId = 3, Title = "Charlie", AddedAt = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
             Seasons = [new() { SeasonNumber = 1, Episodes = [
-                new() { EpisodeNumber = 2, AirDateUtc = DateTimeOffset.Parse("2023-01-01T00:00:00Z"), HasFile = false },
-                new() { EpisodeNumber = 1, AirDateUtc = DateTimeOffset.Parse("2021-01-01T00:00:00Z"), HasFile = false }] }],
+                new() { EpisodeNumber = 2, AirDateUtc = DateTimeOffset.Parse("2023-01-01T00:00:00Z"), HasFile = true, File = new() { Size = 200 } },
+                new() { EpisodeNumber = 1, AirDateUtc = DateTimeOffset.Parse("2021-01-01T00:00:00Z"), HasFile = true, File = new() { Size = 100 } }] }],
         },
         new()
         {
             SeriesId = 4, Title = "NoDate",
-            Seasons = [new() { SeasonNumber = 1, Episodes = [new() { EpisodeNumber = 1, HasFile = false }] }],
+            Seasons = [new() { SeasonNumber = 1, Episodes = [new() { EpisodeNumber = 1, HasFile = true, File = new() { Size = 0 } }] }],
         },
     ];
 

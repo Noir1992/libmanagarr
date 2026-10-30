@@ -34,6 +34,7 @@ export class SortControlWidget {
     { value: LibrarySortField.ALPHABETICAL, label: this.i18n.t('sort.field.alphabetical') },
     { value: LibrarySortField.AIRED, label: this.i18n.t('sort.field.aired') },
     { value: LibrarySortField.ADDED, label: this.i18n.t('sort.field.added') },
+    { value: LibrarySortField.SIZE, label: this.i18n.t('sort.field.size') },
   ]);
 
   protected readonly directionIcon: Signal<string> = computed((): string =>
