@@ -137,7 +137,7 @@
   </div>
 
   @if (connectionFeedbackMessage()) {
-    <div class="connection-test-required-message">
+    <div class="connection-test-required-message" [class.is-error]="connectionFeedbackState() === 'error'">
       <mat-icon class="material-symbols-outlined">info_circle</mat-icon>
       {{ connectionFeedbackMessage() }}
     </div>
