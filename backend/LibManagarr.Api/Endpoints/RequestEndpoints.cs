@@ -189,6 +189,40 @@ public static class RequestEndpoints
 
         try
         {
+            SeerrRequestResource? detail = await seerrClient.GetRequestDetailAsync(seerrInstance, id, cancellationToken);
+            string? mediaType = MapDetailMediaType(detail);
+            if (detail is null || mediaType is null)
+            {
+                return RequestNotFoundProblem();
+            }
+
+            if (mediaType == "movie")
+            {
+                // Direct approval needs the same current Radarr values as saving the edit dialog.
+                // Old requests can still reference profiles and folders that no longer exist.
+                var (options, serverId) = await ResolveEditOptionsAsync(
+                    seerrInstance, seerrClient, detail, mediaType, cancellationToken);
+                if (options.ProfileId is null || options.RootFolder is null || serverId is null)
+                {
+                    return TypedResults.Problem(new ProblemDetails
+                    {
+                        Title = "Radarr request cannot be approved.",
+                        Detail = "No usable Radarr server, quality profile or root folder is configured in Seerr.",
+                        Status = StatusCodes.Status409Conflict
+                    });
+                }
+
+                await seerrClient.UpdateRequestAsync(seerrInstance, id, new SeerrRequestUpdateResource
+                {
+                    MediaType = mediaType,
+                    ServerId = serverId,
+                    ProfileId = options.ProfileId,
+                    RootFolder = options.RootFolder,
+                    LanguageProfileId = detail.LanguageProfileId,
+                    Is4k = detail.Is4k ?? detail.Is4kRequest,
+                }, cancellationToken);
+            }
+
             await seerrClient.ApproveRequestAsync(seerrInstance, id, cancellationToken);
             return TypedResults.NoContent();
         }
@@ -347,59 +381,11 @@ public static class RequestEndpoints
             return RequestNotFoundProblem();
         }
 
-        string application = mediaType == "tv" ? "sonarr" : "radarr";
         try
         {
-            int? serverId = detail.ServerId;
-            if (serverId is null)
-            {
-                IReadOnlyList<SeerrServerResource> servers = await seerrClient.GetServersAsync(
-                    seerrInstance,
-                    application,
-                    cancellationToken);
-
-                serverId = (servers.FirstOrDefault(server => server.IsDefault == true)
-                    ?? servers.FirstOrDefault())?.Id;
-            }
-
-            SeerrServiceResource? service = serverId is int resolvedServerId
-                ? await seerrClient.GetServiceInfoAsync(seerrInstance, application, resolvedServerId, cancellationToken)
-                : null;
-
-            List<SeerrEditOption> qualityProfiles = [.. (service?.Profiles ?? [])
-                .Select(profile => profile?.Id is int profileIdOption
-                    ? new SeerrEditOption(profileIdOption, profile!.Name ?? $"Profile {profileIdOption}")
-                    : null)
-                .OfType<SeerrEditOption>()];
-
-            List<string> rootFolders = [.. (service?.RootFolders ?? [])
-                .Select(folder => folder?.Path)
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .Select(path => path!.Trim())];
-
-            SeerrMediaMetadataResource? tvMetadata = null;
-            if (mediaType == "tv" && int.TryParse(detail.Media?.TmdbId, out int tmdbId))
-            {
-                tvMetadata = await GetTvMetadataAsync(seerrInstance, seerrClient, tmdbId, cancellationToken);
-            }
-
-            bool isAnime = IsAnimeMedia(tvMetadata);
-            SeerrServerResource? server = service?.Server;
-            int? defaultProfileId = isAnime
-                ? server?.ActiveAnimeProfileId ?? server?.ActiveProfileId
-                : server?.ActiveProfileId;
-            string? defaultRootFolder = isAnime
-                ? FirstNonBlank(server?.ActiveAnimeDirectory, server?.ActiveDirectory)
-                : server?.ActiveDirectory;
-
-            return TypedResults.Ok(new SeerrRequestEditOptions
-            {
-                QualityProfiles = qualityProfiles,
-                RootFolders = rootFolders,
-                Seasons = mediaType == "tv" ? MapSeasonOptions(detail, tvMetadata) : [],
-                ProfileId = ResolveOfferedProfile(qualityProfiles, detail.ProfileId, defaultProfileId),
-                RootFolder = ResolveOfferedFolder(rootFolders, detail.RootFolder, defaultRootFolder),
-            });
+            var (options, _) = await ResolveEditOptionsAsync(
+                seerrInstance, seerrClient, detail, mediaType, cancellationToken);
+            return TypedResults.Ok(options);
         }
         catch (HttpRequestException)
         {
@@ -410,6 +396,66 @@ public static class RequestEndpoints
                 Status = StatusCodes.Status502BadGateway
             });
         }
+    }
+
+    private static async Task<(SeerrRequestEditOptions Options, int? ServerId)> ResolveEditOptionsAsync(
+        SeerrInstanceSettings seerrInstance,
+        SeerrClient seerrClient,
+        SeerrRequestResource detail,
+        string mediaType,
+        CancellationToken cancellationToken)
+    {
+        string application = mediaType == "tv" ? "sonarr" : "radarr";
+        int? serverId = detail.ServerId;
+        if (serverId is null)
+        {
+            IReadOnlyList<SeerrServerResource> servers = await seerrClient.GetServersAsync(
+                seerrInstance,
+                application,
+                cancellationToken);
+
+            serverId = (servers.FirstOrDefault(server => server.IsDefault == true)
+                ?? servers.FirstOrDefault())?.Id;
+        }
+
+        SeerrServiceResource? service = serverId is int resolvedServerId
+            ? await seerrClient.GetServiceInfoAsync(seerrInstance, application, resolvedServerId, cancellationToken)
+            : null;
+
+        List<SeerrEditOption> qualityProfiles = [.. (service?.Profiles ?? [])
+            .Select(profile => profile?.Id is int profileIdOption
+                ? new SeerrEditOption(profileIdOption, profile!.Name ?? $"Profile {profileIdOption}")
+                : null)
+            .OfType<SeerrEditOption>()];
+
+        List<string> rootFolders = [.. (service?.RootFolders ?? [])
+            .Select(folder => folder?.Path)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!.Trim())];
+
+        SeerrMediaMetadataResource? tvMetadata = null;
+        if (mediaType == "tv" && int.TryParse(detail.Media?.TmdbId, out int tmdbId))
+        {
+            tvMetadata = await GetTvMetadataAsync(seerrInstance, seerrClient, tmdbId, cancellationToken);
+        }
+
+        bool isAnime = IsAnimeMedia(tvMetadata);
+        SeerrServerResource? server = service?.Server;
+        int? defaultProfileId = isAnime
+            ? server?.ActiveAnimeProfileId ?? server?.ActiveProfileId
+            : server?.ActiveProfileId;
+        string? defaultRootFolder = isAnime
+            ? FirstNonBlank(server?.ActiveAnimeDirectory, server?.ActiveDirectory)
+            : server?.ActiveDirectory;
+
+        return (new SeerrRequestEditOptions
+        {
+            QualityProfiles = qualityProfiles,
+            RootFolders = rootFolders,
+            Seasons = mediaType == "tv" ? MapSeasonOptions(detail, tvMetadata) : [],
+            ProfileId = ResolveOfferedProfile(qualityProfiles, detail.ProfileId, defaultProfileId),
+            RootFolder = ResolveOfferedFolder(rootFolders, detail.RootFolder, defaultRootFolder),
+        }, serverId);
     }
 
     // The metadata proxy answers unknown media ids with an upstream error; the dialog then

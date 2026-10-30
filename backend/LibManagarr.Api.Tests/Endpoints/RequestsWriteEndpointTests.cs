@@ -15,18 +15,95 @@ namespace LibManagarr.Api.Tests.Endpoints;
 public sealed class RequestsWriteEndpointTests
 {
     [Fact]
-    public async Task Approve_ReturnsNoContent_ForwardsApproveToSeerr()
+    public async Task Approve_ReturnsNoContent_ForwardsTvApprovalToSeerr()
     {
-        StubRecordingHandler handler = new("{}");
+        StubRecordingHandler handler = new("""{ "id": 12, "type": 2 }""");
 
         IResult result = await InvokeAsync(
             "ApproveRequestAsync",
             [12, new StubSettingsService(Configured()), new SeerrClient(new HttpClient(handler)), CancellationToken.None]);
 
         Assert.IsType<NoContent>(result);
-        RecordedRequest sent = Assert.Single(handler.Requests);
+        Assert.Equal(2, handler.Requests.Count);
+        RecordedRequest sent = handler.Requests[1];
         Assert.Equal(HttpMethod.Post, sent.Method);
         Assert.Equal("/api/v1/request/12/approve", sent.Path);
+    }
+
+    [Theory]
+    [InlineData(null, null, 16, "/movies")]
+    [InlineData(9, "/old-movies", 16, "/movies")]
+    [InlineData(15, "/other-movies", 15, "/other-movies")]
+    public async Task Approve_ResolvesCurrentRadarrValues_BeforeApproval(
+        int? profileId, string? rootFolder, int expectedProfile, string expectedFolder)
+    {
+        StubRoutingHandler handler = new(new Dictionary<string, string>
+        {
+            ["/api/v1/request/12"] = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                id = 12, type = 1, profileId, rootFolder, is4k = true, languageProfileId = 2
+            }),
+            ["/api/v1/settings/radarr"] = """[{ "id": 0, "isDefault": true }]""",
+            ["/api/v1/service/radarr/0"] = """
+                {
+                    "server": { "activeProfileId": 16, "activeDirectory": "/movies" },
+                    "profiles": [{ "id": 15 }, { "id": 16 }],
+                    "rootFolders": [{ "path": "/movies" }, { "path": "/other-movies" }]
+                }
+                """,
+            ["/api/v1/request/12/approve"] = "{}",
+        });
+
+        IResult result = await InvokeAsync("ApproveRequestAsync",
+            [12, new StubSettingsService(Configured()), new SeerrClient(new HttpClient(handler)), CancellationToken.None]);
+
+        Assert.IsType<NoContent>(result);
+        Assert.Equal(5, handler.Requests.Count);
+        RecordedRequest update = handler.Requests[3];
+        Assert.Equal(HttpMethod.Put, update.Method);
+        using var body = System.Text.Json.JsonDocument.Parse(update.Body);
+        Assert.Equal("movie", body.RootElement.GetProperty("mediaType").GetString());
+        Assert.Equal(0, body.RootElement.GetProperty("serverId").GetInt32());
+        Assert.Equal(expectedProfile, body.RootElement.GetProperty("profileId").GetInt32());
+        Assert.Equal(expectedFolder, body.RootElement.GetProperty("rootFolder").GetString());
+        Assert.True(body.RootElement.GetProperty("is4k").GetBoolean());
+        Assert.Equal(2, body.RootElement.GetProperty("languageProfileId").GetInt32());
+        Assert.Equal(HttpMethod.Post, handler.Requests[4].Method);
+        Assert.Equal("/api/v1/request/12/approve", handler.Requests[4].Path);
+    }
+
+    [Fact]
+    public async Task Approve_DoesNotApprove_WhenRadarrHasNoUsableProfileOrFolder()
+    {
+        StubRoutingHandler handler = new(new Dictionary<string, string>
+        {
+            ["/api/v1/request/12"] = """{ "id": 12, "type": 1, "serverId": 3 }""",
+            ["/api/v1/service/radarr/3"] = """{ "profiles": [], "rootFolders": [] }""",
+        });
+
+        IResult result = await InvokeAsync("ApproveRequestAsync",
+            [12, new StubSettingsService(Configured()), new SeerrClient(new HttpClient(handler)), CancellationToken.None]);
+
+        Assert.Equal(StatusCodes.Status409Conflict, Assert.IsType<ProblemHttpResult>(result).ProblemDetails.Status);
+        Assert.All(handler.Requests, request => Assert.Equal(HttpMethod.Get, request.Method));
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    public async Task Approve_Stops_WhenUpdatingOrApprovingFails(int failedCall)
+    {
+        StubStatusSequenceHandler handler = new(
+            ("""{ "id": 12, "type": 1, "serverId": 3 }""", HttpStatusCode.OK),
+            ("""{ "profiles": [{ "id": 16 }], "rootFolders": [{ "path": "/movies" }] }""", HttpStatusCode.OK),
+            ("{}", failedCall == 3 ? HttpStatusCode.InternalServerError : HttpStatusCode.OK),
+            ("{}", HttpStatusCode.InternalServerError));
+
+        IResult result = await InvokeAsync("ApproveRequestAsync",
+            [12, new StubSettingsService(Configured()), new SeerrClient(new HttpClient(handler)), CancellationToken.None]);
+
+        Assert.Equal(StatusCodes.Status502BadGateway, Assert.IsType<ProblemHttpResult>(result).ProblemDetails.Status);
+        Assert.Equal(failedCall, handler.RequestCount);
     }
 
     [Fact]
@@ -584,6 +661,7 @@ public sealed class RequestsWriteEndpointTests
     private sealed class StubStatusSequenceHandler(params (string Json, HttpStatusCode StatusCode)[] responses) : HttpMessageHandler
     {
         private int index;
+        public int RequestCount => index;
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -604,21 +682,24 @@ public sealed class RequestsWriteEndpointTests
     private sealed class StubRoutingHandler(IReadOnlyDictionary<string, string> jsonByPath) : HttpMessageHandler
     {
         public List<string> Paths { get; } = [];
+        public List<RecordedRequest> Requests { get; } = [];
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             string path = request.RequestUri!.AbsolutePath;
             Paths.Add(path);
+            Requests.Add(new RecordedRequest(request.Method, path,
+                request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken)));
 
             bool known = jsonByPath.TryGetValue(path, out string? json);
 
-            return Task.FromResult(new HttpResponseMessage(known ? HttpStatusCode.OK : HttpStatusCode.NotFound)
+            return new HttpResponseMessage(known ? HttpStatusCode.OK : HttpStatusCode.NotFound)
             {
                 Content = new StringContent(json ?? "{\"message\":\"not found\"}", Encoding.UTF8, "application/json"),
                 RequestMessage = request
-            });
+            };
         }
     }
 }
