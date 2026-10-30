@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ArrInstanceSettings } from '../interfaces/settings/arr-instance-settings';
+import { SeerrInstanceSettings } from '../interfaces/settings/seerr-instance-settings';
 import { AppI18nService } from './app-i18n.service';
 import { AppSettingsService, ValidationProblemError } from './app-settings.service';
 
@@ -151,6 +152,58 @@ describe('AppSettingsService', () => {
     request.flush(null);
     await deleting;
     expect(service.sonarrInstances()).toEqual([]);
+  });
+
+  function seerrInstance(): SeerrInstanceSettings {
+    return { id: 'seerr-1', baseUrl: 'http://seerr', apiKey: 'test-key' };
+  }
+
+  it('loads the Seerr instance and clears the state when none is configured', async () => {
+    const pending = service.loadSeerrInstance();
+    http.expectOne('/api/settings/seerr').flush(seerrInstance());
+    await pending;
+    expect(service.seerrInstance()).toEqual(seerrInstance());
+
+    const pendingEmpty = service.loadSeerrInstance();
+    http.expectOne('/api/settings/seerr').flush(null, { status: 204, statusText: 'No Content' });
+    await pendingEmpty;
+    expect(service.seerrInstance()).toBeNull();
+  });
+
+  it('saves and deletes the Seerr instance only after successful responses', async () => {
+    const saved: SeerrInstanceSettings = { ...seerrInstance(), baseUrl: 'http://updated-seerr' };
+    const saving = service.saveSeerrInstance(saved);
+    const saveRequest = http.expectOne('/api/settings/seerr');
+    expect(saveRequest.request.method).toBe('PUT');
+    expect(saveRequest.request.body).toEqual(saved);
+    saveRequest.flush(null);
+    await saving;
+    expect(service.seerrInstance()).toEqual(saved);
+
+    const deleting = service.deleteSeerrInstance();
+    const deleteRequest = http.expectOne('/api/settings/seerr');
+    expect(deleteRequest.request.method).toBe('DELETE');
+    expect(service.seerrInstance()).toEqual(saved);
+    deleteRequest.flush(null);
+    await deleting;
+    expect(service.seerrInstance()).toBeNull();
+  });
+
+  it('keeps the saved Seerr instance when saving fails', async () => {
+    const loading = service.loadSeerrInstance();
+    http.expectOne('/api/settings/seerr').flush(seerrInstance());
+    await loading;
+
+    const pending = service.saveSeerrInstance({ ...seerrInstance(), baseUrl: 'http://changed-seerr' }).then(
+      (): never => {
+        throw new Error('Expected request failure');
+      },
+      (error) => error as Error,
+    );
+    http.expectOne('/api/settings/seerr').flush({ detail: 'Cannot save' }, { status: 500, statusText: 'Error' });
+
+    expect((await pending)!.message).toBe('Cannot save');
+    expect(service.seerrInstance()).toEqual(seerrInstance());
   });
 
   it('clears the syncing state after a successful response with missing optional fields', async () => {

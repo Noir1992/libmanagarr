@@ -5,6 +5,7 @@ import { LibraryPage } from './pages/library/library.page';
 import { LibraryTrendPage } from './pages/library-trend/library-trend.page';
 import { LoginPage } from './pages/login/login.page';
 import { LogsPage } from './pages/logs/logs.page';
+import { RequestsPage } from './pages/requests/requests.page';
 import { SettingsPage } from './pages/settings/settings.page';
 import { SetupPage } from './pages/setup/setup.page';
 import { pendingChangesGuard } from './guards/pending-changes.guard';
@@ -49,6 +50,11 @@ export const appRoutes: Routes = [
   {
     path: 'library-trend',
     component: LibraryTrendPage,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'requests',
+    component: RequestsPage,
     canActivate: [authGuard],
   },
 ];

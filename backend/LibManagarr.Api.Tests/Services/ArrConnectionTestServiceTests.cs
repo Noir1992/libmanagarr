@@ -15,6 +15,7 @@ public sealed class ArrConnectionTestServiceTests
     {
         ArrConnectionTestService service = CreateService(
             new StubHttpMessageHandler(HttpStatusCode.OK),
+            new StubHttpMessageHandler(HttpStatusCode.OK),
             new StubHttpMessageHandler(HttpStatusCode.OK));
 
         TestConnectionResult result = await service.TestAsync(
@@ -25,10 +26,41 @@ public sealed class ArrConnectionTestServiceTests
     }
 
     [Fact]
+    public async Task TestAsync_ShouldReturnSuccess_ForSeerrConnection()
+    {
+        ArrConnectionTestService service = CreateService(
+            new StubHttpMessageHandler(HttpStatusCode.OK),
+            new StubHttpMessageHandler(HttpStatusCode.OK),
+            new StubHttpMessageHandler(HttpStatusCode.OK));
+
+        TestConnectionResult result = await service.TestAsync(
+            CreateRequest(ArrApplicationKind.Seerr),
+            CancellationToken.None);
+
+        Assert.Equal("Connection successful.", result.Message);
+    }
+
+    [Fact]
+    public async Task TestAsync_ShouldThrowBadGateway_ForSeerrAuthFailure()
+    {
+        ArrConnectionTestService service = CreateService(
+            new StubHttpMessageHandler(HttpStatusCode.OK),
+            new StubHttpMessageHandler(HttpStatusCode.OK),
+            new StubHttpMessageHandler(HttpStatusCode.Unauthorized));
+
+        ApiProblemException exception = await Assert.ThrowsAsync<ApiProblemException>(
+            () => service.TestAsync(CreateRequest(ArrApplicationKind.Seerr), CancellationToken.None));
+
+        Assert.Equal(StatusCodes.Status502BadGateway, exception.StatusCode);
+        Assert.Equal("Connection failed", exception.Title);
+    }
+
+    [Fact]
     public async Task TestAsync_ShouldThrowBadGateway_ForHttpRequestError()
     {
         ArrConnectionTestService service = CreateService(
             new StubHttpMessageHandler(HttpStatusCode.BadGateway),
+            new StubHttpMessageHandler(HttpStatusCode.OK),
             new StubHttpMessageHandler(HttpStatusCode.OK));
 
         ApiProblemException exception = await Assert.ThrowsAsync<ApiProblemException>(
@@ -43,6 +75,7 @@ public sealed class ArrConnectionTestServiceTests
     {
         ArrConnectionTestService service = CreateService(
             new StubHttpMessageHandler(HttpStatusCode.OK),
+            new StubHttpMessageHandler(HttpStatusCode.OK),
             new StubHttpMessageHandler(HttpStatusCode.OK));
 
         ApiProblemException exception = await Assert.ThrowsAsync<ApiProblemException>(
@@ -54,11 +87,13 @@ public sealed class ArrConnectionTestServiceTests
 
     private static ArrConnectionTestService CreateService(
         HttpMessageHandler sonarrHandler,
-        HttpMessageHandler radarrHandler)
+        HttpMessageHandler radarrHandler,
+        HttpMessageHandler seerrHandler)
     {
         return new ArrConnectionTestService(
             new SonarrClient(new HttpClient(sonarrHandler)),
             new RadarrClient(new HttpClient(radarrHandler)),
+            new SeerrClient(new HttpClient(seerrHandler)),
             NullLogger<ArrConnectionTestService>.Instance);
     }
 

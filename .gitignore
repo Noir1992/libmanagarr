@@ -51,3 +51,6 @@ Thumbs.db
 
 # Local .NET build and verification output
 /.artifacts/
+/.agents/
+/.codex/
+/.qwen/

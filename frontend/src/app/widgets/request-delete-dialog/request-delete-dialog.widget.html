@@ -1,0 +1,14 @@
+<h2 mat-dialog-title class="dialog-title request-dialog-title" [title]="titleLabel()">{{ titleLabel() }}</h2>
+
+<mat-dialog-content class="dialog-content">
+  @if (data.title) {
+    <p class="request-dialog-media-title" [title]="data.title">{{ data.title }}</p>
+  }
+
+  <p class="request-dialog-confirm-text">{{ confirmText() }}</p>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" mat-button class="cancel-button request-dialog-cancel" (click)="cancel()">{{ cancelLabel() }}</button>
+  <button type="button" mat-flat-button class="danger-button request-dialog-confirm" (click)="confirm()">{{ confirmLabel() }}</button>
+</mat-dialog-actions>

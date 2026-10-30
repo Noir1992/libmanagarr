@@ -67,5 +67,23 @@
         </div>
       </section>
     </section>
+    <section class="card">
+      <section>
+        <div class="card-header">
+          <img [ngSrc]="instanceLogoPath('Seerr')" [height]="24" [width]="24" alt="" aria-hidden="true" />
+
+          <h2 class="card-title">{{ seerrHeading() }}</h2>
+        </div>
+
+        <div class="card-content instance-list">
+          <app-settings-seerr-card
+            [instanceGroup]="seerrFormState()"
+            [isConfigured]="isSeerrConfigured()"
+            [isDeletingState]="isSeerrDeleting()"
+            (removeInstance)="removeSeerrInstanceAsync()"
+          />
+        </div>
+      </section>
+    </section>
   }
 </section>

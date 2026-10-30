@@ -1,0 +1,28 @@
+.dialog-title {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+
+.dialog-content {
+  display: grid;
+  gap: var(--theme-default-gap);
+  font-family: var(--app-font-family), serif;
+}
+
+.request-dialog-media-title {
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 0.9em;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-dialog-confirm-text {
+  margin: 0;
+  color: var(--theme-text);
+}

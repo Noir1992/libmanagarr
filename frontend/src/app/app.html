@@ -57,6 +57,10 @@
           <mat-icon class="material-symbols-outlined">timeline</mat-icon>
           <span>{{ libraryTrendLabel() }}</span>
         </a>
+        <a routerLink="/requests" routerLinkActive="is-active" class="navigation-item" (click)="closeNavigation()">
+          <mat-icon class="material-symbols-outlined">subscriptions</mat-icon>
+          <span>{{ requestsLabel() }}</span>
+        </a>
         <a routerLink="/logs" routerLinkActive="is-active" class="navigation-item" (click)="closeNavigation()">
           <mat-icon class="material-symbols-outlined">text_snippet</mat-icon>
           <span>{{ logsLabel() }}</span>

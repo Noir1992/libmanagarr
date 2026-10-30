@@ -169,6 +169,7 @@ describe('SettingsPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     fixture.detectChanges();
     httpTestingController.expectOne('/api/settings/instances').flush(createInstancesResponse());
+    httpTestingController.expectOne('/api/settings/seerr').flush(null, { status: 204, statusText: 'No Content' });
     await fixture.whenStable();
     fixture.detectChanges();
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -176,9 +177,10 @@ describe('SettingsPage', () => {
     await fixture.whenStable();
 
     const logos: NodeListOf<HTMLImageElement> = fixture.nativeElement.querySelectorAll('.mat-mdc-tab-body-active img[aria-hidden="true"]');
-    expect(logos).toHaveSize(2);
+    expect(logos).toHaveSize(3);
     expect(logos[0].getAttribute('src')).toBe('/icons/logo_radarr.svg');
     expect(logos[1].getAttribute('src')).toBe('/icons/logo_sonarr.svg');
+    expect(logos[2].getAttribute('src')).toBe('/icons/logo_seerr.svg');
   });
 
   it('should read the active tab from the url', async () => {
@@ -212,6 +214,7 @@ describe('SettingsPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     fixture.detectChanges();
     httpTestingController.expectOne('/api/settings/instances').flush(createInstancesResponse());
+    httpTestingController.expectOne('/api/settings/seerr').flush(null, { status: 204, statusText: 'No Content' });
 
     expect(fixture.componentInstance['selectedTabIndex']()).toBe(1);
     expect(navigateSpy).toHaveBeenCalledWith(

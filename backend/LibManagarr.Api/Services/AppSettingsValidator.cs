@@ -17,6 +17,7 @@ public static class AppSettingsValidator
 
         AppendInstanceErrors(errors, "sonarrInstances", settings.SonarrInstances);
         AppendInstanceErrors(errors, "radarrInstances", settings.RadarrInstances);
+        AppendSeerrErrors(errors, settings.Seerr);
 
         return errors;
     }
@@ -116,16 +117,64 @@ public static class AppSettingsValidator
         return errors;
     }
 
+    public static Dictionary<string, string[]> ValidateSeerr(SeerrInstanceSettings instance)
+    {
+        Dictionary<string, string[]> errors = [];
+        AppendSeerrErrors(errors, instance);
+        return errors;
+    }
+
     public static Dictionary<string, string[]> ValidateConnectionRequest(TestConnectionRequest request)
     {
-        Dictionary<string, string[]> errors = ValidateInstance(request.Instance);
+        // Seerr has no instance name, so only the connection-sensitive fields are validated for it.
+        Dictionary<string, string[]> errors = request.Kind == ArrApplicationKind.Seerr
+            ? ValidateSeerrConnectionInstance(request.Instance)
+            : ValidateInstance(request.Instance);
 
         if (!Enum.IsDefined(request.Kind))
         {
-            errors["kind"] = ["The kind must be 'Sonarr' or 'Radarr'."];
+            errors["kind"] = ["The kind must be 'Sonarr', 'Radarr', or 'Seerr'."];
         }
 
         return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateSeerrConnectionInstance(ArrInstanceSettings instance)
+    {
+        Dictionary<string, string[]> errors = [];
+        Dictionary<string, List<string>> fieldErrors = [];
+        AppendBaseUrlAndApiKeyErrors(fieldErrors, "instance", instance.BaseUrl, instance.ApiKey);
+
+        foreach (KeyValuePair<string, List<string>> entry in fieldErrors)
+        {
+            errors[entry.Key] = entry.Value.ToArray();
+        }
+
+        return errors;
+    }
+
+    private static void AppendSeerrErrors(Dictionary<string, string[]> errors, SeerrInstanceSettings? instance)
+    {
+        if (instance is null)
+        {
+            return;
+        }
+
+        Dictionary<string, List<string>> fieldErrors = [];
+        AppendSeerrFieldErrors(fieldErrors, "seerr", instance);
+
+        foreach (KeyValuePair<string, List<string>> entry in fieldErrors)
+        {
+            errors[entry.Key] = entry.Value.ToArray();
+        }
+    }
+
+    private static void AppendSeerrFieldErrors(
+        Dictionary<string, List<string>> fieldErrors,
+        string instancePath,
+        SeerrInstanceSettings instance)
+    {
+        AppendBaseUrlAndApiKeyErrors(fieldErrors, instancePath, instance.BaseUrl, instance.ApiKey);
     }
 
     private static void AppendInstanceErrors(
@@ -192,11 +241,21 @@ public static class AppSettingsValidator
         string instancePath,
         ArrInstanceSettings instance)
     {
-        if (string.IsNullOrWhiteSpace(instance.Name))
+        AppendInstanceCoreErrors(fieldErrors, instancePath, instance.Name, instance.BaseUrl, instance.ApiKey);
+    }
+
+    private static void AppendInstanceCoreErrors(
+        Dictionary<string, List<string>> fieldErrors,
+        string instancePath,
+        string name,
+        string baseUrl,
+        string apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(name))
         {
             AddFieldError(fieldErrors, $"{instancePath}.name", "The name is required.");
         }
-        else if (instance.Name.Trim().Length > MaxInstanceFieldLength)
+        else if (name.Trim().Length > MaxInstanceFieldLength)
         {
             AddFieldError(
                 fieldErrors,
@@ -204,12 +263,21 @@ public static class AppSettingsValidator
                 $"The name must not exceed {MaxInstanceFieldLength} characters.");
         }
 
-        if (string.IsNullOrWhiteSpace(instance.BaseUrl) ||
-            !Uri.TryCreate(instance.BaseUrl, UriKind.Absolute, out Uri? _))
+        AppendBaseUrlAndApiKeyErrors(fieldErrors, instancePath, baseUrl, apiKey);
+    }
+
+    private static void AppendBaseUrlAndApiKeyErrors(
+        Dictionary<string, List<string>> fieldErrors,
+        string instancePath,
+        string baseUrl,
+        string apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl) ||
+            !Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? _))
         {
             AddFieldError(fieldErrors, $"{instancePath}.baseUrl", "The baseUrl must be a valid absolute URL.");
         }
-        else if (instance.BaseUrl.Trim().Length > MaxInstanceFieldLength)
+        else if (baseUrl.Trim().Length > MaxInstanceFieldLength)
         {
             AddFieldError(
                 fieldErrors,
@@ -217,11 +285,11 @@ public static class AppSettingsValidator
                 $"The baseUrl must not exceed {MaxInstanceFieldLength} characters.");
         }
 
-        if (string.IsNullOrWhiteSpace(instance.ApiKey))
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             AddFieldError(fieldErrors, $"{instancePath}.apiKey", "The apiKey is required.");
         }
-        else if (instance.ApiKey.Trim().Length > MaxInstanceFieldLength)
+        else if (apiKey.Trim().Length > MaxInstanceFieldLength)
         {
             AddFieldError(
                 fieldErrors,

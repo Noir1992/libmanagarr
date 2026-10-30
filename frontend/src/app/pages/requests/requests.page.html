@@ -1,0 +1,195 @@
+<main class="page-shell">
+  <section class="page-header">
+    <div class="page-title-row">
+      <h1 class="page-title">{{ title() }}</h1>
+    </div>
+    <p class="page-description">{{ description() }}</p>
+  </section>
+
+  <section class="page-content">
+    @if (notConfigured()) {
+      <section class="requests-not-configured-state" routerLink="/settings" [queryParams]="{ tab: 'arr-instances' }">
+        <div class="requests-not-configured-state-header">
+          <mat-icon class="material-symbols-outlined" aria-hidden="true">info</mat-icon>
+          <span>{{ notConfiguredText() }}</span>
+        </div>
+
+        <span class="requests-not-configured-state-info-text">{{ goToSettingsText() }}</span>
+      </section>
+    } @else {
+      <div class="requests-filter-bar" role="group">
+        @for (filter of statusFilters(); track filter.value) {
+          <button
+            type="button"
+            class="requests-filter-chip"
+            [class.is-active]="isActiveFilter(filter.value)"
+            [attr.aria-pressed]="isActiveFilter(filter.value)"
+            (click)="applyStatusFilter(filter.value)"
+          >
+            {{ filter.label }}
+          </button>
+        }
+      </div>
+
+      @if (loading()) {
+        <app-loading-section />
+      } @else if (loadError(); as error) {
+        <app-loading-error-section [error]="error" />
+      } @else if (requests().length === 0) {
+        <app-no-data-section [isFiltered]="isFiltered()" />
+      } @else {
+        <ul class="requests-list">
+          @for (request of requests(); track request.id) {
+            <li class="requests-list-item">
+              <div class="requests-poster">
+                @if (posterUrl(request); as url) {
+                  <img class="requests-poster-image" [src]="url" alt="" loading="lazy" />
+                } @else {
+                  <mat-icon class="material-symbols-outlined" aria-hidden="true">{{ typeIcon(request.type) }}</mat-icon>
+                }
+              </div>
+
+              <div class="requests-item-title-row">
+                <span class="requests-item-title">{{ request.title ?? '—' }}</span>
+                @if (request.year) {
+                  <span class="requests-item-year">({{ request.year }})</span>
+                }
+                @if (request.is4kRequest) {
+                  <span class="requests-item-4k-badge">4K</span>
+                }
+                @if (typeLabel(request.type); as type) {
+                  <span class="requests-item-type" [attr.data-type]="request.type">{{ type }}</span>
+                }
+              </div>
+
+              <div class="requests-item-summary">
+                @if (request.seasons?.length) {
+                  <div class="requests-item-seasons">
+                    <span class="requests-item-seasons-label">{{ seasonsLabel() }}:</span>
+                    @for (season of request.seasons; track season) {
+                      <span class="requests-item-season">{{ seasonLabel(season) }}</span>
+                    }
+                  </div>
+                }
+
+                <div class="requests-item-status">
+                  <span class="requests-item-status-label">{{ statusHeadingLabel() }}:</span>
+                  <span class="requests-status-badge" [attr.data-status]="request.status">{{ statusLabel(request.status) }}</span>
+                </div>
+
+                <div class="requests-item-meta">
+                  @if (request.requestedBy) {
+                    <span class="requests-item-requester"
+                      >{{ requestedByLabel() }}: <span class="requests-item-requester-name">{{ request.requestedBy }}</span></span
+                    >
+                  }
+                </div>
+
+                @if (request.requestedAt) {
+                  <span class="requests-item-date">{{ requestedAtLabel() }}: {{ request.requestedAt | date: 'medium' }}</span>
+                }
+              </div>
+
+              <div class="requests-item-side">
+                <div class="requests-item-actions">
+                  @if (canApproveOrDecline(request)) {
+                    <button
+                      type="button"
+                      class="requests-action-button requests-action-approve"
+                      [disabled]="runningAction()"
+                      [title]="approveLabel()"
+                      [attr.aria-label]="approveLabel()"
+                      (click)="approveAsync(request)"
+                    >
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">check_circle</mat-icon>
+                    </button>
+                    <button
+                      type="button"
+                      class="requests-action-button requests-action-decline"
+                      [disabled]="runningAction()"
+                      [title]="declineLabel()"
+                      [attr.aria-label]="declineLabel()"
+                      (click)="declineWithDialogAsync(request)"
+                    >
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">cancel</mat-icon>
+                    </button>
+                  }
+                  @if (canEdit(request)) {
+                    <button
+                      type="button"
+                      class="requests-action-button requests-action-edit"
+                      [disabled]="runningAction()"
+                      [title]="editLabel()"
+                      [attr.aria-label]="editLabel()"
+                      (click)="editWithDialogAsync(request)"
+                    >
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">edit</mat-icon>
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="requests-action-button requests-action-delete"
+                    [disabled]="runningAction()"
+                    [title]="deleteLabel()"
+                    [attr.aria-label]="deleteLabel()"
+                    (click)="deleteWithDialogAsync(request)"
+                  >
+                    <mat-icon class="material-symbols-outlined" aria-hidden="true">delete</mat-icon>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  class="requests-more-trigger"
+                  [matMenuTriggerFor]="requestsActionsMenu"
+                  [disabled]="runningAction()"
+                  [title]="moreActionsLabel()"
+                  [attr.aria-label]="moreActionsLabel()"
+                >
+                  <mat-icon class="material-symbols-outlined" aria-hidden="true">more_horiz</mat-icon>
+                </button>
+
+                <mat-menu #requestsActionsMenu="matMenu" xPosition="before">
+                  @if (canApproveOrDecline(request)) {
+                    <button type="button" mat-menu-item [disabled]="runningAction()" (click)="approveAsync(request)">
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">check_circle</mat-icon>
+                      <span>{{ approveLabel() }}</span>
+                    </button>
+                    <button type="button" mat-menu-item [disabled]="runningAction()" (click)="declineWithDialogAsync(request)">
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">cancel</mat-icon>
+                      <span>{{ declineLabel() }}</span>
+                    </button>
+                  }
+                  @if (canEdit(request)) {
+                    <button type="button" mat-menu-item [disabled]="runningAction()" (click)="editWithDialogAsync(request)">
+                      <mat-icon class="material-symbols-outlined" aria-hidden="true">edit</mat-icon>
+                      <span>{{ editLabel() }}</span>
+                    </button>
+                  }
+                  <button type="button" mat-menu-item [disabled]="runningAction()" (click)="deleteWithDialogAsync(request)">
+                    <mat-icon class="material-symbols-outlined" aria-hidden="true">delete</mat-icon>
+                    <span>{{ deleteLabel() }}</span>
+                  </button>
+                </mat-menu>
+              </div>
+            </li>
+          }
+        </ul>
+
+        <div class="requests-pagination">
+          <button type="button" class="requests-pagination-button" [disabled]="!canGoPrevious()" (click)="previousPage()">
+            <mat-icon class="material-symbols-outlined" aria-hidden="true">chevron_left</mat-icon>
+            <span>{{ previousLabel() }}</span>
+          </button>
+
+          <span class="requests-pagination-info">{{ paginationInfo() }}</span>
+
+          <button type="button" class="requests-pagination-button" [disabled]="!canGoNext()" (click)="nextPage()">
+            <span>{{ nextLabel() }}</span>
+            <mat-icon class="material-symbols-outlined" aria-hidden="true">chevron_right</mat-icon>
+          </button>
+        </div>
+      }
+    }
+  </section>
+</main>

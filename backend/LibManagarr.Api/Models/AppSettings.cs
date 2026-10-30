@@ -10,6 +10,8 @@ public sealed class AppSettings
 
     public List<ArrInstanceSettings> RadarrInstances { get; set; } = [];
 
+    public SeerrInstanceSettings? Seerr { get; set; }
+
     public List<SonarrInstanceSnapshot> SonarrSnapshots { get; set; } = [];
 
     public List<RadarrInstanceSnapshot> RadarrSnapshots { get; set; } = [];
