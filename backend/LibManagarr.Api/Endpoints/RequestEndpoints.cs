@@ -317,6 +317,8 @@ public static class RequestEndpoints
     // additionally offer the show's seasons from the metadata proxy. Pending requests carry no
     // serverId, profileId or rootFolder yet, so the preselection falls back to the server
     // defaults; anime media fall back to the server anime defaults like in Seerr's dialogs.
+    // A value that the arr no longer offers never preselects, so the dialog always shows a
+    // choice it can also save back.
     private static async Task<IResult> GetEditOptionsAsync(
         int id,
         ISettingsService settingsService = null!,
@@ -395,8 +397,8 @@ public static class RequestEndpoints
                 QualityProfiles = qualityProfiles,
                 RootFolders = rootFolders,
                 Seasons = mediaType == "tv" ? MapSeasonOptions(detail, tvMetadata) : [],
-                ProfileId = detail.ProfileId ?? defaultProfileId,
-                RootFolder = FirstNonBlank(detail.RootFolder, defaultRootFolder),
+                ProfileId = ResolveOfferedProfile(qualityProfiles, detail.ProfileId, defaultProfileId),
+                RootFolder = ResolveOfferedFolder(rootFolders, detail.RootFolder, defaultRootFolder),
             });
         }
         catch (HttpRequestException)
@@ -524,6 +526,40 @@ public static class RequestEndpoints
 
         List<int> mirroredSeasons = [.. MapSeasonNumbers(detail.Seasons)];
         return mirroredSeasons.Count > 0 ? mirroredSeasons : null;
+    }
+
+    // Seerr keeps the profile and the folder a request was created with even after the arr
+    // dropped that profile or moved its library, and the dialog selects cannot render a value
+    // that is not one of their options (live probe 2026-10-30: a movie request still carries
+    // profileId 9 and the folder "/media/movies (anime)" while radarr offers ids 15 to 18 under
+    // "/media/videos/movies"). A candidate therefore only wins when the service route really
+    // offers it, so the preselection falls back to the server default and then to the first
+    // option instead of showing an empty field that would save an invalid value back.
+    private static int? ResolveOfferedProfile(IReadOnlyList<SeerrEditOption> options, params int?[] candidates)
+    {
+        foreach (int? candidate in candidates)
+        {
+            if (candidate is int id && options.Any(option => option.Id == id))
+            {
+                return candidate;
+            }
+        }
+
+        return options.FirstOrDefault()?.Id;
+    }
+
+    private static string? ResolveOfferedFolder(IReadOnlyList<string> folders, params string?[] candidates)
+    {
+        foreach (string? candidate in candidates)
+        {
+            string? path = candidate?.Trim();
+            if (!string.IsNullOrWhiteSpace(path) && folders.Contains(path))
+            {
+                return path;
+            }
+        }
+
+        return folders.FirstOrDefault();
     }
 
     private static string? FirstNonBlank(string? preferred, string? fallback)

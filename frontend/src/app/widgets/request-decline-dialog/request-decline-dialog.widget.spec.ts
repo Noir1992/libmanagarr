@@ -26,7 +26,21 @@ describe('RequestDeclineDialogWidget', () => {
     const element: HTMLElement = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('.request-dialog-title')?.textContent?.trim()).toBe('Decline request');
     expect(element.querySelector('.request-dialog-media-title')?.textContent?.trim()).toBe('Sample Movie');
-    expect(element.querySelector('textarea[formControlName="reason"]')).not.toBeNull();
+
+    // The reason stays a textarea but follows the shared field layout, so the global input styling
+    // frames it exactly once.
+    const textarea: HTMLTextAreaElement = element.querySelector('.field .field-control-wrap textarea#request-decline-reason')!;
+    expect(textarea).toBeTruthy();
+    expect(textarea.getAttribute('formControlName')).toBe('reason');
+    expect(element.querySelector('.field > label')?.textContent?.trim()).toBe('Reason (optional)');
+    expect(element.querySelector('.field > label')?.getAttribute('for')).toBe('request-decline-reason');
+    expect(element.querySelector('mat-form-field')).toBeNull();
+
+    // The popup shares the standard dialog structure, so it has no own header bar and no close icon.
+    expect(element.querySelector('mat-dialog-content .field')).not.toBeNull();
+    expect(element.querySelector('mat-dialog-actions .request-dialog-confirm')).not.toBeNull();
+    expect(element.querySelectorAll('mat-dialog-actions button')).toHaveSize(2);
+    expect(element.querySelector('mat-icon-button')).toBeNull();
   });
 
   it('closes with the trimmed reason when the user confirms', () => {

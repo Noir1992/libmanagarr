@@ -1,51 +1,15 @@
-:host {
-  display: block;
+.dialog-title {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  font-weight: 700;
   color: var(--theme-text);
 }
 
-.request-dialog {
-  display: flex;
-  flex-direction: column;
-  max-height: 80vh;
-
-  .request-dialog-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--theme-default-gap-small);
-    border-bottom: 1px solid var(--theme-border-color);
-    padding: var(--theme-default-gap-small) var(--theme-default-gap);
-
-    .request-dialog-title {
-      margin: 0;
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 1.2rem;
-      font-weight: 600;
-      color: var(--theme-text);
-    }
-
-    button {
-      flex-shrink: 0;
-    }
-  }
-
-  .request-dialog-content {
-    display: grid;
-    gap: var(--theme-default-gap);
-    padding: var(--theme-default-gap);
-    overflow: auto;
-  }
-
-  .request-dialog-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--theme-default-gap-small);
-    padding: var(--theme-default-gap-small) var(--theme-default-gap) var(--theme-default-gap);
-  }
+.dialog-content {
+  display: grid;
+  gap: var(--theme-default-gap);
+  font-family: var(--app-font-family), serif;
 }
 
 .request-dialog-media-title {
@@ -56,8 +20,4 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.request-dialog-field {
-  width: 100%;
 }

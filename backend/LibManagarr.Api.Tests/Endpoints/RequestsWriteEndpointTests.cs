@@ -242,7 +242,7 @@ public sealed class RequestsWriteEndpointTests
         StubRoutingHandler handler = new(new Dictionary<string, string>
         {
             ["/api/v1/request/12"] = """
-                { "id": 12, "type": 1, "serverId": 0, "profileId": 5, "rootFolder": "/movies-4k" }
+                { "id": 12, "type": 1, "serverId": 0, "profileId": 16, "rootFolder": "/movies (anime)" }
                 """,
             ["/api/v1/service/radarr/0"] = """
                 {
@@ -260,12 +260,76 @@ public sealed class RequestsWriteEndpointTests
         SeerrRequestEditOptions options = Assert.IsType<Ok<SeerrRequestEditOptions>>(result).Value!;
         Assert.Equal([15, 16], [.. options.QualityProfiles.Select((profile) => profile.Id)]);
         Assert.Equal(["/movies", "/movies (anime)"], [.. options.RootFolders]);
-        // The request's own values win over the server defaults.
-        Assert.Equal(5, options.ProfileId);
-        Assert.Equal("/movies-4k", options.RootFolder);
+        // The request's own values win as long as the arr still offers them.
+        Assert.Equal(16, options.ProfileId);
+        Assert.Equal("/movies (anime)", options.RootFolder);
         Assert.Empty(options.Seasons);
         // With a serverId on the detail the settings list stays unqueried.
         Assert.DoesNotContain("/api/v1/settings/radarr", handler.Paths);
+    }
+
+    [Fact]
+    public async Task EditOptions_IgnoresStaleValuesTheArrNoLongerOffers()
+    {
+        // Live probe 2026-10-30: movie requests keep the profile and folder they were created
+        // with even after radarr dropped profile 9 and moved the library to /media/videos. A
+        // select cannot render a value outside its options, so the preselection has to stay on
+        // the offered lists instead of leaving the field empty and saving the stale value back.
+        StubRoutingHandler handler = new(new Dictionary<string, string>
+        {
+            ["/api/v1/request/307"] = """
+                { "id": 307, "type": 1, "profileId": 9, "rootFolder": "/media/movies (anime)" }
+                """,
+            ["/api/v1/settings/radarr"] = """
+                [ { "id": 0, "name": "Radarr", "apiKey": "secret", "activeDirectory": "/media/videos/movies", "isDefault": true } ]
+                """,
+            ["/api/v1/service/radarr/0"] = """
+                {
+                  "server": { "id": 0, "name": "Radarr", "activeDirectory": "/media/videos/movies", "activeProfileId": 15, "isDefault": true },
+                  "profiles": [ { "id": 15, "name": "Standard" }, { "id": 16, "name": "High Resolution" } ],
+                  "rootFolders": [ { "id": 9, "path": "/media/videos/movies" }, { "id": 10, "path": "/media/videos/movies (anime)" } ]
+                }
+                """,
+        });
+
+        IResult result = await InvokeAsync(
+            "GetEditOptionsAsync",
+            [307, new StubSettingsService(Configured()), new SeerrClient(new HttpClient(handler)), CancellationToken.None]);
+
+        SeerrRequestEditOptions options = Assert.IsType<Ok<SeerrRequestEditOptions>>(result).Value!;
+        // Both stale values drop out and the server defaults preselect instead.
+        Assert.Equal(15, options.ProfileId);
+        Assert.Equal("/media/videos/movies", options.RootFolder);
+        // The detail carried no serverId, so the default server was resolved through the settings.
+        Assert.Contains("/api/v1/settings/radarr", handler.Paths);
+    }
+
+    [Fact]
+    public async Task EditOptions_FallsBackToTheFirstOption_WhenTheServerDefaultsAreStaleToo()
+    {
+        StubRoutingHandler handler = new(new Dictionary<string, string>
+        {
+            ["/api/v1/request/308"] = """
+                { "id": 308, "type": 1, "serverId": 0, "profileId": 9, "rootFolder": "/media/movies" }
+                """,
+            ["/api/v1/service/radarr/0"] = """
+                {
+                  "server": { "id": 0, "name": "Radarr", "activeDirectory": "/media/videos/moved", "activeProfileId": 99, "isDefault": true },
+                  "profiles": [ { "id": 15, "name": "Standard" }, { "id": 16, "name": "High Resolution" } ],
+                  "rootFolders": [ { "id": 9, "path": "/media/videos/movies" }, { "id": 10, "path": "/media/videos/movies (anime)" } ]
+                }
+                """,
+        });
+
+        IResult result = await InvokeAsync(
+            "GetEditOptionsAsync",
+            [308, new StubSettingsService(Configured()), new SeerrClient(new HttpClient(handler)), CancellationToken.None]);
+
+        SeerrRequestEditOptions options = Assert.IsType<Ok<SeerrRequestEditOptions>>(result).Value!;
+        // Neither the request nor the server default is offered, so the first option keeps the
+        // dialog preselected and saving possible.
+        Assert.Equal(15, options.ProfileId);
+        Assert.Equal("/media/videos/movies", options.RootFolder);
     }
 
     [Fact]

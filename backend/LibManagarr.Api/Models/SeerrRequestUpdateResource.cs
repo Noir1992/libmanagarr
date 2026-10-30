@@ -45,8 +45,9 @@ public sealed class SeerrDeclineResource
 // Options for the request edit dialog, resolved per request. Profiles and root folders come
 // from the request's arr server via the service route; Seasons is the table shown for tv media,
 // one entry per season of the show with its episode count and state. ProfileId and RootFolder
-// are the preselection: the request's own values, falling back to the server defaults because
-// pending requests do not carry them yet.
+// are the preselection and always a member of their list: the request's own values when the arr
+// still offers them, else the server defaults, because pending requests do not carry values yet
+// and older ones can outlive the profile or folder they were created with.
 public sealed class SeerrRequestEditOptions
 {
     public IReadOnlyList<SeerrEditOption> QualityProfiles { get; set; } = [];

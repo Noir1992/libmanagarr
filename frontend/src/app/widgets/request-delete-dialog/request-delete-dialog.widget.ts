@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, Signal } from '@angular/core';
-import { MatButtonModule, MatIconButton } from '@angular/material/button';
+import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { AppI18nService } from '../../services/app-i18n.service';
 
@@ -9,7 +9,7 @@ export interface RequestDeleteDialogData {
 
 @Component({
   selector: 'app-request-delete-dialog',
-  imports: [MatButtonModule, MatDialogModule, MatIconButton],
+  imports: [MatButtonModule, MatDialogModule],
   templateUrl: './request-delete-dialog.widget.html',
   styleUrl: './request-delete-dialog.widget.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,7 +23,6 @@ export class RequestDeleteDialogWidget {
   protected readonly confirmText: Signal<string> = computed((): string => this.i18n.t('requests.delete.confirm'));
   protected readonly confirmLabel: Signal<string> = computed((): string => this.i18n.t('requests.action.delete'));
   protected readonly cancelLabel: Signal<string> = computed((): string => this.i18n.t('common.cancel'));
-  protected readonly closeLabel: Signal<string> = computed((): string => this.i18n.t('common.close'));
 
   protected cancel(): void {
     this.dialogRef.close();

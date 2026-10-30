@@ -27,6 +27,9 @@ describe('RequestDeleteDialogWidget', () => {
     expect(element.querySelector('.request-dialog-title')?.textContent?.trim()).toBe('Delete request');
     expect(element.querySelector('.request-dialog-media-title')?.textContent?.trim()).toBe('Sample Movie');
     expect(element.querySelector('.request-dialog-confirm-text')?.textContent?.trim()).toBe('Remove this request from Seerr?');
+    expect(element.querySelector('mat-dialog-content .request-dialog-confirm-text')).not.toBeNull();
+    expect(element.querySelector('mat-dialog-actions .request-dialog-confirm')).not.toBeNull();
+    expect(element.querySelector('mat-icon-button')).toBeNull();
   });
 
   it('closes with true when the user confirms', () => {
