@@ -14,7 +14,7 @@ public sealed class ScheduledTaskCatalog(IEnumerable<ScheduledTaskDefinition> de
     public static IServiceCollection AddBuiltInScheduledTasks(IServiceCollection services)
     {
         services.AddSingleton(new ScheduledTaskDefinition("arrDataSync", false, true, () => new()));
-        services.AddSingleton(new ScheduledTaskDefinition("cleanup", true, false, () => new()
+        services.AddSingleton(new ScheduledTaskDefinition("cleanup", true, true, () => new()
         {
             Enabled = true, ScheduleMode = ScheduleMode.DailyAtTime
         }));

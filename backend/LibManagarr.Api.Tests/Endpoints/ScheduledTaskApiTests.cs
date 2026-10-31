@@ -36,7 +36,7 @@ public sealed class ScheduledTaskApiTests
         JsonObject cleanup = tasks.Single(task => task!["taskKey"]!.GetValue<string>() == "cleanup")!.AsObject();
         Assert.True(sync["canRunManually"]!.GetValue<bool>());
         Assert.True(cleanup["readOnly"]!.GetValue<bool>());
-        Assert.False(cleanup["canRunManually"]!.GetValue<bool>());
+        Assert.True(cleanup["canRunManually"]!.GetValue<bool>());
         Assert.Equal(0, sync["revision"]!.GetValue<int>());
         JsonObject payload = Configuration();
         using HttpResponseMessage update = await client.PutAsJsonAsync(TaskRoute, payload);
@@ -48,7 +48,12 @@ public sealed class ScheduledTaskApiTests
         Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(TaskRoute, payload)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync("/api/settings/tasks/cleanup", Configuration())).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.PutAsJsonAsync("/api/settings/tasks/unknown", payload)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync("/api/settings/tasks/cleanup/run", null)).StatusCode);
+        using HttpResponseMessage cleanupRun = await client.PostAsync("/api/settings/tasks/cleanup/run", null);
+        Assert.Equal(HttpStatusCode.OK, cleanupRun.StatusCode);
+        JsonObject completedCleanup = (await cleanupRun.Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.Equal(factory.FakeTime.GetUtcNow(), completedCleanup["lastRunAt"]!.GetValue<DateTimeOffset>());
+        Assert.Equal(cleanup["nextRunAt"]!.GetValue<DateTimeOffset>(), completedCleanup["nextRunAt"]!.GetValue<DateTimeOffset>());
+        Assert.True(completedCleanup["readOnly"]!.GetValue<bool>());
         Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync("/api/settings/tasks/unknown/run", null)).StatusCode);
         string settingsFile = Path.Combine(factory.ConfigDirectory, "settings.json");
         string beforeRun = await File.ReadAllTextAsync(settingsFile);

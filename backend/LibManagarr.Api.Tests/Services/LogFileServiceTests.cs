@@ -51,8 +51,8 @@ public sealed class LogFileServiceTests : IDisposable
         foreach (string name in new[] { "2026-05-07.log", "2026-05-08.log", "2026-05-10.log", "other.log", "2026-05-01.txt" })
             File.WriteAllText(Path.Combine(directory, name), name);
 
-        service.CleanupExpiredLogs();
-        service.CleanupExpiredLogs();
+        Assert.Equal(1, service.CleanupExpiredLogs());
+        Assert.Equal(0, service.CleanupExpiredLogs());
 
         Assert.Equal(new[] { "2026-05-01.txt", "2026-05-08.log", "2026-05-10.log", "other.log" },
             Directory.GetFiles(directory).Select(Path.GetFileName).Order(StringComparer.Ordinal));

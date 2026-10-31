@@ -22,6 +22,9 @@ export function buildTaskRows(scheduledTasks: ScheduledTasks, translate: Transla
 export function describeTaskRunSchedule(task: ScheduledTaskRow, translate: TranslateFn): string {
   switch (task.scheduleMode) {
     case 'DailyAtTime':
+      if (task.timeHour === 0 && task.timeMinute === 0) {
+        return translate('settings.tasks.scheduleInfo.dailyAtMidnight');
+      }
       return translate('settings.tasks.scheduleInfo.dailyAtTime', {
         time: formatTime(task.timeHour, task.timeMinute),
       });

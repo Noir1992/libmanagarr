@@ -49,7 +49,7 @@ public sealed class ScheduledTaskHandlerTests
         await File.WriteAllTextAsync(expired, "old");
         await File.WriteAllTextAsync(today, "today");
         ReadOnlySettings settings = new(new() { Logging = new() { RetentionDays = 1 } });
-        LogCleanupTaskHandler handler = new(logs, settings);
+        LogCleanupTaskHandler handler = new(logs, settings, NullLogger<LogCleanupTaskHandler>.Instance);
         await handler.ExecuteAsync(default);
         Assert.False(File.Exists(expired));
         Assert.True(File.Exists(today));

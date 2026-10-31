@@ -1,6 +1,7 @@
 import { ScrollingModule } from '@angular/cdk/scrolling';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal, Signal, WritableSignal } from '@angular/core';
 import { MatTableModule } from '@angular/material/table';
+import { MatInputModule } from '@angular/material/input';
 import { FilterOption } from '../../interfaces/filter-option';
 import { FilterOptionType } from '../../enums/filter-option-type';
 import { AppLogLevel } from '../../interfaces/general/app-log-level';
@@ -20,6 +21,7 @@ const LOG_LEVELS: readonly AppLogLevel[] = ['Debug', 'Information', 'Warning', '
   selector: 'app-logs-page',
   imports: [
     MatTableModule,
+    MatInputModule,
     PageFilterWidget,
     AppDatePipe,
     LoadingErrorSectionWidget,
@@ -43,6 +45,7 @@ export class LogsPage implements OnInit {
   /* I18n signals */
   protected readonly title: Signal<string> = computed((): string => this.i18n.t('settings.logs.title'));
   protected readonly description: Signal<string> = computed((): string => this.i18n.t('settings.logs.description'));
+  protected readonly searchLabel: Signal<string> = computed((): string => this.i18n.t('settings.logs.search'));
   protected readonly filterLevelLabel: Signal<string> = computed((): string => this.i18n.t('settings.logs.filter.levels'));
   protected readonly filterRangeLabel: Signal<string> = computed((): string => this.i18n.t('settings.logs.filter.range'));
   protected readonly logsTimestampColumnLabel: Signal<string> = computed((): string => this.i18n.t('settings.logs.column.timestamp'));
@@ -59,8 +62,16 @@ export class LogsPage implements OnInit {
   protected readonly selectedStartDate: WritableSignal<Date | null> = signal<Date | null>(null);
   protected readonly selectedEndDate: WritableSignal<Date | null> = signal<Date | null>(null);
   protected readonly selectedLevels: WritableSignal<readonly AppLogLevel[]> = signal<readonly AppLogLevel[]>([]);
-  protected readonly isFiltered: WritableSignal<boolean> = signal<boolean>(false);
-  protected readonly noDataAvailable: Signal<boolean> = computed((): boolean => this.logsState().length === 0);
+  protected readonly logSearch: WritableSignal<string> = signal<string>('');
+  private readonly hasActiveFilters: WritableSignal<boolean> = signal<boolean>(false);
+  protected readonly isFiltered: Signal<boolean> = computed((): boolean => this.hasActiveFilters() || this.logSearch().trim().length > 0);
+  protected readonly visibleLogs: Signal<readonly LogEntry[]> = computed((): readonly LogEntry[] => {
+    const query: string = this.logSearch().trim().toLowerCase();
+    return query.length === 0
+      ? this.logsState()
+      : this.logsState().filter((entry) => entry.source.toLowerCase().includes(query) || entry.message.toLowerCase().includes(query));
+  });
+  protected readonly noDataAvailable: Signal<boolean> = computed((): boolean => this.visibleLogs().length === 0);
   protected readonly filters: Signal<readonly FilterOption[]> = computed((): readonly FilterOption[] => [
     {
       id: 'log-levels',
@@ -109,6 +120,10 @@ export class LogsPage implements OnInit {
   }
 
   /* Handlers */
+  protected onLogSearchChanged(event: Event): void {
+    this.logSearch.set((event.target as HTMLInputElement).value);
+  }
+
   protected async refreshLogsAsync(): Promise<void> {
     this.loading.set(true);
     this.loadError.set(null);
@@ -199,7 +214,7 @@ export class LogsPage implements OnInit {
     const hasFilteredDateRange: boolean =
       !this.datesEqual(this.selectedStartDate(), defaultStart) || !this.datesEqual(this.selectedEndDate(), defaultEnd);
 
-    this.isFiltered.set(hasFilteredLevels || hasFilteredDateRange);
+    this.hasActiveFilters.set(hasFilteredLevels || hasFilteredDateRange);
   }
 
   private datesEqual(a: Date | null, b: Date): boolean {
