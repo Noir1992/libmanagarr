@@ -31,8 +31,25 @@
             <label for="setup-password">{{ passwordLabel() }}</label>
             <app-info-icon [messageText]="passwordRequirements()" />
           </div>
-          <div class="field-control-wrap">
-            <input matInput id="setup-password" type="password" formControlName="password" autocomplete="new-password" />
+          <div class="field-control-wrap password-wrap">
+            <input
+              matInput
+              id="setup-password"
+              [type]="passwordVisible() ? 'text' : 'password'"
+              formControlName="password"
+              autocomplete="new-password"
+            />
+            <button
+              type="button"
+              mat-icon-button
+              class="material-symbols-outlined"
+              aria-controls="setup-password"
+              [attr.aria-label]="passwordVisible() ? hidePasswordLabel() : showPasswordLabel()"
+              [disabled]="busy()"
+              (click)="passwordVisible.set(!passwordVisible())"
+            >
+              <span aria-hidden="true">{{ passwordVisible() ? 'visibility_off' : 'visibility' }}</span>
+            </button>
           </div>
           @if (
             setupForm.controls.password.dirty &&
@@ -48,8 +65,25 @@
           <div class="field-label-row">
             <label for="setup-confirm-password">{{ confirmPasswordLabel() }}</label>
           </div>
-          <div class="field-control-wrap">
-            <input matInput id="setup-confirm-password" type="password" formControlName="confirmPassword" autocomplete="new-password" />
+          <div class="field-control-wrap password-wrap">
+            <input
+              matInput
+              id="setup-confirm-password"
+              [type]="confirmPasswordVisible() ? 'text' : 'password'"
+              formControlName="confirmPassword"
+              autocomplete="new-password"
+            />
+            <button
+              type="button"
+              mat-icon-button
+              class="material-symbols-outlined"
+              aria-controls="setup-confirm-password"
+              [attr.aria-label]="confirmPasswordVisible() ? hidePasswordLabel() : showPasswordLabel()"
+              [disabled]="busy()"
+              (click)="confirmPasswordVisible.set(!confirmPasswordVisible())"
+            >
+              <span aria-hidden="true">{{ confirmPasswordVisible() ? 'visibility_off' : 'visibility' }}</span>
+            </button>
           </div>
           @if (fieldErrors().confirmPassword) {
             <p class="field-error">{{ fieldErrors().confirmPassword }}</p>

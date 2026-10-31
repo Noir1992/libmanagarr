@@ -53,6 +53,8 @@ export class LoginPage implements OnInit {
   protected readonly loginTitle: Signal<string> = computed((): string => this.i18n.t('auth.loginTitle'));
   protected readonly usernameLabel: Signal<string> = computed((): string => this.i18n.t('auth.username'));
   protected readonly passwordLabel: Signal<string> = computed((): string => this.i18n.t('auth.password'));
+  protected readonly showPasswordLabel: Signal<string> = computed((): string => this.i18n.t('auth.showPassword'));
+  protected readonly hidePasswordLabel: Signal<string> = computed((): string => this.i18n.t('auth.hidePassword'));
   protected readonly rememberMeLabel: Signal<string> = computed((): string => this.i18n.t('auth.rememberMe'));
   protected readonly signInLabel: Signal<string> = computed((): string => this.i18n.t('auth.signIn'));
   protected readonly forgotPasswordLabel: Signal<string> = computed((): string => this.i18n.t('auth.forgotPassword'));
@@ -71,6 +73,7 @@ export class LoginPage implements OnInit {
   protected readonly authErrorLabel: Signal<string | null> = this.authService.errorLabel;
 
   /* Signals */
+  protected readonly passwordVisible: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly mode: WritableSignal<LoginMode> = signal<LoginMode>('credentials');
   protected readonly useRecoveryCode: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly busy: WritableSignal<boolean> = signal<boolean>(false);

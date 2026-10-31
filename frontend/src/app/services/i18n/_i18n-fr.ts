@@ -174,6 +174,8 @@ export const i18nFr: Record<TranslationKey, string> = {
   'auth.forgotPasswordMessage':
     'LibManagarr enregistre son compte unique dans le fichier auth.db du répertoire de configuration et ne peut pas envoyer de liens de réinitialisation. Pour choisir un nouveau mot de passe, arrêtez le backend, supprimez le fichier auth.db ainsi que ses fichiers -shm et -wal, redémarrez le backend et créez un nouveau compte sur la page de configuration. Les paramètres et les statistiques restent inchangés.',
   'auth.password': 'Mot de passe',
+  'auth.showPassword': 'Afficher le mot de passe',
+  'auth.hidePassword': 'Masquer le mot de passe',
   'auth.passwordLength': 'Le mot de passe doit comporter entre 12 et 128 caractères.',
   'auth.passwordRequirements':
     'Utilisez 12 à 128 caractères. Aucun type de caractère particulier, comme des majuscules, des chiffres ou des caractères spéciaux, n’est obligatoire.',

@@ -169,6 +169,8 @@ export type TranslationKey =
   | 'auth.loadFailed'
   | 'auth.loginTitle'
   | 'auth.password'
+  | 'auth.showPassword'
+  | 'auth.hidePassword'
   | 'auth.passwordLength'
   | 'auth.passwordRequirements'
   | 'auth.passwordMismatch'
