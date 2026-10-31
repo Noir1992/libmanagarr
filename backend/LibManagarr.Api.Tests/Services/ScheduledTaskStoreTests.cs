@@ -56,7 +56,7 @@ public sealed class ScheduledTaskStoreTests : IDisposable
         Assert.Null(sync.NextRunAt);
         Assert.True(cleanup.Enabled);
         Assert.True(cleanup.ReadOnly);
-        Assert.False(cleanup.CanRunManually);
+        Assert.True(cleanup.CanRunManually);
         Assert.Equal(ScheduleMode.DailyAtTime, cleanup.ScheduleMode);
         Assert.Equal(0, cleanup.TimeHour);
         Assert.True(cleanup.NextRunAt > clock.GetUtcNow());

@@ -6,7 +6,10 @@ public interface IScheduledTaskHandler
     Task ExecuteAsync(CancellationToken cancellationToken);
 }
 
-public sealed class LogCleanupTaskHandler(LogFileService logs, ISettingsService settings) : IScheduledTaskHandler
+public sealed class LogCleanupTaskHandler(
+    LogFileService logs,
+    ISettingsService settings,
+    ILogger<LogCleanupTaskHandler> logger) : IScheduledTaskHandler
 {
     public string TaskKey => "cleanup";
     public async Task ExecuteAsync(CancellationToken cancellationToken)
@@ -14,6 +17,8 @@ public sealed class LogCleanupTaskHandler(LogFileService logs, ISettingsService 
         cancellationToken.ThrowIfCancellationRequested();
         logs.UpdateSettings((await settings.GetSnapshotAsync(cancellationToken)).Logging);
         cancellationToken.ThrowIfCancellationRequested();
-        logs.CleanupExpiredLogs();
+        logger.LogInformation("Starting log cleanup.");
+        int deletedFileCount = logs.CleanupExpiredLogs();
+        logger.LogInformation("Completed log cleanup with {DeletedFileCount} deleted files.", deletedFileCount);
     }
 }

@@ -23,9 +23,22 @@ public sealed class ScheduledTaskExecutionService(
         CancellationToken token = linked.Token;
         try
         {
-            ScheduledTask current = await tasks.GetAsync(key, token);
             DateTimeOffset startedAt = clock.GetUtcNow();
-            if (!manual && (!current.Enabled || current.NextRunAt is null || current.NextRunAt > startedAt)) return null;
+            ScheduledTask current;
+            while (true)
+            {
+                current = await tasks.GetAsync(key, token);
+                if (!manual && (!current.Enabled || current.NextRunAt is null || current.NextRunAt > startedAt)) return null;
+
+                // The scheduler polls once per minute. Cleanup only runs during its configured
+                // local minute; missed runs (including downtime) move to the next regular slot.
+                DateTimeOffset localStart = TimeZoneInfo.ConvertTime(startedAt, clock.LocalTimeZone);
+                if (manual || key != "cleanup" ||
+                    (localStart.Hour == current.TimeHour && localStart.Minute == current.TimeMinute)) break;
+
+                DateTimeOffset next = ScheduleCalculator.GetFutureRunAt(current, startedAt, clock.LocalTimeZone);
+                if (await store.UpdateRunAsync(key, current.Revision, null, next, token)) return null;
+            }
             bool completed = false;
             try
             {

@@ -111,18 +111,19 @@ public sealed class LogFileService(TimeProvider timeProvider, StoragePaths stora
         }
     }
 
-    public void CleanupExpiredLogs()
+    public int CleanupExpiredLogs()
     {
         lock (syncRoot)
         {
             if (!Directory.Exists(currentLogDirectoryPath))
             {
-                return;
+                return 0;
             }
 
             DateOnly cutoffDate = DateOnly.FromDateTime(timeProvider.GetLocalNow().DateTime)
                 .AddDays(1 - currentSettings.RetentionDays);
 
+            int deletedFileCount = 0;
             foreach (string filePath in Directory.EnumerateFiles(currentLogDirectoryPath, "*.log"))
             {
                 DateOnly? fileDate = TryParseFileDate(filePath);
@@ -132,7 +133,10 @@ public sealed class LogFileService(TimeProvider timeProvider, StoragePaths stora
                 }
 
                 File.Delete(filePath);
+                deletedFileCount++;
             }
+
+            return deletedFileCount;
         }
     }
 

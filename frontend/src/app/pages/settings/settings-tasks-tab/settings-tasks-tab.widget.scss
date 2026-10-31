@@ -1,3 +1,9 @@
+.task-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .task-actions {
   display: flex;
   align-items: center;

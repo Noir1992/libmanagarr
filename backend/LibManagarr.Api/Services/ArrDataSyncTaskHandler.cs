@@ -35,19 +35,13 @@ public sealed class ArrDataSyncTaskHandler(
     {
         try
         {
-            SyncInstanceResult result = await snapshotSyncService.SyncAsync(
+            await snapshotSyncService.SyncAsync(
                 new SyncInstanceRequest
                 {
                     Kind = kind,
                     InstanceId = instance.Id
                 },
                 cancellationToken);
-
-            logger.LogInformation(
-                "Scheduled sync completed for {Kind} instance {InstanceName} with {ItemCount} items.",
-                kind,
-                instance.Name,
-                result.ItemCount);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception)

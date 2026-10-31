@@ -10,7 +10,7 @@ namespace LibManagarr.Api.Tests.Services;
 public sealed class ScheduledTaskExecutionTests : IDisposable
 {
     private readonly TestStorageEnvironment environment = new();
-    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 21, 12, 0, 0, TimeSpan.Zero));
+    private readonly SchedulerClock clock = new(new DateTimeOffset(2026, 10, 21, 0, 0, 0, TimeSpan.Zero));
     private readonly TestHandler sync = new("arrDataSync");
     private readonly TestHandler cleanup = new("cleanup");
     private readonly TestLifetime lifetime = new();
@@ -38,6 +38,71 @@ public sealed class ScheduledTaskExecutionTests : IDisposable
         if (!task.Enabled)
             task = await tasks.UpdateAsync(key, ScheduledTaskStoreTests.Request(task, true), default);
         Assert.True(await store.UpdateRunAsync(key, task.Revision, null, clock.GetUtcNow().AddDays(-4), default));
+    }
+
+    [Fact]
+    public async Task Cleanup_SkipsMissedRunUntilNextScheduledMinute_AndPreservesLastRun()
+    {
+        await MakeDueAsync("cleanup");
+        ScheduledTask before = await tasks.GetAsync("cleanup", default);
+        DateTimeOffset lastRun = clock.GetUtcNow().AddDays(-5);
+        await store.UpdateRunAsync("cleanup", before.Revision, lastRun, before.NextRunAt, default);
+        clock.Advance(TimeSpan.FromHours(12));
+
+        Assert.Null(await execution.RunAsync("cleanup", false, default));
+
+        ScheduledTask skipped = await tasks.GetAsync("cleanup", default);
+        Assert.Equal(0, cleanup.Calls);
+        Assert.Equal(lastRun, skipped.LastRunAt);
+        Assert.Equal(new DateTimeOffset(2026, 10, 22, 0, 0, 0, TimeSpan.Zero), skipped.NextRunAt);
+
+        clock.Advance(TimeSpan.FromHours(12) + TimeSpan.FromSeconds(45));
+        ScheduledTask completed = (await execution.RunAsync("cleanup", false, default))!;
+        Assert.Equal(1, cleanup.Calls);
+        Assert.Equal(clock.GetUtcNow(), completed.LastRunAt);
+        Assert.Equal(new DateTimeOffset(2026, 10, 23, 0, 0, 0, TimeSpan.Zero), completed.NextRunAt);
+        Assert.Null(await execution.RunAsync("cleanup", false, default));
+    }
+
+    [Fact]
+    public async Task Cleanup_DoesNotRunAfterScheduledMinute_ButSyncStillCatchesUp()
+    {
+        await MakeDueAsync("cleanup");
+        await MakeDueAsync("arrDataSync");
+        clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.Null(await execution.RunAsync("cleanup", false, default));
+        Assert.Equal(0, cleanup.Calls);
+        Assert.NotNull(await execution.RunAsync("arrDataSync", false, default));
+        Assert.Equal(1, sync.Calls);
+    }
+
+    [Fact]
+    public async Task Cleanup_UsesApplicationTimeZoneForScheduledMinute()
+    {
+        clock.Zone = TimeZoneInfo.CreateCustomTimeZone("UTC+2", TimeSpan.FromHours(2), "UTC+2", "UTC+2");
+        await MakeDueAsync("cleanup");
+        Assert.Null(await execution.RunAsync("cleanup", false, default));
+        Assert.Equal(0, cleanup.Calls);
+
+        clock.Advance(TimeSpan.FromHours(22));
+        Assert.NotNull(await execution.RunAsync("cleanup", false, default));
+        Assert.Equal(1, cleanup.Calls);
+    }
+
+    [Fact]
+    public async Task Cleanup_CanRunManuallyOutsideScheduledMinute_WithoutChangingSchedule()
+    {
+        clock.Advance(TimeSpan.FromHours(12));
+        ScheduledTask before = await tasks.GetAsync("cleanup", default);
+
+        ScheduledTask completed = (await execution.RunAsync("cleanup", true, default))!;
+
+        Assert.Equal(1, cleanup.Calls);
+        Assert.Equal(clock.GetUtcNow(), completed.LastRunAt);
+        Assert.Equal(before.NextRunAt, completed.NextRunAt);
+        Assert.True(completed.ReadOnly);
+        Assert.Null(await execution.RunAsync("cleanup", false, default));
     }
 
     [Fact]
@@ -139,9 +204,6 @@ public sealed class ScheduledTaskExecutionTests : IDisposable
         Assert.NotNull(task.LastRunAt);
         Assert.Null(task.NextRunAt);
         Assert.Equal(1, sync.Calls);
-        ScheduledTaskException forbidden = await Assert.ThrowsAsync<ScheduledTaskException>(() => execution.RunAsync("cleanup", true, default));
-        Assert.Equal(403, forbidden.StatusCode);
-        Assert.Equal(0, cleanup.Calls);
         ScheduledTaskException unknown = await Assert.ThrowsAsync<ScheduledTaskException>(() => execution.RunAsync("unknown", true, default));
         Assert.Equal(404, unknown.StatusCode);
     }
@@ -152,6 +214,15 @@ public sealed class ScheduledTaskExecutionTests : IDisposable
         lifetime.Dispose();
         SqliteConnection.ClearAllPools();
         environment.Dispose();
+    }
+
+    private sealed class SchedulerClock(DateTimeOffset start) : TimeProvider
+    {
+        private DateTimeOffset current = start;
+        public TimeZoneInfo Zone { get; set; } = TimeZoneInfo.Utc;
+        public override TimeZoneInfo LocalTimeZone => Zone;
+        public override DateTimeOffset GetUtcNow() => current;
+        public void Advance(TimeSpan by) => current += by;
     }
 
     private sealed class TestHandler(string key) : IScheduledTaskHandler

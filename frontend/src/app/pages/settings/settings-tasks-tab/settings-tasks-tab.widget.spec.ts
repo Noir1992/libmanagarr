@@ -13,7 +13,7 @@ describe('SettingsTasksTabWidget', () => {
   const task = (taskKey: string, readOnly = false): ScheduledTaskSettings => ({
     taskKey,
     revision: 0,
-    canRunManually: !readOnly,
+    canRunManually: true,
     enabled: true,
     readOnly,
     scheduleMode: 'Interval',
@@ -71,8 +71,24 @@ describe('SettingsTasksTabWidget', () => {
     expect(element.textContent).toContain('Cleanup');
     expect(element.textContent).toContain('third Task');
     expect(element.querySelectorAll('mat-slide-toggle')).toHaveSize(2);
-    expect(element.querySelectorAll('.task-actions > button')).toHaveSize(4);
+    expect(element.querySelectorAll('.task-actions > button')).toHaveSize(5);
     expect(service.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs cleanup manually while keeping its schedule read-only', async () => {
+    const row = (fixture.nativeElement as HTMLElement).querySelectorAll('tr.mat-mdc-row')[1];
+    const buttons = row.querySelectorAll<HTMLButtonElement>('.task-actions > button');
+    expect(buttons).toHaveSize(1);
+    expect(buttons[0].textContent).toContain('play_arrow');
+    expect(row.querySelector('mat-slide-toggle')).toBeNull();
+    buttons[0].click();
+    await fixture.whenStable();
+    expect(service.run).toHaveBeenCalledOnceWith('cleanup');
+    expect(service.save).not.toHaveBeenCalled();
+
+    states.set({ cleanup: { running: true } });
+    await fixture.whenStable();
+    expect(buttons[0].disabled).toBeTrue();
   });
 
   it('updates and runs the selected third task', async () => {

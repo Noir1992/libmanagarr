@@ -10,7 +10,20 @@
     @if (loadSettingsError(); as error) {
       <app-loading-error-section [error]="error" />
     } @else {
-      <app-page-filter [filters]="filters()" [storagePrefix]="'logs'" />
+      <div class="list-controls">
+        <div class="log-search">
+          <span class="material-symbols-outlined" aria-hidden="true">search</span>
+          <input
+            matInput
+            type="search"
+            [placeholder]="searchLabel()"
+            [attr.aria-label]="searchLabel()"
+            [value]="logSearch()"
+            (input)="onLogSearchChanged($event)"
+          />
+        </div>
+        <app-page-filter [filters]="filters()" [storagePrefix]="'logs'" [bubblesBelow]="true" />
+      </div>
 
       @if (isLoading()) {
         <app-loading-section />
@@ -23,7 +36,7 @@
           <app-no-data-section [isFiltered]="isFiltered()" />
         } @else {
           <cdk-virtual-scroll-viewport class="logs-table-viewport" [itemSize]="29">
-            <table mat-table fixedLayout [dataSource]="logsState()">
+            <table mat-table fixedLayout [dataSource]="visibleLogs()">
               <ng-container matColumnDef="timestamp">
                 <th mat-header-cell *matHeaderCellDef>{{ logsTimestampColumnLabel() }}</th>
                 <td mat-cell *matCellDef="let row">{{ row.timestamp | appDate: 'medium' }}</td>
