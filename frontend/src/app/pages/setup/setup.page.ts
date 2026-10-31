@@ -55,12 +55,16 @@ export class SetupPage {
   protected readonly setupTitle: Signal<string> = computed((): string => this.i18n.t('auth.setupTitle'));
   protected readonly usernameLabel: Signal<string> = computed((): string => this.i18n.t('auth.username'));
   protected readonly passwordLabel: Signal<string> = computed((): string => this.i18n.t('auth.password'));
+  protected readonly showPasswordLabel: Signal<string> = computed((): string => this.i18n.t('auth.showPassword'));
+  protected readonly hidePasswordLabel: Signal<string> = computed((): string => this.i18n.t('auth.hidePassword'));
   protected readonly passwordLengthMessage: Signal<string> = computed((): string => this.i18n.t('auth.passwordLength'));
   protected readonly passwordRequirements: Signal<string> = computed((): string => this.i18n.t('auth.passwordRequirements'));
   protected readonly confirmPasswordLabel: Signal<string> = computed((): string => this.i18n.t('auth.confirmPassword'));
   protected readonly createAccountLabel: Signal<string> = computed((): string => this.i18n.t('auth.createAccount'));
 
   /* Signals */
+  protected readonly passwordVisible: WritableSignal<boolean> = signal<boolean>(false);
+  protected readonly confirmPasswordVisible: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly busy: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly formError: WritableSignal<string | null> = signal<string | null>(null);
   protected readonly fieldErrors: WritableSignal<SetupFieldErrors> = signal<SetupFieldErrors>(NO_FIELD_ERRORS);

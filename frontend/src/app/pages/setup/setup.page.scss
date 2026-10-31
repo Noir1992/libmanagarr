@@ -16,6 +16,24 @@
   width: 100%;
 }
 
+form > .field + .field {
+  margin-top: var(--theme-default-gap);
+}
+
+.password-wrap {
+  align-items: center;
+  gap: var(--theme-default-gap-small);
+
+  input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  button {
+    flex-shrink: 0;
+  }
+}
+
 .auth-title {
   font-size: 1.1rem;
   margin: 0;

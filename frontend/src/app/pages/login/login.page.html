@@ -44,15 +44,26 @@
             <div class="field-label-row">
               <label for="login-password">{{ passwordLabel() }}</label>
             </div>
-            <div class="field-control-wrap">
+            <div class="field-control-wrap password-wrap">
               <input
                 matInput
                 id="login-password"
-                type="password"
+                [type]="passwordVisible() ? 'text' : 'password'"
                 formControlName="password"
                 autocomplete="current-password"
                 [disabled]="busy()"
               />
+              <button
+                type="button"
+                mat-icon-button
+                class="material-symbols-outlined"
+                aria-controls="login-password"
+                [attr.aria-label]="passwordVisible() ? hidePasswordLabel() : showPasswordLabel()"
+                [disabled]="busy()"
+                (click)="passwordVisible.set(!passwordVisible())"
+              >
+                <span aria-hidden="true">{{ passwordVisible() ? 'visibility_off' : 'visibility' }}</span>
+              </button>
             </div>
           </div>
 

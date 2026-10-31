@@ -174,6 +174,8 @@ export const i18nEn: Record<TranslationKey, string> = {
   'auth.forgotPasswordMessage':
     'LibManagarr keeps its single account in the auth.db file inside the configuration directory and cannot send reset links. To choose a new password, stop the backend, delete auth.db together with its -shm and -wal files, restart the backend, and create a new account on the setup screen. Settings and statistics stay untouched.',
   'auth.password': 'Password',
+  'auth.showPassword': 'Show password',
+  'auth.hidePassword': 'Hide password',
   'auth.passwordLength': 'The password must be between 12 and 128 characters long.',
   'auth.passwordRequirements':
     'Use 12 to 128 characters. No specific character types, such as uppercase letters, numbers or symbols, are required.',
