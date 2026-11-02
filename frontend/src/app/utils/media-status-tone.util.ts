@@ -1,3 +1,4 @@
+import { LibraryStatus } from '../interfaces/library/library-status';
 import { MediaGridDetailTone } from '../interfaces/general/media-grid-item';
 
 export function airStatusTone(status: string | undefined): MediaGridDetailTone | undefined {
@@ -24,4 +25,17 @@ export function airStatusTone(status: string | undefined): MediaGridDetailTone |
 export function fileStatusTone(hasFile: boolean | undefined): MediaGridDetailTone | undefined {
   if (hasFile === undefined) return undefined;
   return hasFile ? 'success' : 'danger';
+}
+
+export function libraryStatusTone(status: LibraryStatus | undefined): MediaGridDetailTone | undefined {
+  switch (status) {
+    case 'present':
+      return 'success';
+    case 'partial':
+      return 'warning';
+    case 'missing':
+      return 'danger';
+    default:
+      return undefined;
+  }
 }

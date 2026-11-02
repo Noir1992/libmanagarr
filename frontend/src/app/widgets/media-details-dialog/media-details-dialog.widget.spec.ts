@@ -267,7 +267,7 @@ describe('Media detail dialogs', () => {
         .find((row) => row.querySelector('dt')?.textContent?.trim() === label)!
         .querySelector('dd')!;
     expect(ddFor('Aired status').classList).toContain('tone-success');
-    expect(ddFor('Availability').classList).toContain('tone-success');
+    expect(ddFor('Library status').classList).toContain('tone-success');
   });
 
   it('marks an unreleased movie without file with warning and danger tones', async () => {
@@ -286,7 +286,7 @@ describe('Media detail dialogs', () => {
         .find((row) => row.querySelector('dt')?.textContent?.trim() === label)!
         .querySelector('dd')!;
     expect(ddFor('Aired status').classList).toContain('tone-warning');
-    expect(ddFor('Availability').classList).toContain('tone-danger');
+    expect(ddFor('Library status').classList).toContain('tone-danger');
   });
 
   it('links the instance through an icon behind the plain instance name', async () => {

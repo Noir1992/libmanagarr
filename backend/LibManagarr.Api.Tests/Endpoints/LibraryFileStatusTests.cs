@@ -47,7 +47,8 @@ public sealed class LibraryFileStatusTests
     [InlineData(false, "missing", 2)]
     [InlineData(true, "all", 4)]
     [InlineData(true, "present", 0)]
-    [InlineData(true, "missing", 2)]
+    [InlineData(true, "partial", 3)]
+    [InlineData(true, "missing", 0)]
     public async Task Library_ShouldFilterFileStatusAndExposeNoScoreForMissingFiles(bool sonarr, string selection, int count)
     {
         JsonElement response = await Query(sonarr, await Settings(), new() { FileStatusFilter = selection });
@@ -67,7 +68,7 @@ public sealed class LibraryFileStatusTests
     {
         LibraryRequestFilter filter = new()
         {
-            FileStatusFilter = "missing", MonitoredFilter = "monitored", EpisodeMonitoredFilter = "monitored",
+            FileStatusFilter = "partial", MonitoredFilter = "monitored", EpisodeMonitoredFilter = "monitored",
             AiredFilter = "aired", Types = ["regular"], Genres = ["Drama"], Profiles = ["HD"]
         };
         JsonElement response = await Query(true, await Settings(), filter);
@@ -83,7 +84,8 @@ public sealed class LibraryFileStatusTests
         Assert.Single(series.GetProperty("Seasons").EnumerateArray());
         filter.EpisodeMonitoredFilter = "notMonitored";
         filter.AiredFilter = "notAired";
-        Assert.Empty(Entries(true, await Query(true, await Settings(), filter)));
+        Assert.Equal(new[] { "Future" }, Entries(true, await Query(true, await Settings(), filter))
+            .Select(episode => episode.GetProperty("Title").GetString()));
     }
 
     [Theory]
@@ -104,7 +106,7 @@ public sealed class LibraryFileStatusTests
         }
         JsonElement result = await Query(sonarr, settings, new() { FileStatusFilter = "missing", ExcludedFilters = ["file-status-filter"] });
         if (sonarr)
-            Assert.Empty(Entries(true, result));
+            Assert.Equal(4, Entries(true, result).Length);
         else
             Assert.True(Assert.Single(Entries(false, result)).GetProperty("HasFile").GetBoolean());
     }
@@ -119,7 +121,7 @@ public sealed class LibraryFileStatusTests
         Assert.Equal(2, movieCounts["file-status-filter"]["missing"]);
         Assert.Equal(1, movieCounts["video-codec-filter"]["__all__"]);
         Assert.Equal(1, episodeCounts["file-status-filter"]["__all__"]);
-        Assert.Equal(1, episodeCounts["file-status-filter"]["missing"]);
+        Assert.Equal(1, episodeCounts["file-status-filter"]["partial"]);
         Assert.Equal(1, episodeCounts["video-codec-filter"]["__all__"]);
         Assert.Equal(3, episodeCounts["episode-monitored-filter"]["monitored"]);
         Assert.Equal(1, episodeCounts["episode-type-filter"]["special"]);
@@ -133,38 +135,47 @@ public sealed class LibraryFileStatusTests
     }
 
     [Fact]
-    public async Task Availability_ShouldUseWholeSeriesIgnoreFutureEpisodesAndUnmonitoredMissingEpisodes()
+    public async Task Availability_ShouldReportPresentOnlyForCompleteSeriesAndPartialForPendingOrMissingEpisodes()
     {
         AppSettings settings = await Settings();
-        SonarrSeriesSnapshot missing = settings.SonarrSnapshots[0].Series[0];
-        missing.Seasons.Where(season => season.SeasonNumber == 0).SelectMany(season => season.Episodes)
+        SonarrSeriesSnapshot incomplete = settings.SonarrSnapshots[0].Series[0];
+        incomplete.Seasons.Where(season => season.SeasonNumber == 0).SelectMany(season => season.Episodes)
             .ToList().ForEach(episode => episode.Monitored = false);
         settings.SonarrSnapshots[0].Series.Add(new SonarrSeriesSnapshot
         {
-            SeriesId = 2, Title = "Available", Status = "continuing",
+            SeriesId = 2, Title = "Pending", Status = "continuing",
             Seasons = [new() { SeasonNumber = 1, Episodes = [
                 new() { EpisodeNumber = 1, Title = "Downloaded", HasFile = true, Monitored = true, AirDateUtc = DateTimeOffset.UtcNow.AddDays(-1) },
                 new() { EpisodeNumber = 2, Title = "Future", HasFile = false, Monitored = true, AirDateUtc = DateTimeOffset.UtcNow.AddDays(1) }
+            ] }]
+        });
+        settings.SonarrSnapshots[0].Series.Add(new SonarrSeriesSnapshot
+        {
+            SeriesId = 3, Title = "Complete", Status = "ended",
+            Seasons = [new() { SeasonNumber = 1, Episodes = [
+                new() { EpisodeNumber = 1, Title = "Downloaded", HasFile = true, Monitored = true, AirDateUtc = DateTimeOffset.UtcNow.AddDays(-2) }
             ] }, new() { SeasonNumber = 0, Episodes = [
                 new() { EpisodeNumber = 0, Title = "Unmonitored special", HasFile = false, Monitored = false, AirDateUtc = DateTimeOffset.UtcNow.AddDays(-1) }
             ] }]
         });
         JsonElement present = await Query(true, settings, new() { FileStatusFilter = "present" });
-        JsonElement availableSeries = Assert.Single(present.GetProperty("Instances")[0].GetProperty("Rows").EnumerateArray());
-        Assert.Equal("Available", availableSeries.GetProperty("SeriesTitle").GetString());
-        Assert.True(availableSeries.GetProperty("IsAvailable").GetBoolean());
-        Assert.Equal(3, Entries(true, present).Length);
-        JsonElement missingOnly = await Query(true, settings, new() { FileStatusFilter = "missing" });
-        JsonElement missingSeries = Assert.Single(missingOnly.GetProperty("Instances")[0].GetProperty("Rows").EnumerateArray());
-        Assert.False(missingSeries.GetProperty("IsAvailable").GetBoolean());
-        Assert.All(Entries(true, missingOnly), episode => Assert.False(episode.GetProperty("HasFile").GetBoolean()));
+        JsonElement completeSeries = Assert.Single(present.GetProperty("Instances")[0].GetProperty("Rows").EnumerateArray());
+        Assert.Equal("Complete", completeSeries.GetProperty("SeriesTitle").GetString());
+        Assert.Equal("present", completeSeries.GetProperty("LibraryStatus").GetString());
+        Assert.Equal(2, Entries(true, present).Length);
+        JsonElement partial = await Query(true, settings, new() { FileStatusFilter = "partial" });
+        Assert.Equal(new[] { "Pending", "Series" }, partial.GetProperty("Instances")[0].GetProperty("Rows")
+            .EnumerateArray().Select(row => row.GetProperty("SeriesTitle").GetString()));
+        Assert.All(Entries(true, partial), episode => Assert.False(episode.GetProperty("HasFile").GetBoolean()));
+        Assert.Empty(Entries(true, await Query(true, settings, new() { FileStatusFilter = "missing" })));
         Assert.Empty(Entries(true, await Query(true, settings, new() { FileStatusFilter = "missing", VideoCodecs = ["HEVC"] })));
         JsonElement excluded = await Query(true, settings, new() { FileStatusFilter = "missing", ExcludedFilters = ["file-status-filter"] });
-        Assert.Equal("Available", Assert.Single(excluded.GetProperty("Instances")[0].GetProperty("Rows").EnumerateArray()).GetProperty("SeriesTitle").GetString());
+        Assert.Equal(3, excluded.GetProperty("Instances")[0].GetProperty("Rows").EnumerateArray().Count());
         Dictionary<string, int> counts = LibraryFilterCountBuilder.Build(settings.SonarrSnapshots[0])["file-status-filter"];
-        Assert.Equal(2, counts["__all__"]);
+        Assert.Equal(3, counts["__all__"]);
         Assert.Equal(1, counts["present"]);
-        Assert.Equal(1, counts["missing"]);
+        Assert.Equal(2, counts["partial"]);
+        Assert.False(counts.ContainsKey("missing"));
         JsonElement futureMovie = await Query(false, settings, new() { FileStatusFilter = "missing", AiredFilter = "notAired" });
         Assert.Equal("Future", Assert.Single(Entries(false, futureMovie)).GetProperty("MovieTitle").GetString());
     }
@@ -222,9 +233,9 @@ public sealed class LibraryFileStatusTests
     }
 
     [Theory]
-    [InlineData("missing", false)]
+    [InlineData("partial", false)]
     [InlineData("present", true)]
-    public async Task MissingAndMonitored_ShouldRequireTheSameEpisodeToMatchBothConditions(string availability, bool exclude)
+    public async Task MissingAndMonitored_ShouldRequireTheSameEpisodeToMatchBothConditions(string fileStatus, bool exclude)
     {
         AppSettings settings = await Settings();
         SonarrSeriesSnapshot mixed = settings.SonarrSnapshots[0].Series[0];
@@ -232,7 +243,7 @@ public sealed class LibraryFileStatusTests
             episode.Monitored = false;
         LibraryRequestFilter filter = new()
         {
-            FileStatusFilter = availability, EpisodeMonitoredFilter = "monitored",
+            FileStatusFilter = fileStatus, EpisodeMonitoredFilter = "monitored",
             ExcludedFilters = exclude ? ["file-status-filter"] : []
         };
         Assert.Empty(Entries(true, await Query(true, settings, filter)));
@@ -250,9 +261,10 @@ public sealed class LibraryFileStatusTests
         JsonElement result = await Query(true, settings, filter);
         JsonElement series = Assert.Single(result.GetProperty("Instances")[0].GetProperty("Rows").EnumerateArray());
         Assert.Equal(2, series.GetProperty("SeriesId").GetInt32());
-        Assert.False(series.GetProperty("IsAvailable").GetBoolean());
-        JsonElement match = Assert.Single(Entries(true, result));
-        Assert.Equal("Missing monitored", match.GetProperty("Title").GetString());
+        Assert.Equal("partial", series.GetProperty("LibraryStatus").GetString());
+        JsonElement[] matches = Entries(true, result);
+        Assert.DoesNotContain("Missing unmonitored", matches.Select(episode => episode.GetProperty("Title").GetString()));
+        JsonElement match = matches.Single(episode => episode.GetProperty("Title").GetString() == "Missing monitored");
         Assert.False(match.GetProperty("HasFile").GetBoolean());
         Assert.True(match.GetProperty("Monitored").GetBoolean());
         Assert.True(match.GetProperty("HasAired").GetBoolean());
@@ -275,7 +287,11 @@ public sealed class LibraryFileStatusTests
         Assert.Equal(0, movieCounts.GetProperty("resolution-filter").GetProperty("__all__").GetInt32());
         Assert.Equal(1, movieCounts.GetProperty("radarr-instance-filter").GetProperty("first").GetInt32());
         Assert.Equal(0, movieCounts.GetProperty("radarr-instance-filter").GetProperty("empty").GetInt32());
-        JsonElement episodes = await Query(true, settings, filter);
+        JsonElement episodes = await Query(true, settings, new()
+        {
+            FileStatusFilter = "partial", EpisodeMonitoredFilter = "monitored",
+            SonarrInstanceFilter = ["__all__"], RadarrInstanceFilter = ["__all__"]
+        });
         Assert.Equal(2, Entries(true, episodes).Length);
         JsonElement counts = episodes.GetProperty("Counts");
         Assert.Equal(1, counts.GetProperty("genre-filter").GetProperty("Drama").GetInt32());
@@ -307,7 +323,7 @@ public sealed class LibraryFileStatusTests
         Assert.Equal(1, counts.GetProperty("upgrade-target-filter").GetProperty("below").GetInt32());
         Assert.Equal(1, counts.GetProperty("episode-type-filter").GetProperty("regular").GetInt32());
         Assert.False(counts.GetProperty("episode-type-filter").TryGetProperty("special", out _));
-        Assert.Equal(1, counts.GetProperty("file-status-filter").GetProperty("missing").GetInt32());
+        Assert.Equal(1, counts.GetProperty("file-status-filter").GetProperty("partial").GetInt32());
         filter.ExcludedFilters = ["video-codec-filter"];
         result = await Query(true, settings, filter);
         Assert.Equal(2, Entries(true, result).Length);
@@ -330,7 +346,7 @@ public sealed class LibraryFileStatusTests
 
         JsonElement missing = await Query(true, settings, new() { FileStatusFilter = "missing" });
         JsonElement series = Assert.Single(missing.GetProperty("Instances")[0].GetProperty("Rows").EnumerateArray());
-        Assert.False(series.GetProperty("IsAvailable").GetBoolean());
+        Assert.Equal("missing", series.GetProperty("LibraryStatus").GetString());
         Assert.Equal(1, missing.GetProperty("Counts").GetProperty("file-status-filter").GetProperty("missing").GetInt32());
         Assert.Single(Entries(true, missing));
         Assert.Empty(Entries(true, await Query(true, settings, new() { FileStatusFilter = "present" })));

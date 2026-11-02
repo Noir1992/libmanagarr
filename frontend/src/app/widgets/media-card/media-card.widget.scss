@@ -75,7 +75,10 @@
 
       .media-card-detail-row-label {
         color: var(--theme-muted);
-        flex-shrink: 0;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
       }
 
       .media-card-detail-row-value {
@@ -83,8 +86,7 @@
         font-weight: 500;
         text-align: right;
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        flex-shrink: 0;
 
         &.tone-success {
           color: var(--theme-success-color);

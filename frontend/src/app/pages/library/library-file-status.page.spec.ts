@@ -35,7 +35,7 @@ describe('LibraryPage file status', () => {
       of({
         ...empty,
         counts: {
-          'file-status-filter': { __all__: 2, present: 1, missing: 1 },
+          'file-status-filter': { __all__: 2, present: 1, partial: 1 },
           'episode-monitored-filter': { __all__: 4, monitored: 3, notMonitored: 1 },
           'episode-type-filter': { __all__: 4, regular: 3, special: 1 },
         },
@@ -70,12 +70,12 @@ describe('LibraryPage file status', () => {
 
   it('starts with all entries and merges file counts while retaining an existing selection', async () => {
     expect(filter('file-status-filter').selectedValue).toBe('all');
-    expect(filter('file-status-filter').options.map((option) => option.label)).toEqual(['All', 'Available', 'Missing']);
+    expect(filter('file-status-filter').options.map((option) => option.label)).toEqual(['All', 'Available', 'Partially available', 'Missing']);
     expect(page['filterOptions']().find((option) => option.id === 'status-filter')?.label).toBe('Aired status');
     filter('file-status-filter').selectedValue = 'missing';
     await page['loadFilterValues']();
     expect(filter('file-status-filter').selectedValue).toBe('missing');
-    expect(filter('file-status-filter').options.map((option) => option.count)).toEqual([5, 2, 3]);
+    expect(filter('file-status-filter').options.map((option) => option.count)).toEqual([5, 2, 1, 2]);
     expect(filter('episode-monitored-filter').label).toBe('Monitored');
     expect(filter('monitored-filter').label).toBe('Series monitored');
     expect(filter('episode-monitored-filter').options.map((option) => option.count)).toEqual([7, 4, 3]);
@@ -155,7 +155,7 @@ describe('LibraryPage file status', () => {
           qualityProfileName: 'HD',
           status: 'continuing',
           monitored: true,
-          isAvailable: false,
+          libraryStatus: 'missing',
           totalEpisodes: 1,
           airedEpisodes: 0,
           seasons: [
@@ -169,14 +169,14 @@ describe('LibraryPage file status', () => {
       ],
     });
     const movie = page['gridItems']()[0];
-    expect(movie.detailRows).toContain({ label: 'Availability', value: 'Missing', tone: 'danger' });
+    expect(movie.detailRows).toContain({ label: 'Library status', value: 'Missing', tone: 'danger' });
     expect(movie.movieData?.customFormatScore).toBeNull();
-    expect(page['gridItems']()[1].detailRows).toContain({ label: 'Availability', value: 'Missing', tone: 'danger' });
-    expect(movie.detailRows.map((row) => row.label)).toEqual(['Instance', 'Aired status', 'Availability', 'Monitored']);
+    expect(page['gridItems']()[1].detailRows).toContain({ label: 'Library status', value: 'Missing', tone: 'danger' });
+    expect(movie.detailRows.map((row) => row.label)).toEqual(['Instance', 'Aired status', 'Library status', 'Monitored']);
     expect(page['gridItems']()[1].detailRows.map((row) => row.label)).toEqual([
       'Instance',
       'Aired status',
-      'Availability',
+      'Library status',
       'Series monitored',
     ]);
     expect(page['gridItems']()[1].seriesData?.seasons[0].episodes[0].details).toEqual(
@@ -247,12 +247,12 @@ describe('LibraryPage file status', () => {
     });
     const cards = page['gridItems']();
     expect(cards.find((item) => item.title === 'Series')?.detailRows).toContain({
-      label: 'Availability',
+      label: 'Library status',
       value: 'Missing',
       tone: 'danger',
     });
     expect(cards.find((item) => item.title === 'Only Specials Missing')?.detailRows).toContain({
-      label: 'Availability',
+      label: 'Library status',
       value: 'Missing',
       tone: 'danger',
     });
@@ -263,6 +263,7 @@ describe('LibraryPage file status', () => {
     { status: 'upcoming', airDateUtc: null, hasFile: false, value: 'Missing', tone: 'danger' },
     { status: 'continuing', airDateUtc: null, hasFile: false, value: 'Missing', tone: 'danger' },
     { status: 'upcoming', airDateUtc: '2099-01-01T00:00:00Z', hasFile: true, value: 'Available', tone: 'success' },
+    { status: 'continuing', airDateUtc: '2020-01-01T00:00:00Z', hasFile: true, value: 'Available', tone: 'success' },
   ] as const) {
     it(`shows ${scenario.value} for ${scenario.status} with file=${scenario.hasFile} and date=${scenario.airDateUtc}`, () => {
       page['upsertSonarrInstanceTable']({
@@ -300,14 +301,78 @@ describe('LibraryPage file status', () => {
       });
 
       expect(page['gridItems']()[0].detailRows).toContain({
-        label: 'Availability',
+        label: 'Library status',
         value: scenario.value,
         tone: scenario.tone,
       });
     });
   }
 
-  it('uses the backend availability flag even when the visible episodes are all in the future', () => {
+  it('shows partially available when the backend reports a partial library status', () => {
+    page['upsertSonarrInstanceTable']({
+      instanceId: 's',
+      instanceName: 'Sonarr',
+      rows: [
+        {
+          seriesId: 1,
+          instanceName: 'Sonarr',
+          seriesTitle: 'Series',
+          seriesTitleSlug: 'series',
+          qualityProfileName: 'HD',
+          status: 'ended',
+          monitored: true,
+          libraryStatus: 'partial',
+          fileCount: 1,
+          totalEpisodes: 1,
+          airedEpisodes: 1,
+          seasons: [
+            {
+              number: 1,
+              monitored: true,
+              episodes: [{ number: 1, title: 'Episode', airDateUtc: '2020-01-01T00:00:00Z', hasFile: true, monitored: true, customFormatScore: null }],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(page['gridItems']()[0].detailRows).toContain({ label: 'Library status', value: 'Partially available', tone: 'warning' });
+    expect(page['gridItems']()[0].seriesData?.libraryStatus).toBe('partial');
+  });
+
+  it('computes partially available locally when a monitored episode lacks a file and the backend sends no status', () => {
+    page['upsertSonarrInstanceTable']({
+      instanceId: 's',
+      instanceName: 'Sonarr',
+      rows: [
+        {
+          seriesId: 1,
+          instanceName: 'Sonarr',
+          seriesTitle: 'Series',
+          seriesTitleSlug: 'series',
+          qualityProfileName: 'HD',
+          status: 'continuing',
+          monitored: true,
+          totalEpisodes: 2,
+          airedEpisodes: 1,
+          seasons: [
+            {
+              number: 1,
+              monitored: true,
+              episodes: [
+                { number: 1, title: 'Downloaded', airDateUtc: '2020-01-01T00:00:00Z', hasFile: true, monitored: true, customFormatScore: null },
+                { number: 2, title: 'Pending', airDateUtc: '2099-01-01T00:00:00Z', hasFile: false, monitored: true, customFormatScore: null },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(page['gridItems']()[0].detailRows).toContain({ label: 'Library status', value: 'Partially available', tone: 'warning' });
+  });
+
+  it('uses the backend library status even when the visible episodes are all in the future', () => {
     page['upsertSonarrInstanceTable']({
       instanceId: 's',
       instanceName: 'Sonarr',
@@ -322,7 +387,7 @@ describe('LibraryPage file status', () => {
           monitored: true,
           totalEpisodes: 1,
           airedEpisodes: 0,
-          isAvailable: false,
+          libraryStatus: 'missing',
           fileCount: 0,
           seasons: [
             {
@@ -344,6 +409,6 @@ describe('LibraryPage file status', () => {
       ],
     });
 
-    expect(page['gridItems']()[0].detailRows).toContain({ label: 'Availability', value: 'Missing', tone: 'danger' });
+    expect(page['gridItems']()[0].detailRows).toContain({ label: 'Library status', value: 'Missing', tone: 'danger' });
   });
 });

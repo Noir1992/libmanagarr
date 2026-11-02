@@ -128,7 +128,7 @@ describe('LibraryPage upgrade target', () => {
     expect(page['radarrInstanceTables']()[0].movies[0].upgradeUntilCustomFormatScore).toBe(0);
     expect(page['sonarrInstanceTables']()[0].series[0].upgradeUntilCustomFormatScore).toBe(100);
     expect(page['gridItems']()[0].movieData?.upgradeUntilCustomFormatScore).toBe(0);
-    expect(page['gridItems']()[0].detailRows.map((row) => row.label)).toEqual(['Instance', 'Aired status', 'Availability', 'Monitored']);
+    expect(page['gridItems']()[0].detailRows.map((row) => row.label)).toEqual(['Instance', 'Aired status', 'Library status', 'Monitored']);
     expect(page['gridItems']()[1].seriesData?.upgradeUntilCustomFormatScore).toBe(100);
     expect(page['radarrColumns']().map((column) => column.key)).toContain('customFormatScore');
     expect(page['sonarrSeriesColumns']().map((column) => column.key)).toContain('upgradeUntilCustomFormatScore');

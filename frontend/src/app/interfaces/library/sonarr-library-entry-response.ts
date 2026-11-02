@@ -1,3 +1,4 @@
+import { LibraryStatus } from './library-status';
 import { SonarrSeasonResponse } from './sonarr-season-response';
 
 export interface SonarrLibraryEntryResponse {
@@ -10,7 +11,7 @@ export interface SonarrLibraryEntryResponse {
   status: string;
   totalSize?: number | null;
   addedAt?: string | null;
-  isAvailable?: boolean;
+  libraryStatus?: LibraryStatus;
   monitored: boolean;
   seasons: SonarrSeasonResponse[];
   totalEpisodes: number;

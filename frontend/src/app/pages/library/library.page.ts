@@ -27,6 +27,7 @@ import { MediaGridDetailTone, MediaGridItem } from '../../interfaces/general/med
 import { TableColumnTemplateDefinition } from '../../interfaces/general/table-column-template';
 import { LibraryFilterCounts, LibraryFilterValues } from '../../interfaces/library/library-filter-values';
 import { LibraryRequestFilter } from '../../interfaces/library/library-request-filter';
+import { LibraryStatus } from '../../interfaces/library/library-status';
 import { RadarrLibraryBatchResponse, RadarrLibraryInstanceResult } from '../../interfaces/library/radarr-library-batch-response';
 import { RadarrLibraryEntryResponse } from '../../interfaces/library/radarr-library-entry-response';
 import { RadarrLibraryMovieTable } from '../../interfaces/library/radarr-library-movie-table';
@@ -43,7 +44,7 @@ import { RadarrApiService } from '../../services/radarr-api.service';
 import { SonarrApiService } from '../../services/sonarr-api.service';
 import { normalizeBaseUrl } from '../../utils/base-utils';
 import { episodeDetailData, movieDetailData } from '../../utils/media-detail-utils';
-import { airStatusTone, fileStatusTone } from '../../utils/media-status-tone.util';
+import { airStatusTone, fileStatusTone, libraryStatusTone } from '../../utils/media-status-tone.util';
 import { normalizeResolutionGroup, RESOLUTION_GROUPS } from '../../utils/resolution-statistics-utils';
 import { dateRangeFilter, multiSelectFilterValues, numberRangeFilter, selectFilterValue } from '../../utils/filter-utils';
 import { latestAirDate, LibrarySortKey, sortLibraryEntries } from '../../utils/library-sort-utils';
@@ -244,7 +245,7 @@ export class LibraryPage implements OnInit, OnDestroy {
             instanceName: table.instanceName,
             status: series.status,
             addedAt: series.addedAt,
-            isAvailable: this.seriesIsAvailable(series),
+            libraryStatus: this.seriesLibraryStatus(series),
             monitored: series.monitored,
             genres: series.genres,
             tags: series.tags,
@@ -338,6 +339,7 @@ export class LibraryPage implements OnInit, OnDestroy {
         options: [
           { label: allLabel, value: 'all' },
           { label: this.i18n.t('filter.filePresent'), value: 'present' },
+          { label: this.i18n.t('filter.filePartial'), value: 'partial' },
           { label: this.i18n.t('filter.fileMissing'), value: 'missing' },
         ],
         selectedValue: 'all',
@@ -820,7 +822,7 @@ export class LibraryPage implements OnInit, OnDestroy {
       addedAt: row.addedAt,
       totalSize: row.totalSize,
       monitored: row.monitored,
-      isAvailable: row.isAvailable,
+      libraryStatus: row.libraryStatus,
       libraryEpisodeCount: row.libraryEpisodeCount,
       fileCount: row.fileCount,
       seasons: row.seasons.map((s) => ({
@@ -974,26 +976,26 @@ export class LibraryPage implements OnInit, OnDestroy {
   }
 
   private seriesFileStatusLabel(series: SonarrLibrarySeriesTable): string {
-    return this.fileStatusLabel(this.seriesIsAvailable(series));
+    switch (this.seriesLibraryStatus(series)) {
+      case 'present':
+        return this.i18n.t('filter.filePresent');
+      case 'partial':
+        return this.i18n.t('filter.filePartial');
+      default:
+        return this.i18n.t('filter.fileMissing');
+    }
   }
 
-  private seriesFileStatusTone(series: SonarrLibrarySeriesTable): MediaGridDetailTone {
-    return this.seriesIsAvailable(series) ? 'success' : 'danger';
+  private seriesFileStatusTone(series: SonarrLibrarySeriesTable): MediaGridDetailTone | undefined {
+    return libraryStatusTone(this.seriesLibraryStatus(series));
   }
 
-  private seriesIsAvailable(series: SonarrLibrarySeriesTable): boolean {
+  // Mirrors LibraryAvailability.GetStatus on the backend for snapshots delivered without the libraryStatus field.
+  private seriesLibraryStatus(series: SonarrLibrarySeriesTable): LibraryStatus {
+    if (series.libraryStatus) return series.libraryStatus;
     const episodes = series.seasons.flatMap((season) => season.episodes);
-    return (
-      series.isAvailable ??
-      ((series.fileCount ?? episodes.filter((episode) => episode.hasFile).length) > 0 &&
-        !episodes.some(
-          (episode) =>
-            episode.hasFile === false &&
-            episode.monitored !== false &&
-            !!episode.airDateUtc &&
-            new Date(episode.airDateUtc).getTime() <= Date.now(),
-        ))
-    );
+    if ((series.fileCount ?? episodes.filter((episode) => episode.hasFile).length) === 0) return 'missing';
+    return episodes.some((episode) => episode.hasFile === false && episode.monitored !== false) ? 'partial' : 'present';
   }
 
   protected seasonNumberLabel(seasonNumber: number): string {

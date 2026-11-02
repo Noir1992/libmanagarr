@@ -5,9 +5,10 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef, MatDialog } from '@angu
 import { MediaDetailData } from '../../interfaces/general/media-detail-data';
 import { MediaDetailsDialogWidget } from '../media-details-dialog/media-details-dialog.widget';
 import { MediaGridDetailTone, MediaGridItem } from '../../interfaces/general/media-grid-item';
+import { LibraryStatus } from '../../interfaces/library/library-status';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { TranslationKey } from '../../services/i18n/_i18n-key';
-import { airStatusTone, fileStatusTone } from '../../utils/media-status-tone.util';
+import { airStatusTone, libraryStatusTone } from '../../utils/media-status-tone.util';
 import { specialsLast } from '../../utils/media-detail-utils';
 
 @Component({
@@ -57,7 +58,7 @@ export class SonarrSeriesDialogWidget {
       row('common.column.profile', series?.qualityProfileName),
       row('filter.airStatus', series?.status, airStatusTone(series?.status)),
       row('filter.addedRange', series?.addedAt ? formatDate(series.addedAt, 'medium', this.locale) : na),
-      row('filter.fileStatus', flag(series?.isAvailable, 'filter.filePresent', 'filter.fileMissing'), fileStatusTone(series?.isAvailable)),
+      row('filter.fileStatus', this.libraryStatusLabel(series?.libraryStatus), libraryStatusTone(series?.libraryStatus)),
       row(
         'library.details.totalSize',
         this.data.size == null ? na : `${(this.data.size / 1024 ** 3).toLocaleString(this.locale, { maximumFractionDigits: 2 })} GiB`,
@@ -67,6 +68,19 @@ export class SonarrSeriesDialogWidget {
       row('filter.tags', series?.tags?.join(', ')),
     ];
   });
+  protected libraryStatusLabel(status: LibraryStatus | undefined): string {
+    switch (status) {
+      case 'present':
+        return this.i18n.t('filter.filePresent');
+      case 'partial':
+        return this.i18n.t('filter.filePartial');
+      case 'missing':
+        return this.i18n.t('filter.fileMissing');
+      default:
+        return this.i18n.t('common.na');
+    }
+  }
+
   protected readonly seasonLabel: Signal<string> = computed(() => this.i18n.t('common.column.season'));
   protected readonly episodeLabel: Signal<string> = computed(() => this.i18n.t('common.column.episode'));
   protected readonly titleLabel: Signal<string> = computed(() => this.i18n.t('common.column.title'));
