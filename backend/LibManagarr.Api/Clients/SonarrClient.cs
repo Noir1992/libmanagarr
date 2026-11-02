@@ -15,6 +15,21 @@ public sealed class SonarrClient(HttpClient httpClient)
             cancellationToken);
     }
 
+    public async Task<IReadOnlyList<SonarrEpisodeResource>> FetchCalendarEpisodesAsync(
+        ArrInstanceSettings instance,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        CancellationToken cancellationToken)
+    {
+        string startValue = Uri.EscapeDataString(startUtc.ToString("O"));
+        string endValue = Uri.EscapeDataString(endUtc.ToString("O"));
+        return await GetAsync<List<SonarrEpisodeResource>>(
+                   instance,
+                   $"/api/v3/calendar?start={startValue}&end={endValue}&unmonitored=true&includeSeries=true",
+                   cancellationToken)
+               ?? [];
+    }
+
     public async Task<IReadOnlyList<SonarrHistoryResource>> FetchHistorySinceAsync(
         ArrInstanceSettings instance,
         DateTimeOffset since,

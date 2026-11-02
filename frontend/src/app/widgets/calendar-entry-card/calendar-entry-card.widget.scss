@@ -1,0 +1,120 @@
+.calendar-entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-tile-surface);
+  transition:
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+
+  &.is-past {
+    opacity: 0.55;
+  }
+
+  &:hover {
+    box-shadow: 0 0 15px 0 var(--theme-accent);
+    border-color: color-mix(in srgb, var(--theme-accent) 75%, transparent);
+  }
+}
+
+.calendar-entry-card-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.calendar-entry-card-type-icon {
+  flex: 0 0 auto;
+  align-self: center;
+  height: 18px;
+  width: 18px;
+  min-width: 18px;
+  font-size: 18px;
+}
+
+.calendar-entry-card[data-type='movie'] .calendar-entry-card-type-icon {
+  color: var(--theme-type-movie-color);
+}
+
+.calendar-entry-card[data-type='tv'] .calendar-entry-card-type-icon {
+  color: var(--theme-type-tv-color);
+}
+
+.calendar-entry-card-title {
+  min-width: 0;
+  color: var(--theme-text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-entry-card-code {
+  flex: 0 0 auto;
+  color: var(--theme-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-entry-card-episode {
+  color: var(--theme-text);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-entry-card-status {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--theme-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+
+  mat-icon {
+    height: 15px;
+    width: 15px;
+    min-width: 15px;
+    font-size: 15px;
+  }
+
+  &[data-status='inLibrary'] {
+    color: var(--theme-success-color);
+  }
+
+  &[data-status='missing'] {
+    color: var(--theme-danger-color);
+  }
+}
+
+.calendar-entry-card-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--theme-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-entry-card-release {
+  color: var(--theme-muted);
+  font-size: 0.8rem;
+}
+
+.calendar-entry-card-separator {
+  color: var(--theme-muted);
+}
+
+.calendar-entry-card-instance {
+  color: var(--theme-muted);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

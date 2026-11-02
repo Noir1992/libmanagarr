@@ -1,0 +1,22 @@
+<h2 mat-dialog-title class="dialog-title calendar-day-dialog-title" [title]="data.title">{{ data.title }}</h2>
+
+<mat-dialog-content class="dialog-content calendar-day-dialog-content">
+  <ul class="calendar-day-dialog-list">
+    @for (entry of data.entries; track entry.id) {
+      <li>
+        <app-calendar-entry-card
+          role="button"
+          tabindex="0"
+          (click)="openEntryDetail(entry)"
+          (keydown.enter)="openEntryDetail(entry)"
+          [entry]="entry"
+          [now]="data.now"
+        />
+      </li>
+    }
+  </ul>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" mat-button (click)="close()">{{ closeLabel() }}</button>
+</mat-dialog-actions>

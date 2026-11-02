@@ -15,6 +15,21 @@ public sealed class RadarrClient(HttpClient httpClient)
             cancellationToken);
     }
 
+    public async Task<IReadOnlyList<RadarrMovieResource>> FetchCalendarMoviesAsync(
+        ArrInstanceSettings instance,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        CancellationToken cancellationToken)
+    {
+        string startValue = Uri.EscapeDataString(startUtc.ToString("O"));
+        string endValue = Uri.EscapeDataString(endUtc.ToString("O"));
+        return await GetAsync<List<RadarrMovieResource>>(
+                   instance,
+                   $"/api/v3/calendar?start={startValue}&end={endValue}&unmonitored=true",
+                   cancellationToken)
+               ?? [];
+    }
+
     public async Task<IReadOnlyList<RadarrHistoryResource>> FetchHistorySinceAsync(
         ArrInstanceSettings instance,
         DateTimeOffset since,

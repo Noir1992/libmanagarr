@@ -1,0 +1,49 @@
+.calendar-entry-dialog-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-default-gap-small);
+}
+
+.calendar-entry-dialog-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.calendar-entry-dialog-label {
+  flex: 0 0 14ch;
+  color: var(--theme-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.calendar-entry-dialog-value {
+  min-width: 0;
+  color: var(--theme-text);
+  font-size: 0.9rem;
+}
+
+.calendar-entry-dialog-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--theme-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+
+  mat-icon {
+    height: 16px;
+    width: 16px;
+    min-width: 16px;
+    font-size: 16px;
+  }
+
+  &[data-status='inLibrary'] {
+    color: var(--theme-success-color);
+  }
+
+  &[data-status='missing'] {
+    color: var(--theme-danger-color);
+  }
+}
