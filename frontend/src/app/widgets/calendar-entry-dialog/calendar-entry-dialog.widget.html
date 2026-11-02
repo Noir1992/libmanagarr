@@ -1,0 +1,47 @@
+<h2 mat-dialog-title class="dialog-title calendar-entry-dialog-title" [title]="data.entry.title">{{ data.entry.title }}</h2>
+
+<mat-dialog-content class="dialog-content calendar-entry-dialog-content">
+  <div class="calendar-entry-dialog-rows">
+    <div class="calendar-entry-dialog-row">
+      <span class="calendar-entry-dialog-label">{{ statusRowLabel() }}</span>
+      <span class="calendar-entry-dialog-status" [attr.data-status]="status()">
+        <mat-icon class="material-symbols-outlined" aria-hidden="true">{{ statusIcon() }}</mat-icon>
+        <span>{{ statusLabel() }}</span>
+      </span>
+    </div>
+    @if (episodeCode(); as code) {
+      <div class="calendar-entry-dialog-row">
+        <span class="calendar-entry-dialog-label">{{ seasonEpisodeRowLabel() }}</span>
+        <span class="calendar-entry-dialog-value">{{ code }}</span>
+      </div>
+    }
+    @if (data.entry.episodeTitle) {
+      <div class="calendar-entry-dialog-row">
+        <span class="calendar-entry-dialog-label">{{ episodeTitleRowLabel() }}</span>
+        <span class="calendar-entry-dialog-value">{{ data.entry.episodeTitle }}</span>
+      </div>
+    }
+    @if (releaseTypeLabel(); as label) {
+      <div class="calendar-entry-dialog-row">
+        <span class="calendar-entry-dialog-label">{{ releaseTypeRowLabel() }}</span>
+        <span class="calendar-entry-dialog-value">{{ label }}</span>
+      </div>
+    }
+    <div class="calendar-entry-dialog-row">
+      <span class="calendar-entry-dialog-label">{{ dateRowLabel() }}</span>
+      <span class="calendar-entry-dialog-value">{{ dateLabel() }}</span>
+    </div>
+    <div class="calendar-entry-dialog-row">
+      <span class="calendar-entry-dialog-label">{{ timeRowLabel() }}</span>
+      <span class="calendar-entry-dialog-value">{{ timeLabel() }}</span>
+    </div>
+    <div class="calendar-entry-dialog-row">
+      <span class="calendar-entry-dialog-label">{{ instanceRowLabel() }}</span>
+      <span class="calendar-entry-dialog-value">{{ data.entry.instanceName }}</span>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" mat-button (click)="close()">{{ closeLabel() }}</button>
+</mat-dialog-actions>

@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard, loginGuard, setupGuard } from './guards/auth.guard';
 import { CodecStatisticsPage } from './pages/codec-statistics/codec-statistics.page';
+import { CalendarPage } from './pages/calendar/calendar.page';
 import { LibraryPage } from './pages/library/library.page';
 import { LibraryTrendPage } from './pages/library-trend/library-trend.page';
 import { LoginPage } from './pages/login/login.page';
@@ -55,6 +56,11 @@ export const appRoutes: Routes = [
   {
     path: 'requests',
     component: RequestsPage,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'calendar',
+    component: CalendarPage,
     canActivate: [authGuard],
   },
 ];

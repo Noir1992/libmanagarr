@@ -1,0 +1,12 @@
+.calendar-day-dialog-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-default-gap-small);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calendar-day-dialog-list app-calendar-entry-card {
+  cursor: pointer;
+}

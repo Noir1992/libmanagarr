@@ -1,0 +1,256 @@
+<main class="page-shell">
+  <section class="page-header">
+    <div class="page-title-row">
+      <h1 class="page-title">{{ title() }}</h1>
+    </div>
+    <p class="page-description">{{ description() }}</p>
+  </section>
+
+  <section class="page-content">
+    @if (notConfigured()) {
+      <app-no-arr-instances-configured-section />
+    } @else {
+      <div class="calendar-toolbar">
+        <div class="calendar-filter-group" role="group" [attr.aria-label]="filterLabel()">
+          @for (type of filterableReleaseTypes; track type) {
+            <button
+              type="button"
+              class="calendar-view-chip calendar-filter-chip"
+              [class.is-active]="isReleaseTypeShown(type)"
+              [attr.aria-pressed]="isReleaseTypeShown(type)"
+              (click)="toggleReleaseTypeFilter(type)"
+            >
+              {{ releaseTypeFilterLabel(type) }}
+            </button>
+          }
+        </div>
+
+        <div class="calendar-range-nav">
+          <button type="button" class="calendar-nav-button" [attr.aria-label]="previousLabel()" (click)="previous()">
+            <mat-icon class="material-symbols-outlined" aria-hidden="true">chevron_left</mat-icon>
+          </button>
+          <button type="button" class="calendar-nav-button calendar-today-button" (click)="today()">{{ todayLabel() }}</button>
+          <button type="button" class="calendar-nav-button" [attr.aria-label]="nextLabel()" (click)="next()">
+            <mat-icon class="material-symbols-outlined" aria-hidden="true">chevron_right</mat-icon>
+          </button>
+          <span class="calendar-range-label">{{ rangeLabel() }}</span>
+          <button type="button" class="calendar-nav-button calendar-refresh-button" [attr.aria-label]="refreshLabel()" (click)="refresh()">
+            <mat-icon class="material-symbols-outlined" aria-hidden="true">refresh</mat-icon>
+          </button>
+        </div>
+
+        <div class="calendar-view-switch" role="group">
+          <button
+            type="button"
+            class="calendar-view-chip"
+            [class.is-active]="viewMode() === 'week'"
+            [attr.aria-pressed]="viewMode() === 'week'"
+            (click)="setViewMode('week')"
+          >
+            {{ weekViewLabel() }}
+          </button>
+          <button
+            type="button"
+            class="calendar-view-chip"
+            [class.is-active]="viewMode() === 'month'"
+            [attr.aria-pressed]="viewMode() === 'month'"
+            (click)="setViewMode('month')"
+          >
+            {{ monthViewLabel() }}
+          </button>
+          <button
+            type="button"
+            class="calendar-view-chip"
+            [class.is-active]="viewMode() === 'agenda'"
+            [attr.aria-pressed]="viewMode() === 'agenda'"
+            (click)="setViewMode('agenda')"
+          >
+            {{ agendaViewLabel() }}
+          </button>
+        </div>
+      </div>
+
+      @if (failedInstanceNames().length > 0) {
+        <div class="calendar-instance-error" role="alert">
+          <mat-icon class="material-symbols-outlined" aria-hidden="true">warning</mat-icon>
+          <span class="calendar-instance-error-text">{{ instanceErrorText() }}</span>
+          <button type="button" class="calendar-retry-button" (click)="refresh()">{{ retryLabel() }}</button>
+        </div>
+      }
+
+      @if (loading()) {
+        <app-loading-section />
+      } @else if (loadError(); as error) {
+        <app-loading-error-section [error]="error" />
+      } @else if (!hasEntries()) {
+        <app-no-data-section [isFiltered]="false" />
+      } @else if (!hasVisibleEntries()) {
+        <app-no-data-section [isFiltered]="true" />
+      } @else {
+        @switch (viewMode()) {
+          @case ('week') {
+            <div class="calendar-week-scroll">
+              <div class="calendar-week-grid">
+                @for (column of weekColumns(); track column.dayKey) {
+                  <div class="calendar-week-column" [class.is-today]="column.isToday">
+                    <div class="calendar-week-day-head">
+                      <span class="calendar-week-day-name">{{ column.weekdayLabel }}</span>
+                      <span class="calendar-week-day-number">{{ column.dayNumberLabel }}</span>
+                      @if (column.isToday) {
+                        <span class="calendar-week-now">{{ nowLineLabel() }}</span>
+                      }
+                    </div>
+                    <div class="calendar-week-day-body">
+                      @for (entry of column.undated; track entry.id) {
+                        <app-calendar-entry-card
+                          class="calendar-clickable"
+                          role="button"
+                          tabindex="0"
+                          (click)="openEntryDetail(entry)"
+                          (keydown.enter)="openEntryDetail(entry)"
+                          [entry]="entry"
+                          [now]="now()"
+                          [showInstance]="false"
+                        />
+                      }
+                      @for (entry of column.past; track entry.id) {
+                        <app-calendar-entry-card
+                          class="calendar-clickable"
+                          role="button"
+                          tabindex="0"
+                          (click)="openEntryDetail(entry)"
+                          (keydown.enter)="openEntryDetail(entry)"
+                          [entry]="entry"
+                          [now]="now()"
+                          [showInstance]="false"
+                        />
+                      }
+                      @if (column.isToday) {
+                        <div class="calendar-now-line" role="presentation"></div>
+                      }
+                      @for (entry of column.upcoming; track entry.id) {
+                        <app-calendar-entry-card
+                          class="calendar-clickable"
+                          role="button"
+                          tabindex="0"
+                          (click)="openEntryDetail(entry)"
+                          (keydown.enter)="openEntryDetail(entry)"
+                          [entry]="entry"
+                          [now]="now()"
+                          [showInstance]="false"
+                        />
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+          @case ('month') {
+            <div class="calendar-month-scroll">
+              <div class="calendar-month-grid">
+                @for (label of weekdayLabels(); track label) {
+                  <div class="calendar-month-weekday">{{ label }}</div>
+                }
+                @for (cell of monthCells(); track cell.cell.dayKey) {
+                  <div class="calendar-month-cell" [class.is-adjacent]="!cell.cell.inMonth" [class.is-today]="isTodayCell(cell)">
+                    <div class="calendar-month-date">
+                      <span class="calendar-month-daynumber">{{ cell.cell.date.getDate() }}</span>
+                      @if (isTodayCell(cell)) {
+                        <span class="calendar-month-now">{{ nowLineLabel() }}</span>
+                      }
+                    </div>
+                    @for (row of monthCompactRows(cell); track row.entry.id) {
+                      <div
+                        class="calendar-month-compact calendar-clickable"
+                        role="button"
+                        tabindex="0"
+                        [class.is-past]="row.isPast"
+                        (click)="openEntryDetail(row.entry)"
+                        (keydown.enter)="openEntryDetail(row.entry)"
+                      >
+                        <mat-icon
+                          class="material-symbols-outlined calendar-month-status"
+                          [attr.data-status]="row.status"
+                          [attr.aria-label]="row.statusLabel"
+                          >{{ row.statusIcon }}</mat-icon
+                        >
+                        <span class="calendar-month-time">{{ row.timeText }}</span>
+                        <span class="calendar-month-title" [title]="row.entry.title">{{ row.entry.title }}</span>
+                      </div>
+                    }
+                    @if (cell.hiddenCount > 0) {
+                      <button type="button" class="calendar-more-button" (click)="openDayDialog(cell)">
+                        {{ monthHiddenLabel(cell.hiddenCount) }}
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+          @case ('agenda') {
+            <div class="calendar-agenda-scroll">
+              <table mat-table fixedLayout [dataSource]="agendaRows()" class="calendar-agenda-table">
+                <ng-container matColumnDef="date">
+                  <th mat-header-cell *matHeaderCellDef>{{ dateColumnLabel() }}</th>
+                  <td mat-cell *matCellDef="let row">
+                    @if (row.showDate) {
+                      <span class="calendar-agenda-date">{{ row.dayLabel }}</span>
+                    }
+                    <span class="calendar-sr-only">{{ row.dayLabel }}</span>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="time">
+                  <th mat-header-cell *matHeaderCellDef>{{ timeColumnLabel() }}</th>
+                  <td mat-cell *matCellDef="let row">{{ row.timeText }}</td>
+                </ng-container>
+
+                <ng-container matColumnDef="media">
+                  <th mat-header-cell *matHeaderCellDef>{{ mediaColumnLabel() }}</th>
+                  <td mat-cell *matCellDef="let row">
+                    <div class="calendar-agenda-media">
+                      <div class="calendar-agenda-title-row">
+                        <mat-icon class="material-symbols-outlined calendar-agenda-type" [attr.data-type]="row.typeAttr" aria-hidden="true">{{
+                          row.typeAttr === 'movie' ? 'movie' : 'live_tv'
+                        }}</mat-icon>
+                        <span class="calendar-agenda-title" [title]="row.title">{{ row.title }}</span>
+                        <span class="calendar-agenda-release">{{ row.releaseTypeText }}</span>
+                      </div>
+                      <span class="calendar-agenda-status" [attr.data-status]="row.status">
+                        <mat-icon class="material-symbols-outlined" aria-hidden="true">{{ row.statusIcon }}</mat-icon>
+                        <span>{{ row.statusLabel }}</span>
+                      </span>
+                    </div>
+                  </td>
+                </ng-container>
+
+                <ng-container matColumnDef="episode">
+                  <th mat-header-cell *matHeaderCellDef>{{ seasonEpisodeColumnLabel() }}</th>
+                  <td mat-cell *matCellDef="let row">{{ row.episodeText }}</td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="agendaColumns; sticky: true"></tr>
+                <tr
+                  mat-row
+                  *matRowDef="let row; columns: agendaColumns"
+                  class="calendar-clickable"
+                  (click)="openEntryDetail(row.entry)"
+                  [class.is-past]="row.isPast"
+                  [class.is-day-start]="row.showDate"
+                  [class.is-now-before]="row.nowLineBefore"
+                ></tr>
+              </table>
+              @if (agendaNowLineAtEnd()) {
+                <div class="calendar-agenda-endnow">
+                  <span class="calendar-agenda-endnow-label">{{ nowLineLabel() }}</span>
+                </div>
+              }
+            </div>
+          }
+        }
+      }
+    }
+  </section>
+</main>
