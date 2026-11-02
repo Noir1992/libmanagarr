@@ -117,7 +117,11 @@ function readStoredHiddenReleaseTypes(): ReadonlySet<CalendarReleaseType> {
       return new Set();
     }
 
-    return new Set(parsed.filter((value: unknown): value is CalendarReleaseType => CALENDAR_FILTERABLE_RELEASE_TYPES.includes(value as CalendarReleaseType)));
+    return new Set(
+      parsed.filter((value: unknown): value is CalendarReleaseType =>
+        CALENDAR_FILTERABLE_RELEASE_TYPES.includes(value as CalendarReleaseType),
+      ),
+    );
   } catch {
     return new Set();
   }
@@ -159,9 +163,8 @@ export class CalendarPage implements OnInit, OnDestroy {
   protected readonly loading: WritableSignal<boolean> = signal<boolean>(true);
   protected readonly loadError: WritableSignal<string | null> = signal<string | null>(null);
   protected readonly notConfigured: WritableSignal<boolean> = signal<boolean>(false);
-  protected readonly hiddenReleaseTypes: WritableSignal<ReadonlySet<CalendarReleaseType>> = signal<ReadonlySet<CalendarReleaseType>>(
-    readStoredHiddenReleaseTypes(),
-  );
+  protected readonly hiddenReleaseTypes: WritableSignal<ReadonlySet<CalendarReleaseType>> =
+    signal<ReadonlySet<CalendarReleaseType>>(readStoredHiddenReleaseTypes());
   protected readonly filterableReleaseTypes: readonly CalendarReleaseType[] = CALENDAR_FILTERABLE_RELEASE_TYPES;
 
   protected readonly title = computed((): string => this.i18n.t('calendar.title'));
@@ -180,12 +183,12 @@ export class CalendarPage implements OnInit, OnDestroy {
   protected readonly mediaColumnLabel = computed((): string => this.i18n.t('calendar.column.media'));
   protected readonly seasonEpisodeColumnLabel = computed((): string => this.i18n.t('calendar.column.seasonEpisode'));
 
-  protected readonly nowLineLabel = computed(
-    (): string => `${this.i18n.t('calendar.now')} · ${this.formatTime(this.now())}`,
-  );
+  protected readonly nowLineLabel = computed((): string => `${this.i18n.t('calendar.now')} · ${this.formatTime(this.now())}`);
 
-  protected readonly failedInstanceNames = computed(
-    (): readonly string[] => this.instances().filter((instance) => !instance.loaded).map((instance) => instance.name),
+  protected readonly failedInstanceNames = computed((): readonly string[] =>
+    this.instances()
+      .filter((instance) => !instance.loaded)
+      .map((instance) => instance.name),
   );
 
   protected readonly instanceErrorText = computed((): string => {
@@ -207,41 +210,37 @@ export class CalendarPage implements OnInit, OnDestroy {
     const todayKey = dayKeyFromDate(now);
     const groups = groupEntriesByDay(this.visibleEntries());
 
-    return weekDays(this.anchorDate()).map(
-      (date: Date): CalendarWeekColumn => {
-        const dayKey = dayKeyFromDate(date);
-        const dayEntries = groups.get(dayKey) ?? [];
-        const undated = dayEntries.filter((entry: CalendarEntry) => entryInstant(entry) === null);
-        const timed = dayEntries.filter((entry: CalendarEntry) => entryInstant(entry) !== null);
+    return weekDays(this.anchorDate()).map((date: Date): CalendarWeekColumn => {
+      const dayKey = dayKeyFromDate(date);
+      const dayEntries = groups.get(dayKey) ?? [];
+      const undated = dayEntries.filter((entry: CalendarEntry) => entryInstant(entry) === null);
+      const timed = dayEntries.filter((entry: CalendarEntry) => entryInstant(entry) !== null);
 
-        return {
-          date,
-          dayKey,
-          weekdayLabel: this.formatDate(date, 'EEEE'),
-          dayNumberLabel: this.formatDate(date, 'd'),
-          isToday: dayKey === todayKey,
-          undated,
-          past: timed.filter((entry: CalendarEntry) => isEntryPast(entry, now)),
-          upcoming: timed.filter((entry: CalendarEntry) => !isEntryPast(entry, now)),
-        };
-      },
-    );
+      return {
+        date,
+        dayKey,
+        weekdayLabel: this.formatDate(date, 'EEEE'),
+        dayNumberLabel: this.formatDate(date, 'd'),
+        isToday: dayKey === todayKey,
+        undated,
+        past: timed.filter((entry: CalendarEntry) => isEntryPast(entry, now)),
+        upcoming: timed.filter((entry: CalendarEntry) => !isEntryPast(entry, now)),
+      };
+    });
   });
 
   protected readonly monthCells = computed((): readonly CalendarMonthCell[] => {
     const groups = groupEntriesByDay(this.visibleEntries());
 
-    return monthGrid(this.anchorDate()).map(
-      (cell: CalendarDayCell): CalendarMonthCell => {
-        const entries = groups.get(cell.dayKey) ?? [];
-        return {
-          cell,
-          entries,
-          visible: entries.slice(0, MONTH_VISIBLE_ENTRIES),
-          hiddenCount: Math.max(0, entries.length - MONTH_VISIBLE_ENTRIES),
-        };
-      },
-    );
+    return monthGrid(this.anchorDate()).map((cell: CalendarDayCell): CalendarMonthCell => {
+      const entries = groups.get(cell.dayKey) ?? [];
+      return {
+        cell,
+        entries,
+        visible: entries.slice(0, MONTH_VISIBLE_ENTRIES),
+        hiddenCount: Math.max(0, entries.length - MONTH_VISIBLE_ENTRIES),
+      };
+    });
   });
 
   protected readonly agendaRows = computed((): readonly CalendarAgendaRow[] => {
@@ -252,30 +251,28 @@ export class CalendarPage implements OnInit, OnDestroy {
     const firstFutureIndex = sorted.findIndex((entry: CalendarEntry) => !isEntryPast(entry, now));
     let previousDayKey: string | null = null;
 
-    return sorted.map(
-      (entry: CalendarEntry, index: number): CalendarAgendaRow => {
-        const dayKey = entryDayKey(entry);
-        const showDate = dayKey !== previousDayKey;
-        previousDayKey = dayKey;
-        const status = deriveEntryStatus(entry, now);
+    return sorted.map((entry: CalendarEntry, index: number): CalendarAgendaRow => {
+      const dayKey = entryDayKey(entry);
+      const showDate = dayKey !== previousDayKey;
+      previousDayKey = dayKey;
+      const status = deriveEntryStatus(entry, now);
 
-        return {
-          entry,
-          showDate,
-          dayLabel: this.formatDate(parseDayKey(dayKey), 'EEE, d. MMM y'),
-          timeText: entryTimeLabel(entry) ?? this.i18n.t('calendar.allDay'),
-          typeAttr: entry.application === 'Radarr' ? 'movie' : 'tv',
-          title: entry.title,
-          status,
-          statusLabel: this.i18n.t(CALENDAR_STATUS_LABEL_KEYS[status]),
-          statusIcon: CALENDAR_STATUS_ICON_NAMES[status],
-          releaseTypeText: this.i18n.t(CALENDAR_FILTER_TYPE_LABEL_KEYS[entry.releaseType]),
-          episodeText: this.episodeText(entry),
-          isPast: isEntryPast(entry, now),
-          nowLineBefore: nowInRange && firstFutureIndex === index,
-        };
-      },
-    );
+      return {
+        entry,
+        showDate,
+        dayLabel: this.formatDate(parseDayKey(dayKey), 'EEE, d. MMM y'),
+        timeText: entryTimeLabel(entry) ?? this.i18n.t('calendar.allDay'),
+        typeAttr: entry.application === 'Radarr' ? 'movie' : 'tv',
+        title: entry.title,
+        status,
+        statusLabel: this.i18n.t(CALENDAR_STATUS_LABEL_KEYS[status]),
+        statusIcon: CALENDAR_STATUS_ICON_NAMES[status],
+        releaseTypeText: this.i18n.t(CALENDAR_FILTER_TYPE_LABEL_KEYS[entry.releaseType]),
+        episodeText: this.episodeText(entry),
+        isPast: isEntryPast(entry, now),
+        nowLineBefore: nowInRange && firstFutureIndex === index,
+      };
+    });
   });
 
   protected readonly agendaNowLineAtEnd = computed((): boolean => {
@@ -406,19 +403,17 @@ export class CalendarPage implements OnInit, OnDestroy {
 
   protected monthCompactRows(cell: CalendarMonthCell): readonly CalendarMonthCompactRow[] {
     const now = this.now();
-    return cell.visible.map(
-      (entry: CalendarEntry): CalendarMonthCompactRow => {
-        const status = deriveEntryStatus(entry, now);
-        return {
-          entry,
-          timeText: entryTimeLabel(entry) ?? '·',
-          status,
-          statusLabel: this.i18n.t(CALENDAR_STATUS_LABEL_KEYS[status]),
-          statusIcon: CALENDAR_STATUS_ICON_NAMES[status],
-          isPast: isEntryPast(entry, now),
-        };
-      },
-    );
+    return cell.visible.map((entry: CalendarEntry): CalendarMonthCompactRow => {
+      const status = deriveEntryStatus(entry, now);
+      return {
+        entry,
+        timeText: entryTimeLabel(entry) ?? '·',
+        status,
+        statusLabel: this.i18n.t(CALENDAR_STATUS_LABEL_KEYS[status]),
+        statusIcon: CALENDAR_STATUS_ICON_NAMES[status],
+        isPast: isEntryPast(entry, now),
+      };
+    });
   }
 
   protected isTodayCell(cell: CalendarMonthCell): boolean {
@@ -469,29 +464,27 @@ export class CalendarPage implements OnInit, OnDestroy {
     this.loading.set(true);
     this.loadError.set(null);
 
-    this.calendarApi
-      .fetchCalendar(dayKeyFromDate(range.start), dayKeyFromDate(range.end), this.timeZoneId, refresh)
-      .subscribe({
-        next: (response) => {
-          if (sequence !== this.requestSequence) {
-            return;
-          }
+    this.calendarApi.fetchCalendar(dayKeyFromDate(range.start), dayKeyFromDate(range.end), this.timeZoneId, refresh).subscribe({
+      next: (response) => {
+        if (sequence !== this.requestSequence) {
+          return;
+        }
 
-          this.entries.set(response.entries);
-          this.instances.set(response.instances);
-          this.loading.set(false);
-        },
-        error: () => {
-          if (sequence !== this.requestSequence) {
-            return;
-          }
+        this.entries.set(response.entries);
+        this.instances.set(response.instances);
+        this.loading.set(false);
+      },
+      error: () => {
+        if (sequence !== this.requestSequence) {
+          return;
+        }
 
-          this.entries.set([]);
-          this.instances.set([]);
-          this.loading.set(false);
-          this.loadError.set(this.i18n.t('common.error.loadData'));
-        },
-      });
+        this.entries.set([]);
+        this.instances.set([]);
+        this.loading.set(false);
+        this.loadError.set(this.i18n.t('common.error.loadData'));
+      },
+    });
   }
 
   private startTimers(): void {

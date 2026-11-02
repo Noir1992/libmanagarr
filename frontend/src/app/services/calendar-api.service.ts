@@ -8,10 +8,7 @@ export class CalendarApiService {
   private readonly http: HttpClient = inject(HttpClient);
 
   fetchCalendar(startDate: string, endDate: string, timeZone: string, refresh: boolean = false): Observable<CalendarResponse> {
-    let params = new HttpParams()
-      .set('startDate', startDate)
-      .set('endDate', endDate)
-      .set('timeZone', timeZone);
+    let params = new HttpParams().set('startDate', startDate).set('endDate', endDate).set('timeZone', timeZone);
 
     if (refresh) {
       params = params.set('refresh', 'true');

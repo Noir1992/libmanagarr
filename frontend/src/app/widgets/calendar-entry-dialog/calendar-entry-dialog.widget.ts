@@ -37,7 +37,9 @@ export class CalendarEntryDialogWidget {
   readonly data: CalendarEntryDialogData = inject(MAT_DIALOG_DATA);
 
   protected readonly closeLabel: Signal<string> = computed((): string => this.i18n.t('common.close'));
-  protected readonly status: Signal<CalendarEntryStatus> = computed((): CalendarEntryStatus => deriveEntryStatus(this.data.entry, this.data.now));
+  protected readonly status: Signal<CalendarEntryStatus> = computed(
+    (): CalendarEntryStatus => deriveEntryStatus(this.data.entry, this.data.now),
+  );
   protected readonly statusLabel: Signal<string> = computed((): string => this.i18n.t(CALENDAR_STATUS_LABEL_KEYS[this.status()]));
   protected readonly statusIcon: Signal<string> = computed((): string => CALENDAR_STATUS_ICON_NAMES[this.status()]);
   protected readonly episodeCode: Signal<string | null> = computed((): string | null => episodeLabel(this.data.entry));

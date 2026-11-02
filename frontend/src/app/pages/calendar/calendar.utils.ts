@@ -34,10 +34,7 @@ export const CALENDAR_FILTER_TYPE_LABEL_KEYS: Record<CalendarReleaseType, Transl
 };
 
 // Display-only type filter: entries of hidden release types disappear from every calendar view.
-export function filterEntriesByTypes(
-  entries: readonly CalendarEntry[],
-  hiddenTypes: ReadonlySet<CalendarReleaseType>,
-): CalendarEntry[] {
+export function filterEntriesByTypes(entries: readonly CalendarEntry[], hiddenTypes: ReadonlySet<CalendarReleaseType>): CalendarEntry[] {
   if (hiddenTypes.size === 0) {
     return [...entries];
   }

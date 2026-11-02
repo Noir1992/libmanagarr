@@ -212,9 +212,12 @@
                   <td mat-cell *matCellDef="let row">
                     <div class="calendar-agenda-media">
                       <div class="calendar-agenda-title-row">
-                        <mat-icon class="material-symbols-outlined calendar-agenda-type" [attr.data-type]="row.typeAttr" aria-hidden="true">{{
-                          row.typeAttr === 'movie' ? 'movie' : 'live_tv'
-                        }}</mat-icon>
+                        <mat-icon
+                          class="material-symbols-outlined calendar-agenda-type"
+                          [attr.data-type]="row.typeAttr"
+                          aria-hidden="true"
+                          >{{ row.typeAttr === 'movie' ? 'movie' : 'live_tv' }}</mat-icon
+                        >
                         <span class="calendar-agenda-title" [title]="row.title">{{ row.title }}</span>
                         <span class="calendar-agenda-release">{{ row.releaseTypeText }}</span>
                       </div>
