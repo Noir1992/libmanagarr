@@ -46,7 +46,7 @@ describe('SonarrSeriesDialogWidget episode table', () => {
       url: '',
       posterUrl: null,
       detailRows: [],
-      seriesData: { seasons: [], status: 'upcoming', isAvailable: false },
+      seriesData: { seasons: [], status: 'upcoming', libraryStatus: 'missing' },
     };
     await TestBed.configureTestingModule({
       imports: [SonarrSeriesDialogWidget],
@@ -60,7 +60,7 @@ describe('SonarrSeriesDialogWidget episode table', () => {
     await fixture.whenStable();
     const element: HTMLElement = fixture.nativeElement;
     const availability = Array.from(element.querySelectorAll('.series-dialog-info-row')).find(
-      (row) => row.querySelector('dt')?.textContent?.trim() === 'Availability',
+      (row) => row.querySelector('dt')?.textContent?.trim() === 'Library status',
     );
     expect(availability?.querySelector('dd')?.textContent?.trim()).toBe('Missing');
   });
@@ -106,7 +106,7 @@ describe('SonarrSeriesDialogWidget episode table', () => {
           instanceName: 'My Sonarr',
           qualityProfileName: 'HD',
           status: 'continuing',
-          isAvailable: false,
+          libraryStatus: 'missing',
           monitored: true,
           genres: ['Drama'],
           tags: ['favorite'],
@@ -146,7 +146,7 @@ describe('SonarrSeriesDialogWidget episode table', () => {
         Profile: 'HD',
         'Aired status': 'continuing',
         Added: 'N/A',
-        Availability: 'Missing',
+        'Library status': 'Missing',
         'Total size': 'N/A',
         'Series monitored': 'Yes',
         Genres: 'Drama',
@@ -213,7 +213,7 @@ describe('SonarrSeriesDialogWidget episode table', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('tbody')?.textContent).toContain('2020-01-02');
   });
 
-  it('marks aired status and availability with the tile tones for continuing and available series', async () => {
+  it('shows partially available with the warning tone while the series keeps airing', async () => {
     const item: MediaGridItem = {
       kind: 'series',
       id: 1,
@@ -221,7 +221,7 @@ describe('SonarrSeriesDialogWidget episode table', () => {
       url: '',
       posterUrl: null,
       detailRows: [],
-      seriesData: { seasons: [], status: 'continuing', isAvailable: true },
+      seriesData: { seasons: [], status: 'continuing', libraryStatus: 'partial' },
     };
     await TestBed.configureTestingModule({
       imports: [SonarrSeriesDialogWidget],
@@ -238,7 +238,36 @@ describe('SonarrSeriesDialogWidget episode table', () => {
         .find((row) => row.querySelector('dt')?.textContent?.trim() === label)!
         .querySelector('dd')!;
     expect(ddFor('Aired status').classList).toContain('tone-info');
-    expect(ddFor('Availability').classList).toContain('tone-success');
+    expect(ddFor('Library status').textContent?.trim()).toBe('Partially available');
+    expect(ddFor('Library status').classList).toContain('tone-warning');
+  });
+
+  it('keeps availability on Available with the success tone once the series is no longer airing', async () => {
+    const item: MediaGridItem = {
+      kind: 'series',
+      id: 1,
+      title: 'Series',
+      url: '',
+      posterUrl: null,
+      detailRows: [],
+      seriesData: { seasons: [], status: 'ended', libraryStatus: 'present' },
+    };
+    await TestBed.configureTestingModule({
+      imports: [SonarrSeriesDialogWidget],
+      providers: [
+        { provide: MAT_DIALOG_DATA, useValue: item },
+        { provide: MatDialogRef, useValue: { close: () => undefined } },
+      ],
+    }).compileComponents();
+    TestBed.inject(AppI18nService).setLanguage('en');
+    const fixture = TestBed.createComponent(SonarrSeriesDialogWidget);
+    fixture.detectChanges();
+    const ddFor = (label: string) =>
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.series-dialog-info-row'))
+        .find((row) => row.querySelector('dt')?.textContent?.trim() === label)!
+        .querySelector('dd')!;
+    expect(ddFor('Library status').textContent?.trim()).toBe('Available');
+    expect(ddFor('Library status').classList).toContain('tone-success');
   });
 
   it('keeps aired status and availability uncolored when the series values are unknown', async () => {
@@ -262,7 +291,7 @@ describe('SonarrSeriesDialogWidget episode table', () => {
     const fixture = TestBed.createComponent(SonarrSeriesDialogWidget);
     fixture.detectChanges();
     const tones = ['tone-success', 'tone-warning', 'tone-danger', 'tone-info'];
-    for (const label of ['Aired status', 'Availability']) {
+    for (const label of ['Aired status', 'Library status']) {
       const dd = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.series-dialog-info-row'))
         .find((row) => row.querySelector('dt')?.textContent?.trim() === label)!
         .querySelector('dd')!;

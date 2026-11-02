@@ -1,4 +1,4 @@
-import { airStatusTone, fileStatusTone } from './media-status-tone.util';
+import { airStatusTone, fileStatusTone, libraryStatusTone } from './media-status-tone.util';
 
 describe('media status tones', () => {
   it('maps completed air statuses to success regardless of casing', () => {
@@ -31,5 +31,12 @@ describe('media status tones', () => {
     expect(fileStatusTone(true)).toBe('success');
     expect(fileStatusTone(false)).toBe('danger');
     expect(fileStatusTone(undefined)).toBeUndefined();
+  });
+
+  it('maps library statuses to success, warning and danger and keeps unknown uncolored', () => {
+    expect(libraryStatusTone('present')).toBe('success');
+    expect(libraryStatusTone('partial')).toBe('warning');
+    expect(libraryStatusTone('missing')).toBe('danger');
+    expect(libraryStatusTone(undefined)).toBeUndefined();
   });
 });

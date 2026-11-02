@@ -6,20 +6,17 @@ namespace LibManagarr.Api.Tests.Services;
 public sealed class LibraryAvailabilityTests
 {
     [Theory]
-    [InlineData(false, true, 1, "upcoming", false)]
-    [InlineData(false, true, null, "upcoming", false)]
-    [InlineData(false, true, null, "continuing", false)]
-    [InlineData(false, false, -1, "continuing", false)]
-    [InlineData(false, true, -1, "continuing", false)]
-    [InlineData(true, true, 1, "upcoming", true)]
-    [InlineData(true, true, -1, "continuing", true)]
-    public void Availability_ShouldRequireAFileRegardlessOfAirStatus(
-        bool hasFile, bool monitored, int? airDays, string status, bool available)
+    [InlineData(false, true, 1, LibraryStatus.Missing)]
+    [InlineData(false, true, null, LibraryStatus.Missing)]
+    [InlineData(false, false, -1, LibraryStatus.Missing)]
+    [InlineData(true, true, 1, LibraryStatus.Present)]
+    [InlineData(true, true, -1, LibraryStatus.Present)]
+    public void Status_ShouldBeMissingWithoutAnyFileAndPresentWhenEveryMonitoredEpisodeHasOne(
+        bool hasFile, bool monitored, int? airDays, LibraryStatus expected)
     {
         DateTimeOffset now = new(2026, 10, 19, 12, 0, 0, TimeSpan.Zero);
         SonarrSeriesSnapshot series = new()
         {
-            Status = status,
             Seasons = [new() { Episodes = [new()
             {
                 HasFile = hasFile,
@@ -28,15 +25,15 @@ public sealed class LibraryAvailabilityTests
             }] }]
         };
 
-        Assert.Equal(available, LibraryAvailability.IsAvailable(series, now));
+        Assert.Equal(expected, LibraryAvailability.GetStatus(series));
     }
 
     [Theory]
-    [InlineData(false, -1, true)]
-    [InlineData(true, 1, true)]
-    [InlineData(true, -1, false)]
-    [InlineData(true, 0, false)]
-    public void Availability_ShouldIgnoreOnlyFutureAndUnmonitoredMissingEpisodes(bool monitored, int airDays, bool available)
+    [InlineData(true, -1, LibraryStatus.Partial)]
+    [InlineData(true, 1, LibraryStatus.Partial)]
+    [InlineData(false, -1, LibraryStatus.Present)]
+    [InlineData(false, 1, LibraryStatus.Present)]
+    public void Status_ShouldBePartialOnlyWhenMonitoredEpisodesLackAFile(bool monitored, int airDays, LibraryStatus expected)
     {
         DateTimeOffset now = new(2026, 10, 19, 12, 0, 0, TimeSpan.Zero);
         SonarrSeriesSnapshot series = new()
@@ -47,6 +44,13 @@ public sealed class LibraryAvailabilityTests
             ] }]
         };
 
-        Assert.Equal(available, LibraryAvailability.IsAvailable(series, now));
+        Assert.Equal(expected, LibraryAvailability.GetStatus(series));
     }
+
+    [Theory]
+    [InlineData(LibraryStatus.Missing, "missing")]
+    [InlineData(LibraryStatus.Partial, "partial")]
+    [InlineData(LibraryStatus.Present, "present")]
+    public void WireValue_ShouldMatchTheFileStatusFilterValues(LibraryStatus status, string wireValue) =>
+        Assert.Equal(wireValue, status.ToWireValue());
 }

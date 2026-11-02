@@ -35,7 +35,7 @@
   <div class="media-card-details">
     @for (row of item().detailRows; track row.label) {
       <div class="media-card-detail-row">
-        <span class="media-card-detail-row-label">{{ row.label }}</span>
+        <span class="media-card-detail-row-label" [title]="row.label">{{ row.label }}</span>
         <span
           class="media-card-detail-row-value"
           [class.tone-success]="row.tone === 'success'"

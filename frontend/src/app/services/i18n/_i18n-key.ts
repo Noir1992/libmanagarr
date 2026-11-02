@@ -129,6 +129,7 @@ export type TranslationKey =
   | 'filter.score'
   | 'filter.fileStatus'
   | 'filter.filePresent'
+  | 'filter.filePartial'
   | 'filter.fileMissing'
   | 'filter.episodeMonitored'
   | 'filter.episodeType'

@@ -10,6 +10,7 @@ public sealed class LibraryFilterMatcher
     private readonly LibraryRequestFilter filter;
     private readonly HashSet<string> excludedFilters;
     private readonly bool missingEpisodesOnly;
+    private readonly bool gapEpisodesOnly;
     private readonly HashSet<string>? types;
     private readonly HashSet<string>? statuses;
     private readonly HashSet<string>? genres;
@@ -34,6 +35,7 @@ public sealed class LibraryFilterMatcher
         missingEpisodesOnly =
             (filter.FileStatusFilter == "missing" && !excludedFilters.Contains("file-status-filter"))
             || (filter.FileStatusFilter == "present" && excludedFilters.Contains("file-status-filter"));
+        gapEpisodesOnly = filter.FileStatusFilter == "partial" && !excludedFilters.Contains("file-status-filter");
         types = filter.Types is { Count: > 0 } ? ToSet(filter.Types) : null;
         statuses = ToSet(filter.Statuses);
         genres = ToSet(filter.Genres);
@@ -83,7 +85,7 @@ public sealed class LibraryFilterMatcher
         && MatchesMetadata(movie.Status, movie.Genres, movie.Tags, movie.Profile.Name)
         && MatchesMonitored(movie.Monitored)
         && MatchList("episode-type-filter", types, ["movie"])
-        && MatchesAvailability(movie.HasFile)
+        && MatchesFileStatus(movie.HasFile ? "present" : "missing")
         && MatchesMedia(movie.HasAired, movie.AirDateUtc, movie.File, movie.HasFile)
         && MatchesUpgradeTarget(movie.HasFile ? movie.File.CustomFormatScore : null, movie.Profile.UpgradeUntilCustomFormatScore);
 
@@ -91,11 +93,12 @@ public sealed class LibraryFilterMatcher
         MatchesAdded(series.AddedAt)
         && MatchesMetadata(series.Status, series.Genres, series.Tags, series.Profile.Name)
         && MatchBoolean("monitored-filter", filter.MonitoredFilter, "monitored", "notMonitored", series.Monitored)
-        && MatchesAvailability(LibraryAvailability.IsAvailable(series, now));
+        && MatchesFileStatus(LibraryAvailability.GetStatus(series).ToWireValue());
 
     public bool MatchesEpisode(SonarrEpisodeSnapshot episode, DateTimeOffset now, int? targetScore = null, int seasonNumber = 0,
         bool seriesHasNoFiles = false) =>
         (!missingEpisodesOnly || LibraryAvailability.IsMissing(episode, now) || (seriesHasNoFiles && !episode.HasFile))
+        && (!gapEpisodesOnly || !episode.HasFile)
         && MatchesMedia(episode.AirDateUtc.HasValue && episode.AirDateUtc.Value <= now, episode.AirDateUtc, episode.File, episode.HasFile)
         && MatchesMonitored(episode.Monitored)
         && MatchList("episode-type-filter", types, [seasonNumber > 0 ? "regular" : "special"])
@@ -110,8 +113,8 @@ public sealed class LibraryFilterMatcher
     private bool MatchesMonitored(bool monitored) =>
         MatchBoolean("episode-monitored-filter", filter.EpisodeMonitoredFilter, "monitored", "notMonitored", monitored);
 
-    private bool MatchesAvailability(bool available) =>
-        MatchBoolean("file-status-filter", filter.FileStatusFilter, "present", "missing", available);
+    private bool MatchesFileStatus(string status) =>
+        Apply("file-status-filter", filter.FileStatusFilter is "present" or "partial" or "missing", filter.FileStatusFilter == status);
 
     private bool MatchesUpgradeTarget(int? score, int? targetScore) =>
         Apply("upgrade-target-filter", filter.UpgradeTargetFilter is LibraryUpgradeTarget.Below or LibraryUpgradeTarget.Reached,

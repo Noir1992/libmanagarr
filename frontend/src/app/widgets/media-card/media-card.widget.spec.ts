@@ -128,6 +128,13 @@ describe('MediaCardWidget', () => {
       expect(value.textContent).toBe('Value');
     });
 
+    it('exposes the full label as tooltip so a truncated label stays readable', () => {
+      host.item.detailRows = [{ label: 'A very long detail label', value: 'Value' }];
+      fixture.detectChanges();
+      const label = fixture.nativeElement.querySelector('.media-card-detail-row-label');
+      expect(label.getAttribute('title')).toBe('A very long detail label');
+    });
+
     it('applies the matching tone class to the value of each row', () => {
       host.item.detailRows = [
         { label: 'Aired status', value: 'released', tone: 'success' },

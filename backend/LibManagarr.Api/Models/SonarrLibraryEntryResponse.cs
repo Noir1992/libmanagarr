@@ -20,7 +20,7 @@ public sealed class SonarrLibraryEntryResponse
 
     public string Status { get; init; } = string.Empty;
 
-    public bool IsAvailable { get; init; }
+    public string LibraryStatus { get; init; } = "missing";
 
     public bool Monitored { get; init; }
 

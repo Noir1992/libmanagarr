@@ -37,7 +37,7 @@ public static class LibraryFilterCountBuilder
         AddMedia(counts, episodes.Where(episode => episode.HasFile).Select(episode => LibraryMediaDetailsResponse.From(episode.File, true)!));
         counts["upgrade-target-filter"] = Count(series.SelectMany(item => item.Seasons
             .SelectMany(season => season.Episodes).Select(episode => UpgradeValues(episode.File, item.Profile, episode.HasFile))));
-        counts["file-status-filter"] = Count(series.Select(item => new[] { LibraryAvailability.IsAvailable(item, now) ? "present" : "missing" }));
+        counts["file-status-filter"] = Count(series.Select(item => new[] { LibraryAvailability.GetStatus(item).ToWireValue() }));
         counts["episode-monitored-filter"] = Count(episodes.Select(episode => new[] { episode.Monitored ? "monitored" : "notMonitored" }));
         counts["episode-type-filter"] = Count(series.SelectMany(item => item.Seasons.SelectMany(season => season.Episodes.Select(_ => new[] { season.SeasonNumber > 0 ? "regular" : "special" }))));
         counts["aired-filter"] = Count(episodes.Select(episode => new[]
@@ -81,7 +81,7 @@ public static class LibraryFilterCountBuilder
         counts["episode-monitored-filter"] = Count(episodes.Select(episode => new[] { episode.Monitored ? "monitored" : "notMonitored" }));
         counts["episode-type-filter"] = Count(series.SelectMany(item => item.Seasons.SelectMany(season =>
             season.Episodes.Select(_ => new[] { season.Number > 0 ? "regular" : "special" }))));
-        counts["file-status-filter"] = Count(series.Select(item => new[] { item.IsAvailable ? "present" : "missing" }));
+        counts["file-status-filter"] = Count(series.Select(item => new[] { item.LibraryStatus }));
         counts["aired-filter"] = Count(episodes.Select(episode => new[] { episode.HasAired ? "aired" : "notAired" }));
         counts["upgrade-target-filter"] = Count(series.SelectMany(item => item.Seasons.SelectMany(season =>
             season.Episodes.Select(episode => UpgradeValues(episode.CustomFormatScore, item.UpgradeUntilCustomFormatScore)))));

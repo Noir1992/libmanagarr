@@ -1,3 +1,4 @@
+import { LibraryStatus } from '../library/library-status';
 import { MediaDetailData } from './media-detail-data';
 
 export type MediaGridItemKind = 'movie' | 'series';
@@ -31,7 +32,7 @@ export interface MediaGridItem {
     instanceName?: string;
     status?: string;
     addedAt?: string | null;
-    isAvailable?: boolean;
+    libraryStatus?: LibraryStatus;
     monitored?: boolean;
     genres?: string[];
     tags?: string[];

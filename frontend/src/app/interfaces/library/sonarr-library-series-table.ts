@@ -1,3 +1,4 @@
+import { LibraryStatus } from './library-status';
 import { SonarrLibrarySeasonTable } from './sonarr-library-season-table';
 
 export interface SonarrLibrarySeriesTable {
@@ -10,7 +11,7 @@ export interface SonarrLibrarySeriesTable {
   status: string;
   totalSize?: number | null;
   addedAt?: string | null;
-  isAvailable?: boolean;
+  libraryStatus?: LibraryStatus;
   monitored: boolean;
   seasons: SonarrLibrarySeasonTable[];
   affectedSeasons: number;
