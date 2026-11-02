@@ -14,9 +14,15 @@ public sealed class SonarrEpisodeResource
 
     public int? EpisodeFileId { get; set; }
 
+    public int? SeriesId { get; set; }
+
     public SonarrSeriesResource? Series { get; set; }
 
     public int? Runtime { get; set; }
+
+    // Pure calendar date as reported by Sonarr, without a clock time. Read it as the raw
+    // deserialized day so it never shifts through a UTC conversion.
+    public DateTimeOffset? AirDate { get; set; }
 
     public DateTimeOffset? AirDateUtc { get; set; }
 

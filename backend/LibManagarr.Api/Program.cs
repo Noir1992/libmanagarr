@@ -53,6 +53,8 @@ builder.Services.AddScoped<ISnapshotSyncService, SnapshotSyncService>();
 builder.Services.AddScoped<CodecStatisticsService>();
 builder.Services.AddScoped<LanguageStatisticsService>();
 builder.Services.AddScoped<LibraryTrendStatisticsService>();
+builder.Services.AddSingleton<CalendarCache>();
+builder.Services.AddScoped<CalendarService>();
 ScheduledTaskCatalog.AddBuiltInScheduledTasks(builder.Services);
 builder.Services.AddSingleton<ScheduledTaskCatalog>();
 builder.Services.AddSingleton<IScheduledTaskStore, SqliteScheduledTaskStore>();
@@ -182,6 +184,7 @@ app.MapSonarrEndpoints();
 app.MapRadarrEndpoints();
 app.MapStatisticsEndpoints();
 app.MapRequestEndpoints();
+app.MapCalendarEndpoints();
 
 // Unknown API paths must answer with a plain 404 problem instead of falling through to the
 // SPA shell with status 200.

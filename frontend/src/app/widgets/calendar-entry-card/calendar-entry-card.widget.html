@@ -1,0 +1,30 @@
+<article class="calendar-entry-card" [attr.data-type]="typeAttr()" [class.is-past]="isPast()">
+  <div class="calendar-entry-card-top">
+    <mat-icon class="material-symbols-outlined calendar-entry-card-type-icon" aria-hidden="true">{{ typeIcon() }}</mat-icon>
+    <span class="calendar-entry-card-title" [title]="entry().title">{{ entry().title }}</span>
+    @if (episodeCode(); as code) {
+      <span class="calendar-entry-card-code">{{ code }}</span>
+    }
+  </div>
+
+  @if (entry().episodeTitle) {
+    <div class="calendar-entry-card-episode" [title]="entry().episodeTitle">{{ entry().episodeTitle }}</div>
+  }
+
+  <div class="calendar-entry-card-status" [attr.data-status]="status()">
+    <mat-icon class="material-symbols-outlined" aria-hidden="true">{{ statusIcon() }}</mat-icon>
+    <span>{{ statusLabel() }}</span>
+  </div>
+
+  <div class="calendar-entry-card-foot">
+    @if (releaseTypeLabel(); as label) {
+      <span class="calendar-entry-card-release">{{ label }}</span>
+      <span aria-hidden="true" class="calendar-entry-card-separator">·</span>
+    }
+    <span class="calendar-entry-card-time">{{ timeText() }}</span>
+  </div>
+
+  @if (showInstance()) {
+    <div class="calendar-entry-card-instance">{{ entry().instanceName }}</div>
+  }
+</article>
