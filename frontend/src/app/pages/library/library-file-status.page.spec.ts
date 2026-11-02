@@ -70,7 +70,12 @@ describe('LibraryPage file status', () => {
 
   it('starts with all entries and merges file counts while retaining an existing selection', async () => {
     expect(filter('file-status-filter').selectedValue).toBe('all');
-    expect(filter('file-status-filter').options.map((option) => option.label)).toEqual(['All', 'Available', 'Partially available', 'Missing']);
+    expect(filter('file-status-filter').options.map((option) => option.label)).toEqual([
+      'All',
+      'Available',
+      'Partially available',
+      'Missing',
+    ]);
     expect(page['filterOptions']().find((option) => option.id === 'status-filter')?.label).toBe('Aired status');
     filter('file-status-filter').selectedValue = 'missing';
     await page['loadFilterValues']();
@@ -329,7 +334,16 @@ describe('LibraryPage file status', () => {
             {
               number: 1,
               monitored: true,
-              episodes: [{ number: 1, title: 'Episode', airDateUtc: '2020-01-01T00:00:00Z', hasFile: true, monitored: true, customFormatScore: null }],
+              episodes: [
+                {
+                  number: 1,
+                  title: 'Episode',
+                  airDateUtc: '2020-01-01T00:00:00Z',
+                  hasFile: true,
+                  monitored: true,
+                  customFormatScore: null,
+                },
+              ],
             },
           ],
         },
@@ -360,8 +374,22 @@ describe('LibraryPage file status', () => {
               number: 1,
               monitored: true,
               episodes: [
-                { number: 1, title: 'Downloaded', airDateUtc: '2020-01-01T00:00:00Z', hasFile: true, monitored: true, customFormatScore: null },
-                { number: 2, title: 'Pending', airDateUtc: '2099-01-01T00:00:00Z', hasFile: false, monitored: true, customFormatScore: null },
+                {
+                  number: 1,
+                  title: 'Downloaded',
+                  airDateUtc: '2020-01-01T00:00:00Z',
+                  hasFile: true,
+                  monitored: true,
+                  customFormatScore: null,
+                },
+                {
+                  number: 2,
+                  title: 'Pending',
+                  airDateUtc: '2099-01-01T00:00:00Z',
+                  hasFile: false,
+                  monitored: true,
+                  customFormatScore: null,
+                },
               ],
             },
           ],
