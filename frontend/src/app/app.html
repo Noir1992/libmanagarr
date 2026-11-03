@@ -69,6 +69,22 @@
           <mat-icon class="material-symbols-outlined">text_snippet</mat-icon>
           <span>{{ logsLabel() }}</span>
         </a>
+        <a
+          routerLink="/releases"
+          routerLinkActive="is-active"
+          class="navigation-item navigation-version"
+          [attr.aria-label]="releasesLabel()"
+          [attr.title]="updateAvailable() ? updateAvailableHint() : null"
+          (click)="closeNavigation()"
+        >
+          <mat-icon class="material-symbols-outlined navigation-version-icon" [class.is-visible]="updateAvailable()" aria-hidden="true"
+            >priority_high</mat-icon
+          >
+          <span class="navigation-version-body">
+            <span class="navigation-version-label">{{ versionLabel() }}</span>
+            <span class="navigation-version-value">{{ runningVersion() || releasesLabel() }}</span>
+          </span>
+        </a>
       </nav>
     </aside>
 
