@@ -7,6 +7,7 @@ import { LibraryTrendPage } from './pages/library-trend/library-trend.page';
 import { LoginPage } from './pages/login/login.page';
 import { LogsPage } from './pages/logs/logs.page';
 import { RequestsPage } from './pages/requests/requests.page';
+import { ReleasesPage } from './pages/releases/releases.page';
 import { SettingsPage } from './pages/settings/settings.page';
 import { SetupPage } from './pages/setup/setup.page';
 import { pendingChangesGuard } from './guards/pending-changes.guard';
@@ -61,6 +62,11 @@ export const appRoutes: Routes = [
   {
     path: 'calendar',
     component: CalendarPage,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'releases',
+    component: ReleasesPage,
     canActivate: [authGuard],
   },
 ];

@@ -73,5 +73,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # The release version (without the `v` prefix) becomes the assembly version the
+          # running instance compares against the published GitHub releases.
+          build-args: LIBMANAGARR_VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

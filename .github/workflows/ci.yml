@@ -73,5 +73,8 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Edge builds carry no semantic version, so they report the commit they were built
+          # from. The hyphen keeps the value intact when the backend strips a `+revision` suffix.
+          build-args: LIBMANAGARR_VERSION=edge-${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

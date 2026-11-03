@@ -31,6 +31,10 @@
   --theme-danger-box-shadow-color: rgba(180, 35, 24, 0.2);
   --theme-type-movie-color: #b25000;
   --theme-type-tv-color: #1f6feb;
+  --theme-version-entry: #1f5fb0;
+  --theme-version-entry-soft: rgb(31 95 176 / 12%);
+  --theme-update-indicator: #8a6100;
+  --theme-update-indicator-soft: rgb(250 204 21 / 22%);
   --theme-scrollbar-track: rgb(22 32 42 / 8%);
   --theme-scrollbar-thumb: rgb(22 32 42 / 26%);
   --theme-scrollbar-thumb-hover: rgb(22 32 42 / 38%);
@@ -70,6 +74,10 @@ html[data-theme='dark'] {
   --theme-danger-box-shadow-color: rgb(255 107 107 / 35%);
   --theme-type-movie-color: #ffa94d;
   --theme-type-tv-color: #7cc4ff;
+  --theme-version-entry: #8ab8f5;
+  --theme-version-entry-soft: rgb(138 184 245 / 16%);
+  --theme-update-indicator: #ffd54f;
+  --theme-update-indicator-soft: rgb(255 213 79 / 22%);
   --theme-scrollbar-track: rgb(220 232 242 / 8%);
   --theme-scrollbar-thumb: rgb(220 232 242 / 24%);
   --theme-scrollbar-thumb-hover: rgb(220 232 242 / 36%);

@@ -1,0 +1,196 @@
+.releases-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--theme-default-gap-small);
+  padding: var(--theme-default-gap-small);
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-tile-surface);
+}
+
+.releases-summary-version {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.releases-summary-label {
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+}
+
+.releases-summary-value {
+  color: var(--theme-text);
+  font-weight: 600;
+}
+
+.releases-summary-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--theme-default-gap-small);
+}
+
+.releases-summary-checked {
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+}
+
+.releases-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+  cursor: pointer;
+
+  mat-icon {
+    height: 18px;
+    width: 18px;
+    min-width: 18px;
+    font-size: 18px;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--theme-accent);
+    color: var(--theme-accent);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+.releases-notice {
+  margin: 0;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--theme-warning-color) 45%, transparent);
+  border-radius: var(--theme-border-radius);
+  background: color-mix(in srgb, var(--theme-warning-color) 12%, transparent);
+  color: var(--theme-warning-color);
+  font-size: 0.85rem;
+}
+
+.releases-empty {
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 0.9rem;
+}
+
+.release-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-default-gap-small);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.release-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: var(--theme-default-gap-small);
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-tile-surface);
+}
+
+.release-entry-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.release-entry-title {
+  margin: 0;
+  color: var(--theme-text);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.release-entry-version {
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+}
+
+.release-entry-badge {
+  padding: 0 0.5rem;
+  border: 1px solid var(--theme-border-color);
+  border-radius: 999px;
+  background: var(--theme-surface);
+  color: var(--theme-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.6;
+
+  &[data-state='newer'] {
+    border-color: color-mix(in srgb, var(--theme-update-indicator) 45%, transparent);
+    background: var(--theme-update-indicator-soft);
+    color: var(--theme-update-indicator);
+  }
+}
+
+.release-entry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+}
+
+.release-entry-link {
+  color: var(--theme-accent);
+
+  &:hover {
+    color: var(--theme-link-hover);
+  }
+}
+
+// Upstream notes arrive as raw text, so they keep their line breaks and wrap instead of scrolling.
+.release-entry-notes {
+  margin: 0;
+  color: var(--theme-text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.release-entry-pull {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.release-entry-pull-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.release-entry-pull-value {
+  flex: 0 0 auto;
+  padding: 0 0.35rem;
+  border: 1px solid var(--theme-border-color);
+  border-radius: calc(var(--theme-border-radius) / 2);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+  font-size: 0.8rem;
+}

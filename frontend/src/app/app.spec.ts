@@ -1,19 +1,108 @@
 import { AuthService } from './services/auth.service';
 import { provideHttpClient, withXhr } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { computed, signal, WritableSignal } from '@angular/core';
 import { provideRouter } from '@angular/router';
+import { ReleaseOverview } from './interfaces/releases/release-overview';
+import { ReleaseVersion } from './interfaces/releases/release-version';
+import { ReleasesService } from './services/releases.service';
 import { App } from './app';
 import { appRoutes } from './app.routes';
 
 const NAVIGATION_OPEN_STORAGE_KEY: string = 'navigation:open';
 
 describe('App', () => {
+  let overview: WritableSignal<ReleaseOverview | null>;
+  let releasesService: ReleasesService;
+
   beforeEach(async () => {
     globalThis.localStorage.removeItem(NAVIGATION_OPEN_STORAGE_KEY);
+    overview = signal<ReleaseOverview | null>(null);
+    releasesService = {
+      overview,
+      loading: signal<boolean>(false),
+      loadError: signal<string | null>(null),
+      versions: computed((): readonly ReleaseVersion[] => overview()?.versions ?? []),
+      currentVersion: computed((): string => overview()?.currentVersion ?? ''),
+      updateAvailable: computed((): boolean => overview()?.updateAvailable ?? false),
+      loadAsync: async (): Promise<void> => undefined,
+      loadOnceAsync: async (): Promise<void> => undefined,
+    } as unknown as ReleasesService;
+
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideHttpClient(withXhr()), provideRouter(appRoutes)],
+      providers: [provideHttpClient(withXhr()), provideRouter(appRoutes), { provide: ReleasesService, useValue: releasesService }],
     }).compileComponents();
+  });
+
+  it('shows the running version in the navigation and names it for screen readers', () => {
+    overview.set(overviewWith('1.3.0', false));
+
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    const versionEntry: Element | null = fixture.nativeElement.querySelector('.navigation-version');
+
+    expect(versionEntry?.getAttribute('href')).toContain('/releases');
+    expect(versionEntry?.getAttribute('aria-label')).toBe("What's new");
+    expect(versionEntry?.querySelector('.navigation-version-label')?.textContent).toContain('Version:');
+    expect(versionEntry?.querySelector('.navigation-version-value')?.textContent).toContain('1.3.0');
+  });
+
+  it('raises the update icon only while a newer stable release exists', () => {
+    overview.set(overviewWith('1.3.0', false));
+
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    const hiddenIcon: Element | null = fixture.nativeElement.querySelector('.navigation-version-icon');
+
+    expect(hiddenIcon?.classList.contains('is-visible')).toBeFalse();
+
+    overview.set(overviewWith('1.3.0', true));
+    fixture.detectChanges();
+
+    const visibleIcon: Element | null = fixture.nativeElement.querySelector('.navigation-version-icon');
+
+    expect(visibleIcon?.classList.contains('is-visible')).toBeTrue();
+  });
+
+  // The frame is the entry's own identity, so the rules resolving in the browser are the proof:
+  // it is always tinted, an update only reveals the icon, and the tint follows the theme.
+  it('keeps the version entry framed and reveals only the update icon', () => {
+    const originalTheme: string | undefined = document.documentElement.dataset['theme'];
+
+    try {
+      overview.set(overviewWith('1.3.0', false));
+      document.documentElement.dataset['theme'] = 'light';
+      const fixture: ComponentFixture<App> = TestBed.createComponent(App);
+      fixture.detectChanges();
+
+      const entry: HTMLElement = fixture.nativeElement.querySelector('.navigation-version');
+      const icon: HTMLElement = fixture.nativeElement.querySelector('.navigation-version-icon');
+      const calmBackground: string = getComputedStyle(entry).backgroundColor;
+      const calmBorder: string = getComputedStyle(entry).borderTopColor;
+
+      expect(calmBackground).not.toBe('rgba(0, 0, 0, 0)');
+      expect(getComputedStyle(icon).visibility).toBe('hidden');
+
+      overview.set(overviewWith('1.3.0', true));
+      fixture.detectChanges();
+
+      expect(getComputedStyle(icon).visibility).toBe('visible');
+      expect(getComputedStyle(entry).backgroundColor).toBe(calmBackground);
+      expect(getComputedStyle(entry).borderTopColor).toBe(calmBorder);
+
+      // The frame border carries the theme tint and is not transitioned, so it reports the swap
+      // immediately; the background fades in over 140ms on anchors and still reports its old
+      // colour to a synchronous read, so it cannot prove the theme change here.
+      document.documentElement.dataset['theme'] = 'dark';
+
+      expect(getComputedStyle(entry).borderTopColor).not.toBe(calmBorder);
+    } finally {
+      if (originalTheme === undefined) delete document.documentElement.dataset['theme'];
+      else document.documentElement.dataset['theme'] = originalTheme;
+    }
   });
 
   it('shows a logout failure without claiming the session ended', async () => {
@@ -302,5 +391,15 @@ describe('App', () => {
     const compiled: HTMLElement = fixture.nativeElement as HTMLElement;
 
     return compiled.querySelector('.app-frame')?.classList.contains('is-navigation-open') ?? false;
+  }
+
+  function overviewWith(currentVersion: string, updateAvailable: boolean): ReleaseOverview {
+    return {
+      currentVersion,
+      updateAvailable,
+      status: 'Ok',
+      checkedAt: '2026-11-02T10:00:00.000Z',
+      versions: [],
+    };
   }
 });
