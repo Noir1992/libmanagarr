@@ -18,13 +18,21 @@ import { CanDeactivateWithPendingChanges } from '../../interfaces/general/can-de
 import { AppI18nService } from '../../services/app-i18n.service';
 import { AppSettingsService } from '../../services/app-settings.service';
 import { SettingsAccountTabWidget } from './settings-account-tab/settings-account-tab.widget';
+import { SettingsBackupTabWidget } from './settings-backup-tab/settings-backup-tab.widget';
 import { SettingsGeneralTabWidget } from './settings-general-tab/settings-general-tab.widget';
 import { SettingsArrInstancesTabWidget } from './settings-arr-instances-tab/settings-arr-instances-tab.widget';
 import { SettingsTasksTabWidget } from './settings-tasks-tab/settings-tasks-tab.widget';
 
 @Component({
   selector: 'app-settings-page',
-  imports: [MatTabsModule, SettingsGeneralTabWidget, SettingsArrInstancesTabWidget, SettingsTasksTabWidget, SettingsAccountTabWidget],
+  imports: [
+    MatTabsModule,
+    SettingsGeneralTabWidget,
+    SettingsArrInstancesTabWidget,
+    SettingsTasksTabWidget,
+    SettingsBackupTabWidget,
+    SettingsAccountTabWidget,
+  ],
   templateUrl: './settings.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './settings.page.scss',
@@ -38,7 +46,7 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
 
   /* Constants */
   private static readonly tabQueryParamName: string = 'tab';
-  private static readonly tabQueryParamValues: readonly string[] = ['general', 'arr-instances', 'tasks', 'account'];
+  private static readonly tabQueryParamValues: readonly string[] = ['general', 'arr-instances', 'tasks', 'backup', 'account'];
 
   /* View Queries */
   @ViewChild(MatTabGroup)
@@ -53,6 +61,9 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
   @ViewChild(SettingsTasksTabWidget)
   private readonly settingsTasksTabWidget?: SettingsTasksTabWidget;
 
+  @ViewChild(SettingsBackupTabWidget)
+  private readonly settingsBackupTabWidget?: SettingsBackupTabWidget;
+
   @ViewChild(SettingsAccountTabWidget)
   private readonly settingsAccountTabWidget?: SettingsAccountTabWidget;
 
@@ -62,6 +73,7 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
   protected readonly generalTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.general'));
   protected readonly instancesTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.instancesTab'));
   protected readonly tasksTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.tasksTab'));
+  protected readonly backupTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.backupTab'));
   protected readonly accountTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.accountTab'));
 
   /* Signals */
@@ -166,6 +178,7 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
     | SettingsGeneralTabWidget
     | SettingsArrInstancesTabWidget
     | SettingsTasksTabWidget
+    | SettingsBackupTabWidget
     | SettingsAccountTabWidget
     | null {
     switch (this.selectedTabIndex()) {
@@ -176,6 +189,8 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
       case 2:
         return this.settingsTasksTabWidget ?? null;
       case 3:
+        return this.settingsBackupTabWidget ?? null;
+      case 4:
         return this.settingsAccountTabWidget ?? null;
       default:
         return null;
@@ -194,8 +209,10 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
         return 1;
       case 'tasks':
         return 2;
-      case 'account':
+      case 'backup':
         return 3;
+      case 'account':
+        return 4;
       default:
         return 0;
     }

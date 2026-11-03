@@ -27,4 +27,12 @@ public sealed class StoragePaths
     public string DataDirectory { get; }
 
     public string DatabasePath => Path.Combine(ConfigDirectory, "libmanagarr.db");
+
+    public string AuthDatabasePath => Path.Combine(ConfigDirectory, "auth.db");
+
+    public string SettingsFilePath => Path.Combine(ConfigDirectory, "settings.json");
+
+    public string DataProtectionKeysDirectory => Path.Combine(ConfigDirectory, "data-protection-keys");
+
+    public string BackupsDirectory => Path.Combine(ConfigDirectory, "backups");
 }

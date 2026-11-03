@@ -1,11 +1,13 @@
 using System.Collections.Concurrent;
 using LibManagarr.Api.Models;
+using LibManagarr.Api.Services.Backup;
 
 namespace LibManagarr.Api.Services;
 
 public sealed class ScheduledTaskExecutionService(
     IScheduledTaskStore store, ScheduledTaskService tasks, IServiceScopeFactory scopeFactory,
-    TimeProvider clock, IHostApplicationLifetime lifetime, ILogger<ScheduledTaskExecutionService> logger)
+    BackupOperationCoordinator writes, TimeProvider clock, IHostApplicationLifetime lifetime,
+    ILogger<ScheduledTaskExecutionService> logger)
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> gates = new(StringComparer.Ordinal);
 
@@ -13,6 +15,13 @@ public sealed class ScheduledTaskExecutionService(
     {
         ScheduledTaskDefinition definition = tasks.RequireDefinition(key);
         if (manual && !definition.CanRunManually) throw new ScheduledTaskException(403, "Manual execution is not available for this task.");
+        if (writes.IsInMaintenanceMode)
+        {
+            // A restore waits for its restart, so no task may write to the state it is about to
+            // replace. Missed runs are handled by each task's own schedule on the next start.
+            if (manual) throw new ScheduledTaskException(503, "Tasks are paused while a restore waits for the application to restart.");
+            return null;
+        }
         SemaphoreSlim gate = gates.GetOrAdd(key, _ => new(1, 1));
         if (!await gate.WaitAsync(0, cancellationToken))
         {

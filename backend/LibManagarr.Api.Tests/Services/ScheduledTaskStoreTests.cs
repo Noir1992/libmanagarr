@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using LibManagarr.Api.Models;
 using LibManagarr.Api.Services;
+using LibManagarr.Api.Services.Backup;
 
 namespace LibManagarr.Api.Tests.Services;
 
@@ -23,7 +24,7 @@ public sealed class ScheduledTaskStoreTests : IDisposable
     }
 
     private SqliteScheduledTaskStore CreateStore(ScheduledTaskCatalog? catalog = null) =>
-        new(Paths, catalog ?? CreateCatalog(), clock, NullLogger<SqliteScheduledTaskStore>.Instance);
+        new(Paths, catalog ?? CreateCatalog(), clock, new BackupOperationCoordinator(clock), NullLogger<SqliteScheduledTaskStore>.Instance);
 
     private async Task WriteSettingsAsync(string json)
     {

@@ -35,6 +35,12 @@
         </ng-template>
       </mat-tab>
 
+      <mat-tab [label]="backupTabLabel()">
+        <ng-template matTabContent>
+          <app-settings-backup-tab-widget />
+        </ng-template>
+      </mat-tab>
+
       <mat-tab [label]="accountTabLabel()">
         <ng-template matTabContent>
           <app-settings-account-tab-widget />
