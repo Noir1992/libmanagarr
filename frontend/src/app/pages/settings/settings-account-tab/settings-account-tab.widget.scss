@@ -31,6 +31,20 @@
   gap: var(--theme-default-gap);
 }
 
+.password-wrap {
+  align-items: center;
+  gap: var(--theme-default-gap-small);
+
+  input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  button {
+    flex-shrink: 0;
+  }
+}
+
 .account-notice {
   color: var(--theme-success-color);
   font-weight: 700;

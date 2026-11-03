@@ -84,6 +84,14 @@ describe('SettingsAccountTabWidget', () => {
     return fixture.componentInstance as unknown as AccountTabProbe;
   }
 
+  function inputOf(fixture: ComponentFixture<SettingsAccountTabWidget>, inputId: string): HTMLInputElement {
+    return fixture.nativeElement.querySelector(`#${inputId}`) as HTMLInputElement;
+  }
+
+  function toggleOf(fixture: ComponentFixture<SettingsAccountTabWidget>, inputId: string): HTMLButtonElement {
+    return fixture.nativeElement.querySelector(`button[aria-controls="${inputId}"]`) as HTMLButtonElement;
+  }
+
   async function flushAccountReload(account: AccountBackend): Promise<void> {
     await settle();
     httpController.expectOne('/api/account').flush(account);
@@ -115,6 +123,60 @@ describe('SettingsAccountTabWidget', () => {
 
     expect(probe.passwordForm.hasError('passwordMismatch')).toBeFalse();
     expect(probe.passwordForm.valid).toBeTrue();
+  });
+
+  it('should reveal and hide the change-password fields through their own toggles', async () => {
+    const fixture = await createWidget(DISABLED_ACCOUNT);
+
+    const currentPassword: HTMLInputElement = inputOf(fixture, 'account-current-password');
+    const currentToggle: HTMLButtonElement = toggleOf(fixture, 'account-current-password');
+
+    expect(currentPassword.type).toBe('password');
+    expect(currentToggle.getAttribute('aria-label')).toBe('auth.showPassword');
+    expect(currentToggle.textContent?.trim()).toBe('visibility');
+
+    currentToggle.click();
+    fixture.detectChanges();
+
+    expect(currentPassword.type).toBe('text');
+    expect(currentToggle.getAttribute('aria-label')).toBe('auth.hidePassword');
+    expect(currentToggle.textContent?.trim()).toBe('visibility_off');
+
+    currentToggle.click();
+    fixture.detectChanges();
+
+    expect(currentPassword.type).toBe('password');
+    expect(currentToggle.getAttribute('aria-label')).toBe('auth.showPassword');
+  });
+
+  it('should keep every change-password field revealed only for itself', async () => {
+    const fixture = await createWidget(DISABLED_ACCOUNT);
+
+    toggleOf(fixture, 'account-new-password').click();
+    fixture.detectChanges();
+
+    expect(inputOf(fixture, 'account-new-password').type).toBe('text');
+    expect(inputOf(fixture, 'account-current-password').type).toBe('password');
+    expect(inputOf(fixture, 'account-confirm-password').type).toBe('password');
+  });
+
+  it('should offer a visibility toggle for the two-factor proof passwords', async () => {
+    const fixture = await createWidget(ENABLED_ACCOUNT);
+
+    const disableToggle: HTMLButtonElement = toggleOf(fixture, 'account-disable-password');
+    const rotateToggle: HTMLButtonElement = toggleOf(fixture, 'account-rotate-password');
+
+    expect(inputOf(fixture, 'account-disable-password').type).toBe('password');
+    expect(inputOf(fixture, 'account-rotate-password').type).toBe('password');
+
+    disableToggle.click();
+    rotateToggle.click();
+    fixture.detectChanges();
+
+    expect(inputOf(fixture, 'account-disable-password').type).toBe('text');
+    expect(inputOf(fixture, 'account-rotate-password').type).toBe('text');
+    expect(disableToggle.getAttribute('aria-label')).toBe('auth.hidePassword');
+    expect(rotateToggle.getAttribute('aria-label')).toBe('auth.hidePassword');
   });
 
   it('should load the account profile when the tab opens', async () => {
