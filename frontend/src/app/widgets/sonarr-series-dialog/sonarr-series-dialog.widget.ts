@@ -8,6 +8,7 @@ import { MediaGridDetailTone, MediaGridItem } from '../../interfaces/general/med
 import { LibraryStatus } from '../../interfaces/library/library-status';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { TranslationKey } from '../../services/i18n/_i18n-key';
+import { airStatusLabel } from '../../utils/air-status-label.util';
 import { airStatusTone, libraryStatusTone } from '../../utils/media-status-tone.util';
 import { specialsLast } from '../../utils/media-detail-utils';
 
@@ -56,7 +57,7 @@ export class SonarrSeriesDialogWidget {
     return [
       row('common.column.instance', series?.instanceName),
       row('common.column.profile', series?.qualityProfileName),
-      row('filter.airStatus', series?.status, airStatusTone(series?.status)),
+      row('filter.airStatus', airStatusLabel(series?.status, this.i18n), airStatusTone(series?.status)),
       row('filter.addedRange', series?.addedAt ? formatDate(series.addedAt, 'medium', this.locale) : na),
       row('filter.fileStatus', this.libraryStatusLabel(series?.libraryStatus), libraryStatusTone(series?.libraryStatus)),
       row(

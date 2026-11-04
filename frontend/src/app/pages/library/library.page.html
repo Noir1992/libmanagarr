@@ -79,6 +79,8 @@
                           </a>
                         } @else if ('airDateUtc' === column.key) {
                           {{ row.airDateUtc | appDate: 'mediumDate' }}
+                        } @else if ('status' === column.key) {
+                          {{ airStatusLabel(row.status) }}
                         } @else if ('hasFile' === column.key) {
                           {{ fileStatusLabel(row.hasFile) }}
                         } @else if ('customFormatScore' === column.key) {
@@ -105,6 +107,8 @@
                           <a [href]="row.url" class="text-link" target="_blank" rel="noopener" (click)="$event.stopPropagation()">
                             {{ row[column.key] }}
                           </a>
+                        } @else if ('status' === column.key) {
+                          {{ airStatusLabel(row.status) }}
                         } @else if ('hasFile' === column.key) {
                           {{ fileStatusLabel(row.hasFile) }}
                         } @else if ('customFormatScore' === column.key) {
