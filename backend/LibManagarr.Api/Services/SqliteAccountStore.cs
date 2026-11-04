@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using LibManagarr.Api.Models.Auth;
+using LibManagarr.Api.Services.Backup;
 
 namespace LibManagarr.Api.Services;
 
@@ -91,12 +92,13 @@ public sealed partial class SqliteAccountStore : IAccountStore
     ];
 
     private readonly string connectionString;
-    private readonly SemaphoreSlim storageGate = new(1, 1);
+    private readonly BackupWriteGate storageGate;
     private bool schemaApplied;
 
-    public SqliteAccountStore(StoragePaths storagePaths)
+    public SqliteAccountStore(StoragePaths storagePaths, BackupOperationCoordinator writes)
     {
         Directory.CreateDirectory(storagePaths.ConfigDirectory);
+        storageGate = new BackupWriteGate(writes);
         connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = Path.Combine(storagePaths.ConfigDirectory, DatabaseFileName)

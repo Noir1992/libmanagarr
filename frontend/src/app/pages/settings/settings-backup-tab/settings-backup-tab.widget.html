@@ -1,0 +1,403 @@
+<section class="tab-header">{{ descriptionLabel() }}</section>
+
+<section class="tab-content">
+  @if (errorMessage(); as message) {
+    <p class="field-error">{{ message }}</p>
+    @if (canRetry()) {
+      <div>
+        <button type="button" mat-stroked-button class="secondary-button" [disabled]="actionsBlocked()" (click)="retryAsync()">
+          {{ retryLabel() }}
+        </button>
+      </div>
+    }
+  }
+
+  @if (restoreNotice(); as notice) {
+    <p class="backup-notice" role="status" [class.backup-warning]="notice.kind === 'rolledBack'">{{ notice.text }}</p>
+  }
+
+  @if (restoreState() === 'restartDelayed') {
+    <div class="backup-notice backup-warning" role="status">
+      <p>{{ restartDelayedLabel() }}</p>
+      <button type="button" mat-stroked-button class="secondary-button" (click)="retryAsync()">{{ retryLabel() }}</button>
+    </div>
+  }
+
+  @if (restoreState() === 'restarting') {
+    <p class="backup-notice" role="status" aria-live="polite">{{ waitingLabel() }}</p>
+  }
+
+  @if (restoreState() === 'busy') {
+    <p class="backup-hint">{{ operationRunningLabel() }}</p>
+  }
+
+  <section class="card">
+    <div class="card-header">
+      {{ exportTitleLabel() }}
+      <app-info-icon [messageText]="exportInfoMessage()" />
+    </div>
+    <div class="card-content backup-stack">
+      @if (exportFailure(); as message) {
+        <section class="feedback error" aria-live="assertive">{{ message }}</section>
+      }
+
+      <form [formGroup]="exportForm" (ngSubmit)="exportAsync()">
+        <div class="field">
+          <div class="field-label-row">
+            <label for="export-backup-password">{{ backupPasswordLabel() }}*</label>
+            <app-info-icon [messageText]="backupPasswordInfo()" />
+          </div>
+          <div class="field-control-wrap password-wrap">
+            <input
+              matInput
+              id="export-backup-password"
+              [type]="exportPasswordVisible() ? 'text' : 'password'"
+              formControlName="backupPassword"
+              [class.has-error]="exportArchiveHasError"
+              autocomplete="new-password"
+              spellcheck="false"
+            />
+            <button
+              type="button"
+              mat-icon-button
+              class="material-symbols-outlined"
+              aria-controls="export-backup-password"
+              [attr.aria-label]="exportPasswordVisible() ? hidePasswordLabel() : showPasswordLabel()"
+              (click)="exportPasswordVisible.set(!exportPasswordVisible())"
+            >
+              <span aria-hidden="true">{{ exportPasswordVisible() ? 'visibility_off' : 'visibility' }}</span>
+            </button>
+          </div>
+          @if (exportForm.controls.backupPassword.touched && exportForm.controls.backupPassword.hasError('minlength')) {
+            <p class="field-error" aria-live="polite">{{ passwordLengthMessage() }}</p>
+          } @else {
+            @if (exportPasswordErrors().archivePassword; as message) {
+              <p class="field-error" aria-live="assertive">{{ message }}</p>
+            }
+          }
+        </div>
+
+        <div class="field">
+          <div class="field-label-row">
+            <label for="export-backup-password-confirm">{{ confirmBackupPasswordLabel() }}*</label>
+          </div>
+          <div class="field-control-wrap password-wrap">
+            <input
+              matInput
+              id="export-backup-password-confirm"
+              [type]="exportConfirmVisible() ? 'text' : 'password'"
+              formControlName="confirmBackupPassword"
+              [class.has-error]="exportConfirmHasError"
+              autocomplete="new-password"
+              spellcheck="false"
+            />
+            <button
+              type="button"
+              mat-icon-button
+              class="material-symbols-outlined"
+              aria-controls="export-backup-password-confirm"
+              [attr.aria-label]="exportConfirmVisible() ? hidePasswordLabel() : showPasswordLabel()"
+              (click)="exportConfirmVisible.set(!exportConfirmVisible())"
+            >
+              <span aria-hidden="true">{{ exportConfirmVisible() ? 'visibility_off' : 'visibility' }}</span>
+            </button>
+          </div>
+          @if (exportForm.controls.confirmBackupPassword.touched && !archivePasswordsMatch) {
+            <p class="field-error" aria-live="polite">{{ passwordMismatchMessage() }}</p>
+          }
+        </div>
+
+        <div class="field">
+          <div class="field-label-row">
+            <label for="export-current-password">{{ currentPasswordLabel() }}*</label>
+          </div>
+          <div class="field-control-wrap password-wrap">
+            <input
+              matInput
+              id="export-current-password"
+              [type]="exportProofVisible() ? 'text' : 'password'"
+              formControlName="currentPassword"
+              [class.has-error]="exportPasswordErrors().accountPassword !== null"
+              autocomplete="current-password"
+            />
+            <button
+              type="button"
+              mat-icon-button
+              class="material-symbols-outlined"
+              aria-controls="export-current-password"
+              [attr.aria-label]="exportProofVisible() ? hidePasswordLabel() : showPasswordLabel()"
+              (click)="exportProofVisible.set(!exportProofVisible())"
+            >
+              <span aria-hidden="true">{{ exportProofVisible() ? 'visibility_off' : 'visibility' }}</span>
+            </button>
+          </div>
+          @if (exportPasswordErrors().accountPassword; as message) {
+            <p class="field-error" aria-live="assertive">{{ message }}</p>
+          }
+        </div>
+
+        @if (twoFactorEnabled()) {
+          <div class="field">
+            <div class="field-label-row">
+              <label for="export-code">{{ exportCodeLabel() }}</label>
+            </div>
+            <div class="field-control-wrap">
+              <input
+                matInput
+                id="export-code"
+                type="text"
+                formControlName="code"
+                autocomplete="one-time-code"
+                autocapitalize="none"
+                spellcheck="false"
+              />
+            </div>
+          </div>
+
+          <div>
+            <button type="button" mat-button (click)="toggleExportRecoveryUsage()">{{ exportRecoveryLabel() }}</button>
+          </div>
+        }
+      </form>
+
+      <div>
+        <button
+          type="button"
+          mat-stroked-button
+          class="secondary-button"
+          [disabled]="!canExport || actionsBlocked()"
+          (click)="exportAsync()"
+        >
+          <span class="button-content">
+            <span>{{ exportLabel() }}</span>
+            <app-feedback-icon [state]="exportFeedbackState()" [tooltipText]="exportFeedbackMessage()" variant="inline" />
+          </span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-header">
+      {{ importTitleLabel() }}
+      <app-info-icon [messageText]="importInfoMessage()" />
+    </div>
+    <div class="card-content backup-stack">
+      <input #fileInput class="file-input" type="file" accept=".lmbak" (change)="handleFilePicked(fileInput)" />
+
+      <div class="backup-row">
+        <button type="button" mat-stroked-button class="secondary-button" [disabled]="actionsBlocked()" (click)="fileInput.click()">
+          {{ chooseFileLabel() }}
+        </button>
+        @if (selectedFile(); as file) {
+          <span class="backup-file-name" [title]="file.name">{{ file.name }}</span>
+        }
+      </div>
+
+      @if (selectedFile() !== null && preview() === null) {
+        @if (importFailure(); as message) {
+          <section class="feedback error" aria-live="assertive">{{ message }}</section>
+        }
+
+        <form [formGroup]="importForm" (ngSubmit)="validateAsync()">
+          <div class="field">
+            <div class="field-label-row">
+              <label for="import-backup-password">{{ backupPasswordLabel() }}*</label>
+            </div>
+            <div class="field-control-wrap password-wrap">
+              <input
+                matInput
+                id="import-backup-password"
+                [type]="importPasswordVisible() ? 'text' : 'password'"
+                formControlName="backupPassword"
+                [class.has-error]="importPasswordErrors().archivePassword !== null"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button
+                type="button"
+                mat-icon-button
+                class="material-symbols-outlined"
+                aria-controls="import-backup-password"
+                [attr.aria-label]="importPasswordVisible() ? hidePasswordLabel() : showPasswordLabel()"
+                (click)="importPasswordVisible.set(!importPasswordVisible())"
+              >
+                <span aria-hidden="true">{{ importPasswordVisible() ? 'visibility_off' : 'visibility' }}</span>
+              </button>
+            </div>
+            @if (importPasswordErrors().archivePassword; as message) {
+              <p class="field-error" aria-live="assertive">{{ message }}</p>
+            }
+          </div>
+
+          <div>
+            <button
+              type="button"
+              mat-stroked-button
+              class="secondary-button"
+              [disabled]="!canImport || actionsBlocked()"
+              (click)="validateAsync()"
+            >
+              <span class="button-content">
+                <span>{{ validateLabel() }}</span>
+                <app-feedback-icon [state]="importFeedbackState()" [tooltipText]="importFeedbackMessage()" variant="inline" />
+              </span>
+            </button>
+          </div>
+        </form>
+      }
+    </div>
+  </section>
+
+  @if (preview(); as entry) {
+    <section class="card">
+      <div class="card-header">{{ previewTitleLabel() }}</div>
+      <div class="card-content backup-grid">
+        <div class="field">
+          <div class="field-label-row">
+            <label for="backup-preview-version">{{ previewVersionLabel() }}</label>
+          </div>
+          <div class="field-control-wrap">
+            <input matInput id="backup-preview-version" type="text" disabled [value]="entry.applicationVersion" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label-row">
+            <label for="backup-preview-created">{{ previewCreatedLabel() }}</label>
+          </div>
+          <div class="field-control-wrap">
+            <input matInput id="backup-preview-created" type="text" disabled [value]="entry.createdAt | appDate: 'medium'" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label-row">
+            <label for="backup-preview-expires">{{ previewExpiresLabel() }}</label>
+          </div>
+          <div class="field-control-wrap">
+            <input matInput id="backup-preview-expires" type="text" disabled [value]="entry.expiresAt | appDate: 'short'" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label-row">
+            <label for="backup-preview-library-schema">{{ previewLibrarySchemaLabel() }}</label>
+          </div>
+          <div class="field-control-wrap">
+            <input matInput id="backup-preview-library-schema" type="text" disabled [value]="entry.librarySchemaVersion" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label-row">
+            <label for="backup-preview-instances">{{ previewInstancesLabel() }}</label>
+          </div>
+          <div class="field-control-wrap">
+            <input matInput id="backup-preview-instances" type="text" disabled [value]="instancesLabelOf(entry)" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label-row">
+            <label for="backup-preview-content">{{ previewContentLabel() }}</label>
+          </div>
+          <div class="field-control-wrap">
+            <input matInput id="backup-preview-content" type="text" disabled [value]="previewSettingsLabel()" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label-row">
+            <label for="backup-preview-size">{{ previewSizeLabel() }}</label>
+          </div>
+          <div class="field-control-wrap">
+            <input matInput id="backup-preview-size" type="text" disabled [value]="sizeLabelOf(entry)" />
+          </div>
+        </div>
+
+        @if (!entry.sameApplicationVersion) {
+          <p class="backup-notice backup-warning">{{ versionDiffersLabel() }}</p>
+        }
+
+        @if (applyFailure(); as message) {
+          <section class="feedback error" aria-live="assertive">{{ message }}</section>
+        }
+
+        <p class="backup-summary">{{ applySummary() }}</p>
+
+        <form [formGroup]="applyForm" (ngSubmit)="applyAsync()" class="apply-proof">
+          <div class="field">
+            <div class="field-label-row">
+              <label for="apply-current-password">{{ currentPasswordLabel() }}*</label>
+            </div>
+            <div class="field-control-wrap password-wrap">
+              <input
+                matInput
+                id="apply-current-password"
+                [type]="applyProofVisible() ? 'text' : 'password'"
+                formControlName="currentPassword"
+                [class.has-error]="applyPasswordErrors().accountPassword !== null"
+                autocomplete="current-password"
+              />
+              <button
+                type="button"
+                mat-icon-button
+                class="material-symbols-outlined"
+                aria-controls="apply-current-password"
+                [attr.aria-label]="applyProofVisible() ? hidePasswordLabel() : showPasswordLabel()"
+                (click)="applyProofVisible.set(!applyProofVisible())"
+              >
+                <span aria-hidden="true">{{ applyProofVisible() ? 'visibility_off' : 'visibility' }}</span>
+              </button>
+            </div>
+            @if (applyPasswordErrors().accountPassword; as message) {
+              <p class="field-error" aria-live="assertive">{{ message }}</p>
+            }
+          </div>
+
+          @if (twoFactorEnabled()) {
+            <div class="field">
+              <div class="field-label-row">
+                <label for="apply-code">{{ applyCodeLabel() }}</label>
+              </div>
+              <div class="field-control-wrap">
+                <input
+                  matInput
+                  id="apply-code"
+                  type="text"
+                  formControlName="code"
+                  autocomplete="one-time-code"
+                  autocapitalize="none"
+                  spellcheck="false"
+                />
+              </div>
+            </div>
+
+            <div>
+              <button type="button" mat-button (click)="toggleApplyRecoveryUsage()">{{ applyRecoveryLabel() }}</button>
+            </div>
+          }
+        </form>
+
+        <div class="backup-actions">
+          <button
+            type="button"
+            mat-stroked-button
+            class="secondary-button"
+            [disabled]="!canApply || actionsBlocked()"
+            (click)="applyAsync()"
+          >
+            <span class="button-content">
+              <span>{{ applyLabel() }}</span>
+              <app-feedback-icon [state]="applyFeedbackState()" [tooltipText]="applyFeedbackMessage()" variant="inline" />
+            </span>
+          </button>
+          <button type="button" mat-button class="cancel-button" [disabled]="actionsBlocked()" (click)="discardAsync()">
+            {{ discardLabel() }}
+          </button>
+        </div>
+      </div>
+    </section>
+  }
+</section>

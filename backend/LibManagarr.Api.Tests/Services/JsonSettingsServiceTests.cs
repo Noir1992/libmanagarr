@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using LibManagarr.Api.Models;
 using LibManagarr.Api.Services;
+using LibManagarr.Api.Services.Backup;
 
 namespace LibManagarr.Api.Tests.Services;
 
@@ -8,6 +9,7 @@ public sealed class JsonSettingsServiceTests : IDisposable
 {
     private readonly TestStorageEnvironment environment = new();
     private readonly InMemoryHistoryStore historyStore = new();
+    private readonly BackupOperationCoordinator writes = new(TimeProvider.System);
 
     [Fact]
     public async Task GetAsync_ShouldCreateAndPersistDefaultSettingsWhenNoFileExists()
@@ -29,7 +31,7 @@ public sealed class JsonSettingsServiceTests : IDisposable
     {
         StoragePaths storagePaths = new(environment, configDirectory: null);
         LogFileService logs = new(TimeProvider.System, storagePaths);
-        JsonSettingsService service = new(storagePaths, logs, historyStore);
+        JsonSettingsService service = new(storagePaths, logs, historyStore, writes);
         AppSettings settings = new()
         {
             Logging = new() { Path = " custom-logs ", RetentionDays = -1, MinimumLevel = LogLevel.Trace },
@@ -149,7 +151,7 @@ public sealed class JsonSettingsServiceTests : IDisposable
     private JsonSettingsService CreateService()
     {
         StoragePaths storagePaths = new(environment, configDirectory: null);
-        return new(storagePaths, new LogFileService(TimeProvider.System, storagePaths), historyStore);
+        return new(storagePaths, new LogFileService(TimeProvider.System, storagePaths), historyStore, writes);
     }
 
     [Fact]

@@ -139,6 +139,70 @@ TOTP secret, so `auth.db` without the keys (or vice versa) cannot be restored as
   the 2FA configuration are gone, but `settings.json` and the statistics history in
   `libmanagarr.db` are untouched.
 
+## Backup export and import
+
+**Settings → Backup** (`/settings?tab=backup`) downloads settings and application data as one archive
+and restores one later – the supported way to move an installation to another host. Everything else
+about the config folder above still holds: logs, the poster cache and temporary files are never part
+of an archive.
+
+**Inside the archive** (`libmanagarr-backup-<timestamp>.lmbak`): `settings.json`, `libmanagarr.db`,
+and a manifest with the application version, library schema version and a checksum per component.
+`auth.db` and `data-protection-keys/` are excluded: accounts, passwords, 2FA, recovery codes and sessions
+stay on the target installation. Set up the desired account before importing on a new installation.
+The archive is AES-256-GCM encrypted with a key derived from the backup password
+(PBKDF2-SHA512, 600 000 iterations) and capped at 512 MB.
+
+**Export** requires a fresh identity proof – account password, plus a 2FA or recovery code when 2FA
+is on – and a backup password of at least 12 characters, typed twice. That password is not stored
+anywhere, not even hashed: an archive whose password is lost cannot be opened again.
+
+**Import** takes the archive and its password and shows a preview first: application version,
+creation date, library schema version, the number of Sonarr/Radarr instances, and the packed versus
+unpacked size. Credentials and API keys are
+never displayed. A checked archive stays available for 15 minutes and only for the session that
+uploaded it; after that – or on **Discard** – it is dropped and has to be uploaded again.
+
+**Restore and restart** asks for the identity proof a second time, then writes
+`restore-journal.json` into the config folder and stops the backend host. The automatic host restart does the actual
+switch, before migrations, the settings file, the data-protection provider and the scheduler are
+touched: settings and the library database move out of the way into `<config>/backups/rollback-<operation-id>/`,
+the imported ones move in, and a final integrity check decides. On failure every file moves back and
+the previous state starts again; a crash between two moves is completed or undone by the journal, so
+a mix of the two states never comes up. The rollback copy stays on disk afterwards.
+
+**Automatic restart:** the application stops and disposes its complete backend host, closes pooled
+SQLite connections, and builds a fresh host in the same process before applying the restore.
+This works under Rider, with plain `dotnet LibManagarr.Api.dll`, and in Docker Compose. No child
+process or Docker API access is needed. An ordinary shutdown still exits normally; only a confirmed
+restore requests this host restart. Compose's `restart: unless-stopped` remains useful for process
+failures but is not required for this restore flow.
+
+The UI displays restart progress and polls the authenticated status route once per second. It matches
+the restore operation ID before treating a restore or rollback as complete, then reloads the frontend
+to discard cached configuration and show the result. Temporary connection failures during restart
+are expected. After two minutes without completion, it offers a connection retry and a backend log
+hint; retrying never submits the restore again.
+
+After a successful restore, **the target installation keeps its account, password, 2FA configuration,
+recovery-code usage and data-protection keys**. The archive does not change the application version.
+The account-free format is version 2; older version 1 archives containing account data are refused.
+Create a fresh backup before moving an installation. A pending restore journal containing auth or key
+components is also refused at startup and must be resolved before starting the application.
+An archive whose schema is unsupported by the installed build is refused, and an application version
+difference in the preview is shown as a warning.
+
+The calendar cache is not part of an archive either: after a restore the calendar loads releases and
+file state from the restored instance configuration on the next opening, so it reflects the sources
+rather than the backup point in time.
+
+**Rolling back by hand** is only needed when the automatic rollback could not finish and the
+application refuses to start (it logs the rollback directory in that case): stop the application,
+move the files back from `<config>/backups/rollback-<operation-id>/` into `<config>/`, remove
+`restore-journal.json` and the stale `libmanagarr.db-wal`/`libmanagarr.db-shm` sidecars, then start
+again. UI backup rollback only replaces settings and the library database; leave `auth.db` and
+`data-protection-keys/` on the target installation untouched.
+
 ## Updating
 
 ```bash

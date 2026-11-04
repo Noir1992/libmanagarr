@@ -1,14 +1,22 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using LibManagarr.Api.Models;
+using LibManagarr.Api.Services.Backup;
 
 namespace LibManagarr.Api.Services;
 
 public sealed class SqliteScheduledTaskStore(
-    StoragePaths paths, ScheduledTaskCatalog catalog, TimeProvider clock,
+    StoragePaths paths, ScheduledTaskCatalog catalog, TimeProvider clock, BackupOperationCoordinator writes,
     ILogger<SqliteScheduledTaskStore> logger) : IScheduledTaskStore
 {
     private readonly SemaphoreSlim initializationGate = new(1, 1);
+
+    /// <summary>
+    /// Task rows live in the same database as the library history, so their updates join the writer
+    /// coordination here instead of in every caller. An export that waits for open writers therefore
+    /// also waits for a task state that is about to be written.
+    /// </summary>
+    private readonly BackupWriteGate writeGate = new(writes);
     private bool initialized;
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -52,34 +60,50 @@ public sealed class SqliteScheduledTaskStore(
     public async Task<bool> UpdateConfigurationAsync(ScheduledTask task, long expectedRevision, CancellationToken cancellationToken)
     {
         await InitializeAsync(cancellationToken);
-        await using SqliteConnection connection = await OpenAsync(cancellationToken);
-        using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = """
-            UPDATE scheduled_tasks SET enabled=$enabled, schedule_mode=$mode, interval_unit=$unit,
-                interval_value=$value, time_hour=$hour, time_minute=$minute, every_n_days=$days,
-                next_run_at=$next, revision=revision+1
-            WHERE task_key=$key AND revision=$revision
-            """;
-        AddConfiguration(command, task);
-        command.Parameters.AddWithValue("$revision", expectedRevision);
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        await writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using SqliteConnection connection = await OpenAsync(cancellationToken);
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE scheduled_tasks SET enabled=$enabled, schedule_mode=$mode, interval_unit=$unit,
+                    interval_value=$value, time_hour=$hour, time_minute=$minute, every_n_days=$days,
+                    next_run_at=$next, revision=revision+1
+                WHERE task_key=$key AND revision=$revision
+                """;
+            AddConfiguration(command, task);
+            command.Parameters.AddWithValue("$revision", expectedRevision);
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        }
+        finally
+        {
+            writeGate.Release();
+        }
     }
 
     public async Task<bool> UpdateRunAsync(string taskKey, long expectedRevision, DateTimeOffset? lastRunAt,
         DateTimeOffset? nextRunAt, CancellationToken cancellationToken)
     {
         await InitializeAsync(cancellationToken);
-        await using SqliteConnection connection = await OpenAsync(cancellationToken);
-        using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = """
-            UPDATE scheduled_tasks SET last_run_at=COALESCE($last, last_run_at), next_run_at=$next
-            WHERE task_key=$key AND revision=$revision
-            """;
-        command.Parameters.AddWithValue("$key", taskKey);
-        command.Parameters.AddWithValue("$revision", expectedRevision);
-        command.Parameters.AddWithValue("$last", Timestamp(lastRunAt));
-        command.Parameters.AddWithValue("$next", Timestamp(nextRunAt));
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        await writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using SqliteConnection connection = await OpenAsync(cancellationToken);
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE scheduled_tasks SET last_run_at=COALESCE($last, last_run_at), next_run_at=$next
+                WHERE task_key=$key AND revision=$revision
+                """;
+            command.Parameters.AddWithValue("$key", taskKey);
+            command.Parameters.AddWithValue("$revision", expectedRevision);
+            command.Parameters.AddWithValue("$last", Timestamp(lastRunAt));
+            command.Parameters.AddWithValue("$next", Timestamp(nextRunAt));
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        }
+        finally
+        {
+            writeGate.Release();
+        }
     }
 
     internal static void AddConfiguration(SqliteCommand command, ScheduledTask task)

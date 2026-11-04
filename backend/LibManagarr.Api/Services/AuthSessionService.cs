@@ -99,6 +99,14 @@ public sealed class AuthSessionService
         await accountStore.RevokeSessionByTokenHashAsync(HashToken(sessionToken), timeProvider.GetUtcNow(), cancellationToken);
     }
 
+    /// <summary>
+    /// Hash of the session token of a request, the only form it may be compared or handed to another
+    /// service in. Backup tickets bind to this value, so a stolen ticket cannot be replayed from
+    /// another browser.
+    /// </summary>
+    public static string HashSessionToken(HttpContext httpContext) =>
+        HashToken(httpContext.User.FindFirstValue(SessionTokenClaimType) ?? string.Empty);
+
     internal static string HashToken(string sessionToken) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sessionToken)));
 }

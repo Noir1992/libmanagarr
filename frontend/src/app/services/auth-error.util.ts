@@ -72,6 +72,19 @@ export function toAuthRequestError(error: unknown, fallbackMessage: string): Aut
     return new AuthRequestError(error.message ?? fallbackMessage, error.status, null, {});
   }
 
+  // A caller that reads a blob body itself hands over the decoded document, which is neither a
+  // response nor an error object and would otherwise lose the problem code it carries.
+  const decodedProblem: ProblemPayload | null = readProblemPayload(error);
+
+  if (decodedProblem !== null) {
+    return new AuthRequestError(
+      decodedProblem.detail ?? decodedProblem.title ?? fallbackMessage,
+      decodedProblem.status ?? 0,
+      decodedProblem.code ?? null,
+      decodedProblem.errors ?? {},
+    );
+  }
+
   return new AuthRequestError(error instanceof Error && error.message.trim().length > 0 ? error.message : fallbackMessage, 0, null, {});
 }
 
