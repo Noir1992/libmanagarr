@@ -39,15 +39,26 @@
             <div class="field-label-row">
               <label for="account-current-password">{{ currentPasswordLabel() }}</label>
             </div>
-            <div class="field-control-wrap">
+            <div class="field-control-wrap password-wrap">
               <input
                 matInput
                 id="account-current-password"
-                type="password"
+                [type]="currentPasswordVisible() ? 'text' : 'password'"
                 formControlName="currentPassword"
                 autocomplete="current-password"
                 [disabled]="passwordBusy()"
               />
+              <button
+                type="button"
+                mat-icon-button
+                class="material-symbols-outlined"
+                aria-controls="account-current-password"
+                [attr.aria-label]="currentPasswordVisible() ? hidePasswordLabel() : showPasswordLabel()"
+                [disabled]="passwordBusy()"
+                (click)="currentPasswordVisible.set(!currentPasswordVisible())"
+              >
+                <span aria-hidden="true">{{ currentPasswordVisible() ? 'visibility_off' : 'visibility' }}</span>
+              </button>
             </div>
             @if (passwordFieldErrors().currentPassword) {
               <p class="field-error">{{ passwordFieldErrors().currentPassword }}</p>
@@ -59,15 +70,26 @@
               <label for="account-new-password">{{ newPasswordLabel() }}</label>
               <app-info-icon [messageText]="passwordRequirements()" />
             </div>
-            <div class="field-control-wrap">
+            <div class="field-control-wrap password-wrap">
               <input
                 matInput
                 id="account-new-password"
-                type="password"
+                [type]="newPasswordVisible() ? 'text' : 'password'"
                 formControlName="newPassword"
                 autocomplete="new-password"
                 [disabled]="passwordBusy()"
               />
+              <button
+                type="button"
+                mat-icon-button
+                class="material-symbols-outlined"
+                aria-controls="account-new-password"
+                [attr.aria-label]="newPasswordVisible() ? hidePasswordLabel() : showPasswordLabel()"
+                [disabled]="passwordBusy()"
+                (click)="newPasswordVisible.set(!newPasswordVisible())"
+              >
+                <span aria-hidden="true">{{ newPasswordVisible() ? 'visibility_off' : 'visibility' }}</span>
+              </button>
             </div>
             @if (
               passwordForm.controls.newPassword.dirty &&
@@ -83,15 +105,26 @@
             <div class="field-label-row">
               <label for="account-confirm-password">{{ confirmPasswordLabel() }}</label>
             </div>
-            <div class="field-control-wrap">
+            <div class="field-control-wrap password-wrap">
               <input
                 matInput
                 id="account-confirm-password"
-                type="password"
+                [type]="confirmPasswordVisible() ? 'text' : 'password'"
                 formControlName="confirmPassword"
                 autocomplete="new-password"
                 [disabled]="passwordBusy()"
               />
+              <button
+                type="button"
+                mat-icon-button
+                class="material-symbols-outlined"
+                aria-controls="account-confirm-password"
+                [attr.aria-label]="confirmPasswordVisible() ? hidePasswordLabel() : showPasswordLabel()"
+                [disabled]="passwordBusy()"
+                (click)="confirmPasswordVisible.set(!confirmPasswordVisible())"
+              >
+                <span aria-hidden="true">{{ confirmPasswordVisible() ? 'visibility_off' : 'visibility' }}</span>
+              </button>
             </div>
             @if (passwordFieldErrors().confirmPassword) {
               <p class="field-error">{{ passwordFieldErrors().confirmPassword }}</p>
@@ -243,15 +276,26 @@
               <div class="field-label-row">
                 <label for="account-disable-password">{{ currentPasswordLabel() }}</label>
               </div>
-              <div class="field-control-wrap">
+              <div class="field-control-wrap password-wrap">
                 <input
                   matInput
                   id="account-disable-password"
-                  type="password"
+                  [type]="disablePasswordVisible() ? 'text' : 'password'"
                   formControlName="currentPassword"
                   autocomplete="current-password"
                   [disabled]="disableBusy()"
                 />
+                <button
+                  type="button"
+                  mat-icon-button
+                  class="material-symbols-outlined"
+                  aria-controls="account-disable-password"
+                  [attr.aria-label]="disablePasswordVisible() ? hidePasswordLabel() : showPasswordLabel()"
+                  [disabled]="disableBusy()"
+                  (click)="disablePasswordVisible.set(!disablePasswordVisible())"
+                >
+                  <span aria-hidden="true">{{ disablePasswordVisible() ? 'visibility_off' : 'visibility' }}</span>
+                </button>
               </div>
             </div>
 
@@ -301,15 +345,26 @@
               <div class="field-label-row">
                 <label for="account-rotate-password">{{ currentPasswordLabel() }}</label>
               </div>
-              <div class="field-control-wrap">
+              <div class="field-control-wrap password-wrap">
                 <input
                   matInput
                   id="account-rotate-password"
-                  type="password"
+                  [type]="rotatePasswordVisible() ? 'text' : 'password'"
                   formControlName="currentPassword"
                   autocomplete="current-password"
                   [disabled]="rotateBusy()"
                 />
+                <button
+                  type="button"
+                  mat-icon-button
+                  class="material-symbols-outlined"
+                  aria-controls="account-rotate-password"
+                  [attr.aria-label]="rotatePasswordVisible() ? hidePasswordLabel() : showPasswordLabel()"
+                  [disabled]="rotateBusy()"
+                  (click)="rotatePasswordVisible.set(!rotatePasswordVisible())"
+                >
+                  <span aria-hidden="true">{{ rotatePasswordVisible() ? 'visibility_off' : 'visibility' }}</span>
+                </button>
               </div>
             </div>
 

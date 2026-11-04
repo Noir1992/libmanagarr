@@ -72,6 +72,8 @@ export class SettingsAccountTabWidget extends SettingsUnsavedChangesBase impleme
   protected readonly currentPasswordLabel: Signal<string> = computed((): string => this.i18n.t('settings.account.currentPassword'));
   protected readonly newPasswordLabel: Signal<string> = computed((): string => this.i18n.t('settings.account.newPassword'));
   protected readonly confirmPasswordLabel: Signal<string> = computed((): string => this.i18n.t('settings.account.confirmPassword'));
+  protected readonly showPasswordLabel: Signal<string> = computed((): string => this.i18n.t('auth.showPassword'));
+  protected readonly hidePasswordLabel: Signal<string> = computed((): string => this.i18n.t('auth.hidePassword'));
   protected readonly passwordLengthMessage: Signal<string> = computed((): string => this.i18n.t('auth.passwordLength'));
   protected readonly passwordRequirements: Signal<string> = computed((): string => this.i18n.t('auth.passwordRequirements'));
   protected readonly changePasswordLabel: Signal<string> = computed((): string => this.i18n.t('settings.account.changePassword'));
@@ -122,6 +124,9 @@ export class SettingsAccountTabWidget extends SettingsUnsavedChangesBase impleme
   protected readonly passwordFieldErrors: WritableSignal<PasswordFieldErrors> = signal<PasswordFieldErrors>(NO_PASSWORD_ERRORS);
   protected readonly passwordChanged: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly passwordUseRecovery: WritableSignal<boolean> = signal<boolean>(false);
+  protected readonly currentPasswordVisible: WritableSignal<boolean> = signal<boolean>(false);
+  protected readonly newPasswordVisible: WritableSignal<boolean> = signal<boolean>(false);
+  protected readonly confirmPasswordVisible: WritableSignal<boolean> = signal<boolean>(false);
 
   protected readonly enableStep: WritableSignal<EnableStep> = signal<EnableStep>('idle');
   protected readonly enableBusy: WritableSignal<boolean> = signal<boolean>(false);
@@ -136,9 +141,11 @@ export class SettingsAccountTabWidget extends SettingsUnsavedChangesBase impleme
   protected readonly disableBusy: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly disableError: WritableSignal<string | null> = signal<string | null>(null);
   protected readonly disableUseRecovery: WritableSignal<boolean> = signal<boolean>(false);
+  protected readonly disablePasswordVisible: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly rotateBusy: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly rotateError: WritableSignal<string | null> = signal<string | null>(null);
   protected readonly rotateUseRecovery: WritableSignal<boolean> = signal<boolean>(false);
+  protected readonly rotatePasswordVisible: WritableSignal<boolean> = signal<boolean>(false);
 
   /* Forms */
   protected readonly passwordForm: PasswordFormGroup = this.formBuilder.group(
