@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using LibManagarr.Api.Models;
 using LibManagarr.Api.Services;
+using LibManagarr.Api.Services.Backup;
 
 namespace LibManagarr.Api.Tests.Services;
 
@@ -22,13 +23,14 @@ public sealed class ScheduledTaskExecutionTests : IDisposable
     public ScheduledTaskExecutionTests()
     {
         var catalog = ScheduledTaskStoreTests.CreateCatalog();
-        store = new(new StoragePaths(environment, null), catalog, clock, NullLogger<SqliteScheduledTaskStore>.Instance);
+        BackupOperationCoordinator writes = new(clock);
+        store = new(new StoragePaths(environment, null), catalog, clock, writes, NullLogger<SqliteScheduledTaskStore>.Instance);
         tasks = new(store, catalog, clock);
         ServiceCollection services = new();
         services.AddScoped<IScheduledTaskHandler>(_ => sync);
         services.AddScoped<IScheduledTaskHandler>(_ => cleanup);
         provider = services.BuildServiceProvider();
-        execution = new(store, tasks, provider.GetRequiredService<IServiceScopeFactory>(), clock,
+        execution = new(store, tasks, provider.GetRequiredService<IServiceScopeFactory>(), writes, clock,
             lifetime, NullLogger<ScheduledTaskExecutionService>.Instance);
     }
 

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using LibManagarr.Api.Models;
+using LibManagarr.Api.Services.Backup;
 
 namespace LibManagarr.Api.Services;
 
@@ -22,16 +23,18 @@ public sealed class JsonSettingsService : ISettingsService
         }
     };
 
-    private readonly SemaphoreSlim storageLock = new(1, 1);
+    private readonly BackupWriteGate storageLock;
     private readonly string settingsPath;
     private readonly LogFileService logFileService;
     private readonly IHistoryStore historyStore;
     private AppSettings? snapshot;
 
-    public JsonSettingsService(StoragePaths storagePaths, LogFileService logFileService, IHistoryStore historyStore)
+    public JsonSettingsService(StoragePaths storagePaths, LogFileService logFileService, IHistoryStore historyStore,
+        BackupOperationCoordinator writes)
     {
         this.logFileService = logFileService;
         this.historyStore = historyStore;
+        storageLock = new BackupWriteGate(writes);
         Directory.CreateDirectory(storagePaths.ConfigDirectory);
         settingsPath = Path.Combine(storagePaths.ConfigDirectory, "settings.json");
     }

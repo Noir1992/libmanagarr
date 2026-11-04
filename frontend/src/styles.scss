@@ -85,7 +85,7 @@ button:disabled {
 
   &.error {
     color: var(--theme-danger-color);
-    background: #fee4e2;
+    background: var(--theme-danger-surface);
   }
 
   &.success {

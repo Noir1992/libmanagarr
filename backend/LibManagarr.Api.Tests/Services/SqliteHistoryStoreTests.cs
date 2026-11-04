@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using LibManagarr.Api.Models;
 using LibManagarr.Api.Services;
+using LibManagarr.Api.Services.Backup;
 
 namespace LibManagarr.Api.Tests.Services;
 
@@ -152,7 +153,7 @@ public sealed class SqliteHistoryStoreTests : IDisposable
         Assert.Contains("\"series\":", payload);
     }
 
-    private SqliteHistoryStore CreateStore() => new(new StoragePaths(environment, configDirectory: null));
+    private SqliteHistoryStore CreateStore() => new(new StoragePaths(environment, configDirectory: null), new BackupOperationCoordinator(TimeProvider.System));
 
     [Fact]
     public async Task InstanceSnapshots_ShouldRoundTripPayload_AndReplacePerKind()

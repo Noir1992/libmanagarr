@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using LibManagarr.Api.Models;
+using LibManagarr.Api.Services.Backup;
 
 namespace LibManagarr.Api.Services;
 
@@ -72,12 +73,13 @@ public sealed class SqliteHistoryStore : IHistoryStore
     ];
 
     private readonly string connectionString;
-    private readonly SemaphoreSlim storageGate = new(1, 1);
+    private readonly BackupWriteGate storageGate;
     private bool schemaApplied;
 
-    public SqliteHistoryStore(StoragePaths storagePaths)
+    public SqliteHistoryStore(StoragePaths storagePaths, BackupOperationCoordinator writes)
     {
         Directory.CreateDirectory(storagePaths.ConfigDirectory);
+        storageGate = new BackupWriteGate(writes);
         connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = storagePaths.DatabasePath
