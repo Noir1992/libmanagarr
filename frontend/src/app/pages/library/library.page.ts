@@ -43,6 +43,7 @@ import { AppSettingsService } from '../../services/app-settings.service';
 import { RadarrApiService } from '../../services/radarr-api.service';
 import { SonarrApiService } from '../../services/sonarr-api.service';
 import { normalizeBaseUrl } from '../../utils/base-utils';
+import { airStatusLabel as translateAirStatus } from '../../utils/air-status-label.util';
 import { episodeDetailData, movieDetailData } from '../../utils/media-detail-utils';
 import { airStatusTone, fileStatusTone, libraryStatusTone } from '../../utils/media-status-tone.util';
 import { normalizeResolutionGroup, RESOLUTION_GROUPS } from '../../utils/resolution-statistics-utils';
@@ -205,7 +206,7 @@ export class LibraryPage implements OnInit, OnDestroy {
           movieData: { ...movieDetailData(movie, table.instanceName), posterUrl },
           detailRows: [
             { label: this.i18n.t('common.column.instance'), value: table.instanceName },
-            { label: this.i18n.t('filter.airStatus'), value: movie.status, tone: airStatusTone(movie.status) },
+            { label: this.i18n.t('filter.airStatus'), value: this.airStatusLabel(movie.status), tone: airStatusTone(movie.status) },
             {
               label: this.i18n.t('filter.fileStatus'),
               value: this.fileStatusLabel(movie.hasFile),
@@ -252,7 +253,7 @@ export class LibraryPage implements OnInit, OnDestroy {
           },
           detailRows: [
             { label: this.i18n.t('common.column.instance'), value: table.instanceName },
-            { label: this.i18n.t('filter.airStatus'), value: series.status, tone: airStatusTone(series.status) },
+            { label: this.i18n.t('filter.airStatus'), value: this.airStatusLabel(series.status), tone: airStatusTone(series.status) },
             {
               label: this.i18n.t('filter.fileStatus'),
               value: this.seriesFileStatusLabel(series),
@@ -373,7 +374,7 @@ export class LibraryPage implements OnInit, OnDestroy {
         id: 'status-filter',
         label: this.i18n.t('filter.airStatus'),
         type: FilterOptionType.MULTISELECT,
-        options: this.arrInstanceFilters().statuses.map((s) => ({ value: s, label: s })),
+        options: this.arrInstanceFilters().statuses.map((s) => ({ value: s, label: this.airStatusLabel(s) })),
         selectedValues: [],
         onChanged: () => this.loadData(),
       },
@@ -1004,6 +1005,10 @@ export class LibraryPage implements OnInit, OnDestroy {
 
   protected fileStatusLabel(hasFile: boolean | undefined): string {
     return hasFile === undefined ? this.naLabel() : this.i18n.t(hasFile ? 'filter.filePresent' : 'filter.fileMissing');
+  }
+
+  protected airStatusLabel(status: string | undefined): string {
+    return translateAirStatus(status, this.i18n);
   }
 
   protected monitoredLabel(monitored: boolean | undefined): string {
