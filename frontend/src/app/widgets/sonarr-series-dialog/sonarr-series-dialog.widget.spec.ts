@@ -144,7 +144,7 @@ describe('SonarrSeriesDialogWidget episode table', () => {
       expect(rows).toEqual({
         Instance: 'My Sonarr',
         Profile: 'HD',
-        'Aired status': 'continuing',
+        'Aired status': 'Continuing',
         Added: 'N/A',
         'Library status': 'Missing',
         'Total size': 'N/A',

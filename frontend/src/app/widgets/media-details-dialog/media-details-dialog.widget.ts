@@ -7,6 +7,7 @@ import { MediaGridDetailTone } from '../../interfaces/general/media-grid-item';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { AppSettingsService } from '../../services/app-settings.service';
 import { TranslationKey } from '../../services/i18n/_i18n-key';
+import { airStatusLabel } from '../../utils/air-status-label.util';
 import { airStatusTone, fileStatusTone } from '../../utils/media-status-tone.util';
 
 @Component({
@@ -52,7 +53,7 @@ export class MediaDetailsDialogWidget {
     } else {
       rows.push(
         row('common.column.instance', value(d.instanceName)),
-        row('filter.airStatus', value(d.status), airStatusTone(d.status)),
+        row('filter.airStatus', airStatusLabel(d.status, this.i18n), airStatusTone(d.status)),
         row('filter.addedRange', date(d.addedAt)),
         row('common.column.profile', value(d.qualityProfileName)),
         row('filter.genres', list(d.genres)),
