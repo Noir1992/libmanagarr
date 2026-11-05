@@ -28,6 +28,28 @@ describe('AuthWaitService', () => {
     return service.countdownOf(kind);
   }
 
+  /** The instant every wait of this suite is measured from. */
+  const clockBase: Date = new Date('2026-11-04T12:00:00Z');
+
+  /**
+   * Runs a body with the clock held at `clockBase`. Building a wait and recording it read the clock
+   * once each, and a countdown is floored, so a single millisecond between those two reads would
+   * otherwise shorten the exact text by a second — which the runner decides, not the code.
+   */
+  function withFrozenClock(body: () => void): void {
+    jasmine.clock().install();
+    jasmine.clock().mockDate(clockBase);
+
+    try {
+      body();
+    } finally {
+      // Stops the ticking interval through the faked clearInterval, so the real one is never handed
+      // an id of the mock clock after the uninstall below.
+      service.clear();
+      jasmine.clock().uninstall();
+    }
+  }
+
   it('should hand the very error back so a caller records without changing its throw', () => {
     const error: AuthRequestError = refusal('account_locked', 60);
 
@@ -42,20 +64,24 @@ describe('AuthWaitService', () => {
   });
 
   it('should keep a locked account apart from a busy ip address', () => {
-    service.record(refusal('account_locked', 45));
+    withFrozenClock((): void => {
+      service.record(refusal('account_locked', 45));
 
-    expect(service.accountLocked()).toBeTrue();
-    expect(countdownOf('account_lock')).toBe('00:45');
-    expect(countdownOf('ip_limit')).toBeNull();
+      expect(service.accountLocked()).toBeTrue();
+      expect(countdownOf('account_lock')).toBe('00:45');
+      expect(countdownOf('ip_limit')).toBeNull();
+    });
   });
 
   it('should remember both waits at once', () => {
-    service.record(refusal('account_locked', 120));
-    service.record(refusal('too_many_requests', 30));
+    withFrozenClock((): void => {
+      service.record(refusal('account_locked', 120));
+      service.record(refusal('too_many_requests', 30));
 
-    expect(service.accountLocked()).toBeTrue();
-    expect(countdownOf('account_lock')).toBe('02:00');
-    expect(countdownOf('ip_limit')).toBe('00:30');
+      expect(service.accountLocked()).toBeTrue();
+      expect(countdownOf('account_lock')).toBe('02:00');
+      expect(countdownOf('ip_limit')).toBe('00:30');
+    });
   });
 
   it('should report waiting while either wait runs', () => {
@@ -106,10 +132,7 @@ describe('AuthWaitService', () => {
   });
 
   it('should advance the countdown with the clock and let go once it ran out', () => {
-    jasmine.clock().install();
-    jasmine.clock().mockDate(new Date('2026-11-04T12:00:00Z'));
-
-    try {
+    withFrozenClock((): void => {
       service.record(refusal('account_locked', 3));
       expect(countdownOf('account_lock')).toBe('00:03');
 
@@ -119,8 +142,6 @@ describe('AuthWaitService', () => {
       jasmine.clock().tick(3000);
       expect(countdownOf('account_lock')).toBeNull();
       expect(service.waiting()).toBeFalse();
-    } finally {
-      jasmine.clock().uninstall();
-    }
+    });
   });
 });

@@ -36,6 +36,28 @@ describe('AuthWaitHintWidget', () => {
     return fixture.nativeElement.querySelectorAll('.auth-wait-line');
   }
 
+  /** The instant every wait of this suite is measured from. */
+  const clockBase: Date = new Date('2026-11-04T12:00:00Z');
+
+  /**
+   * Runs a body with the clock held at `clockBase`, so a wait is built and recorded on the same
+   * instant. The countdown text is exact and floored, which the runner would otherwise decide with
+   * whatever milliseconds pass between those two reads.
+   */
+  function withFrozenClock(body: () => void): void {
+    jasmine.clock().install();
+    jasmine.clock().mockDate(clockBase);
+
+    try {
+      body();
+    } finally {
+      // Stops the ticking interval through the faked clearInterval, so the real one is never handed
+      // an id of the mock clock after the uninstall below.
+      waitService.clear();
+      jasmine.clock().uninstall();
+    }
+  }
+
   it('should stay out of the way while no wait is known', () => {
     render();
 
@@ -43,15 +65,17 @@ describe('AuthWaitHintWidget', () => {
   });
 
   it('should name the remaining time and the instant the lock runs to', () => {
-    waitService.record(refusal('account_locked', 300));
+    withFrozenClock((): void => {
+      waitService.record(refusal('account_locked', 300));
 
-    render();
+      render();
 
-    const countdown: Element | null = fixture.nativeElement.querySelector('.auth-wait-countdown');
-    const detail: Element | null = fixture.nativeElement.querySelector('.auth-wait-detail');
+      const countdown: Element | null = fixture.nativeElement.querySelector('.auth-wait-countdown');
+      const detail: Element | null = fixture.nativeElement.querySelector('.auth-wait-detail');
 
-    expect(countdown?.textContent).toContain('Try again in 05:00.');
-    expect(detail?.textContent).toContain('Unlocks at');
+      expect(countdown?.textContent).toContain('Try again in 05:00.');
+      expect(detail?.textContent).toContain('Unlocks at');
+    });
   });
 
   it('should keep the ticking countdown out of the accessibility tree', () => {
