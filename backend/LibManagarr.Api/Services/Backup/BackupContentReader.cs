@@ -77,10 +77,56 @@ internal static class BackupContentReader
                     return $"The {arrayProperty} entry in the backup is not a list.";
                 }
             }
+
+            return ValidateAuthProtection(root);
+        }
+    }
+
+    /// <summary>
+    /// Refuses limits the restored installation could not live with: a request budget of zero turns
+    /// down every protected route, and the form that would raise it again sits behind that same
+    /// budget, so the restore would lock everybody out without a way back in. An absent section or
+    /// field is not a failure here, because the settings service supplies the defaults the first
+    /// time it reads the file.
+    /// </summary>
+    private static string? ValidateAuthProtection(JsonElement root)
+    {
+        if (!root.TryGetProperty("authProtection", out JsonElement authProtection))
+        {
+            return null;
+        }
+
+        if (authProtection.ValueKind != JsonValueKind.Object)
+        {
+            return "The authProtection entry in the backup is not a settings object.";
+        }
+
+        foreach ((string property, int minimum, int maximum) in AuthProtectionLimits)
+        {
+            if (!authProtection.TryGetProperty(property, out JsonElement value))
+            {
+                continue;
+            }
+
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out int limit))
+            {
+                return $"The authProtection.{property} entry in the backup is not a whole number.";
+            }
+
+            if (limit < minimum || limit > maximum)
+            {
+                return $"The authProtection.{property} entry in the backup must be between {minimum} and {maximum}.";
+            }
         }
 
         return null;
     }
+
+    private static readonly (string Property, int Minimum, int Maximum)[] AuthProtectionLimits =
+    [
+        ("requestsPerMinute", AppSettingsValidator.MinRequestsPerMinute, AppSettingsValidator.MaxRequestsPerMinute),
+        ("maxFailedAttempts", AppSettingsValidator.MinMaxFailedAttempts, AppSettingsValidator.MaxMaxFailedAttempts)
+    ];
 
     private static int CountArray(JsonElement root, string propertyName) =>
         root.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.Array ? value.GetArrayLength() : 0;

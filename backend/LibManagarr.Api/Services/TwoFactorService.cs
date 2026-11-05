@@ -47,12 +47,14 @@ public sealed class TwoFactorService
     private readonly IAccountStore accountStore;
     private readonly TimeProvider timeProvider;
     private readonly IDataProtector secretProtector;
+    private readonly ISettingsService settingsService;
 
-    public TwoFactorService(IAccountStore accountStore, TimeProvider timeProvider, IDataProtectionProvider dataProtectionProvider)
+    public TwoFactorService(IAccountStore accountStore, TimeProvider timeProvider, IDataProtectionProvider dataProtectionProvider, ISettingsService settingsService)
     {
         this.accountStore = accountStore;
         this.timeProvider = timeProvider;
         this.secretProtector = dataProtectionProvider.CreateProtector("LibManagarr.TwoFactorSecret.v1");
+        this.settingsService = settingsService;
     }
 
     public static byte[] GenerateSecret() => KeyGeneration.GenerateRandomKey(SecretByteLength);
@@ -147,11 +149,11 @@ public sealed class TwoFactorService
     public Task CancelSetupForSessionAsync(string sessionToken, CancellationToken cancellationToken) =>
         accountStore.RevokeSetupsForSessionAsync(AuthSessionService.HashToken(sessionToken), timeProvider.GetUtcNow(), cancellationToken);
 
-    public async Task RecordSetupFailureAsync(TwoFactorSetupRecord setup, CancellationToken cancellationToken)
+    public async Task<AccountOperationResult> RecordSetupFailureAsync(TwoFactorSetupRecord setup, CancellationToken cancellationToken)
     {
         DateTimeOffset now = timeProvider.GetUtcNow();
         await accountStore.IncrementSetupAttemptAsync(setup.Id, MaxSetupAttempts, now, cancellationToken);
-        await accountStore.RegisterFailedAccessAttemptAsync(setup.AccountId, AccountService.MaxFailedAccessAttempts, AccountService.LockoutDuration, now, cancellationToken);
+        return await RegisterAccountFailureAsync(setup.AccountId, now, cancellationToken);
     }
 
     public async Task<IssuedChallenge> CreateLoginChallengeAsync(AccountRecord account, CancellationToken cancellationToken)
@@ -183,11 +185,23 @@ public sealed class TwoFactorService
             ? Task.FromResult<TwoFactorChallengeRecord?>(null)
             : accountStore.FindChallengeByTokenHashAsync(AuthSessionService.HashToken(challengeToken), cancellationToken);
 
-    public async Task RecordChallengeFailureAsync(TwoFactorChallengeRecord challenge, CancellationToken cancellationToken)
+    public async Task<AccountOperationResult> RecordChallengeFailureAsync(TwoFactorChallengeRecord challenge, CancellationToken cancellationToken)
     {
         DateTimeOffset now = timeProvider.GetUtcNow();
         await accountStore.IncrementChallengeAttemptsAsync(challenge.TokenHash, MaxWrongChallengeAttempts, now, cancellationToken);
-        await accountStore.RegisterFailedAccessAttemptAsync(challenge.AccountId, AccountService.MaxFailedAccessAttempts, AccountService.LockoutDuration, now, cancellationToken);
+        return await RegisterAccountFailureAsync(challenge.AccountId, now, cancellationToken);
+    }
+
+    /// <summary>
+    /// A wrong second factor is counted on the shared account counter with the currently stored
+    /// limit. The answer is the state the row really holds afterwards, so reaching the limit is
+    /// reported as the lock itself and never as another wrong code.
+    /// </summary>
+    private async Task<AccountOperationResult> RegisterAccountFailureAsync(int accountId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        int maxFailedAttempts = (await settingsService.GetAsync(cancellationToken)).AuthProtection.MaxFailedAttempts;
+        AccountRecord? state = await accountStore.RegisterFailedAccessAttemptAsync(accountId, maxFailedAttempts, AccountService.LockoutDuration, now, cancellationToken);
+        return AccountOperationResult.FromFailure(state, now, AccountOperationStatus.InvalidSecondFactor, maxFailedAttempts);
     }
 
     public Task<bool> CompleteLoginAsync(AccountRecord account, TwoFactorChallengeRecord challenge,

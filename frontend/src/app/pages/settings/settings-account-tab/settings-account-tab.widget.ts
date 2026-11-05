@@ -16,6 +16,8 @@ import { TwoFactorSetupBackend } from '../../../interfaces/auth/two-factor-setup
 import { AccountService } from '../../../services/account.service';
 import { AuthService } from '../../../services/auth.service';
 import { AuthRequestError, translateAuthError, translateAuthFieldError } from '../../../services/auth-error.util';
+import { AuthWaitService } from '../../../services/auth-wait.service';
+import { AuthWaitHintWidget } from '../../../widgets/auth-wait-hint/auth-wait-hint.widget';
 import { InfoIconWidget } from '../../../widgets/info-icon/info-icon.widget';
 import { SettingsUnsavedChangesBase } from '../settings-unsaved-changes.base';
 
@@ -53,7 +55,7 @@ const RECOVERY_CODE_FILE_NAME: string = 'libmanagarr-recovery-codes.txt';
  */
 @Component({
   selector: 'app-settings-account-tab-widget',
-  imports: [ReactiveFormsModule, MatButtonModule, MatInput, InfoIconWidget],
+  imports: [ReactiveFormsModule, MatButtonModule, MatInput, AuthWaitHintWidget, InfoIconWidget],
   templateUrl: './settings-account-tab.widget.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './settings-account-tab.widget.scss',
@@ -62,6 +64,7 @@ export class SettingsAccountTabWidget extends SettingsUnsavedChangesBase impleme
   /* Injections */
   private readonly accountService: AccountService = inject(AccountService);
   private readonly authService: AuthService = inject(AuthService);
+  private readonly authWaitService: AuthWaitService = inject(AuthWaitService);
   private readonly router = inject(Router);
   private readonly formBuilder: NonNullableFormBuilder = inject(NonNullableFormBuilder);
 
@@ -146,6 +149,11 @@ export class SettingsAccountTabWidget extends SettingsUnsavedChangesBase impleme
   protected readonly rotateError: WritableSignal<string | null> = signal<string | null>(null);
   protected readonly rotateUseRecovery: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly rotatePasswordVisible: WritableSignal<boolean> = signal<boolean>(false);
+
+  // Every proof on this tab is checked against the same account, so a known wait quietens all of
+  // them at once. The fields and the retry of the profile read stay usable: reading the account is
+  // not what the limits are protecting.
+  protected readonly waiting: Signal<boolean> = this.authWaitService.waiting;
 
   /* Forms */
   protected readonly passwordForm: PasswordFormGroup = this.formBuilder.group(

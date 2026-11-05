@@ -1,6 +1,8 @@
 <section class="tab-header">{{ descriptionLabel() }}</section>
 
 <section class="tab-content">
+  <app-auth-wait-hint />
+
   @if (accountError()) {
     <p class="field-error">{{ accountError() }}</p>
     <button type="button" mat-stroked-button class="secondary-button" (click)="retryAccountLoadAsync()">{{ retryLabel() }}</button>
@@ -167,7 +169,7 @@
               mat-stroked-button
               class="secondary-button"
               (click)="changePasswordAsync()"
-              [disabled]="passwordBusy() || passwordForm.invalid"
+              [disabled]="passwordBusy() || passwordForm.invalid || waiting()"
             >
               {{ changePasswordLabel() }}
             </button>
@@ -211,7 +213,7 @@
                   mat-stroked-button
                   class="secondary-button"
                   (click)="startTwoFactorSetupAsync()"
-                  [disabled]="enableBusy()"
+                  [disabled]="enableBusy() || waiting()"
                 >
                   {{ enableTwoFactorLabel() }}
                 </button>
@@ -254,7 +256,7 @@
                   mat-stroked-button
                   class="secondary-button"
                   (click)="confirmTwoFactorSetupAsync()"
-                  [disabled]="enableBusy() || enableForm.controls.code.invalid"
+                  [disabled]="enableBusy() || enableForm.controls.code.invalid || waiting()"
                 >
                   {{ confirmSetupLabel() }}
                 </button>
@@ -333,7 +335,7 @@
                 mat-stroked-button
                 class="secondary-button"
                 (click)="disableTwoFactorAsync()"
-                [disabled]="disableBusy() || disableForm.invalid"
+                [disabled]="disableBusy() || disableForm.invalid || waiting()"
               >
                 {{ disableTwoFactorLabel() }}
               </button>
@@ -402,7 +404,7 @@
                 mat-stroked-button
                 class="secondary-button"
                 (click)="rotateRecoveryCodesAsync()"
-                [disabled]="rotateBusy() || rotateForm.invalid"
+                [disabled]="rotateBusy() || rotateForm.invalid || waiting()"
               >
                 {{ rotateRecoveryCodesLabel() }}
               </button>

@@ -45,7 +45,8 @@ public static class SettingsEndpoints
         {
             Language = settings.Language,
             Theme = settings.Theme,
-            TitleSorting = TitleSortingSettingsRules.Normalize(settings.TitleSorting)
+            TitleSorting = TitleSortingSettingsRules.Normalize(settings.TitleSorting),
+            AuthProtection = settings.AuthProtection
         });
     }
 
@@ -112,6 +113,7 @@ public static class SettingsEndpoints
                 return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["titleSorting"] = ["Provide enabled and ignoredLeadingWords."] });
         }
         if (!hasTitleSorting) settings.TitleSorting = currentSettings.TitleSorting;
+        if (!HasProperty(request, "authProtection")) settings.AuthProtection = currentSettings.AuthProtection;
         settings.LibraryFilterValues = currentSettings.LibraryFilterValues;
 
         settings.SonarrSnapshots = currentSettings.SonarrSnapshots
@@ -162,6 +164,9 @@ public static class SettingsEndpoints
         enabled.ValueKind is JsonValueKind.True or JsonValueKind.False &&
         request.TryGetProperty("ignoredLeadingWords", out _);
 
+    private static bool HasProperty(JsonElement request, string propertyName) => request.ValueKind == JsonValueKind.Object &&
+        request.EnumerateObject().Any(property => property.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
+
     private static async Task<Results<NoContent, ValidationProblem>> SaveGeneralSettingsAsync(
         GeneralSettingsUpdateRequest settings,
         ISettingsService settingsService,
@@ -174,6 +179,12 @@ public static class SettingsEndpoints
         AppSettings updatedSettings = currentSettings;
         updatedSettings.Language = settings.Language;
         updatedSettings.Theme = settings.Theme;
+        // The language and theme autosave sends only its two fields, so an absent section has to keep
+        // the stored limits; otherwise every language change would reset them to the defaults.
+        if (settings.AuthProtection is not null)
+        {
+            updatedSettings.AuthProtection = settings.AuthProtection;
+        }
 
         Dictionary<string, string[]> validationErrors = AppSettingsValidator.ValidateGeneral(updatedSettings);
         if (validationErrors.Count > 0)

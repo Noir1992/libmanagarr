@@ -7,6 +7,13 @@ public static class AppSettingsValidator
 {
     private const int MaxInstanceFieldLength = 255;
 
+    // Shared with the backup import check, which has to refuse an archive carrying unusable limits
+    // before they are put in place.
+    public const int MinRequestsPerMinute = 1;
+    public const int MaxRequestsPerMinute = 1000;
+    public const int MinMaxFailedAttempts = 1;
+    public const int MaxMaxFailedAttempts = 100;
+
     public static Dictionary<string, string[]> Validate(AppSettings settings)
     {
         Dictionary<string, string[]> errors = [];
@@ -220,6 +227,28 @@ public static class AppSettingsValidator
         if (!Enum.IsDefined(settings.Theme))
         {
             errors["theme"] = ["The theme must be 'light', 'dark', or 'system'."];
+        }
+
+        AppendAuthProtectionErrors(errors, settings.AuthProtection);
+    }
+
+    private static void AppendAuthProtectionErrors(Dictionary<string, string[]> errors, AuthProtectionSettings? authProtection)
+    {
+        if (authProtection is null)
+        {
+            return;
+        }
+
+        if (authProtection.RequestsPerMinute < MinRequestsPerMinute || authProtection.RequestsPerMinute > MaxRequestsPerMinute)
+        {
+            errors["authProtection.requestsPerMinute"] =
+                [$"The requests per minute must be between {MinRequestsPerMinute} and {MaxRequestsPerMinute}."];
+        }
+
+        if (authProtection.MaxFailedAttempts < MinMaxFailedAttempts || authProtection.MaxFailedAttempts > MaxMaxFailedAttempts)
+        {
+            errors["authProtection.maxFailedAttempts"] =
+                [$"The failed attempts must be between {MinMaxFailedAttempts} and {MaxMaxFailedAttempts}."];
         }
     }
 

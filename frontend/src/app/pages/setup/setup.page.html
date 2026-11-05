@@ -94,7 +94,9 @@
           <p class="field-error">{{ formError() }}</p>
         }
 
-        <button type="submit" mat-stroked-button class="auth-submit secondary-button" [disabled]="busy() || setupForm.invalid">
+        <app-auth-wait-hint />
+
+        <button type="submit" mat-stroked-button class="auth-submit secondary-button" [disabled]="busy() || setupForm.invalid || waiting()">
           {{ createAccountLabel() }}
         </button>
       </form>

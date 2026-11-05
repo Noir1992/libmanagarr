@@ -6,6 +6,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
 import { AppLanguage } from '../../../interfaces/general/app-language';
 import { AppTheme } from '../../../interfaces/general/app-theme';
+import { AuthProtectionSettings } from '../../../interfaces/settings/auth-protection-settings';
 import { LoggingSettings } from '../../../interfaces/settings/logging-settings';
 import { AppI18nService } from '../../../services/app-i18n.service';
 import { AppSettingsService, ValidationProblemError } from '../../../services/app-settings.service';
@@ -28,6 +29,15 @@ describe('SettingsGeneralTabWidget', () => {
         'theme.dark': 'Dark',
         'theme.system': 'System',
         'settings.saveError': 'Save error',
+        'settings.authProtection.title': 'Sign-in protection',
+        'settings.authProtection.requestsPerMinute': 'Protected requests per minute',
+        'settings.authProtection.requestsPerMinute.info': 'Protected requests per minute info',
+        'settings.authProtection.maxFailedAttempts': 'Failed attempts before the account lock',
+        'settings.authProtection.maxFailedAttempts.info': 'Failed attempts info',
+        'settings.authProtection.saving': 'Saving',
+        'settings.authProtection.validation.required': 'This value is required.',
+        'settings.authProtection.validation.range': 'Enter a value within the allowed range.',
+        'settings.authProtection.validation.invalid': 'Enter a valid value.',
         'settings.logs.title': 'Logs',
         'settings.logs.path': 'Log path',
         'settings.logs.path.info': 'Log path info',
@@ -56,9 +66,21 @@ describe('SettingsGeneralTabWidget', () => {
       retentionDays: 30,
       minimumLevel: 'Information',
     });
+    const authProtectionSignal: WritableSignal<AuthProtectionSettings> = signal<AuthProtectionSettings>({
+      requestsPerMinute: 10,
+      maxFailedAttempts: 5,
+    });
     const settingsServiceStub: Pick<
       AppSettingsService,
-      'loadLoggingSettings' | 'saveGeneral' | 'saveLoggingSettings' | 'logging' | 'language' | 'theme' | 'titleSorting'
+      | 'loadLoggingSettings'
+      | 'saveGeneral'
+      | 'saveLoggingSettings'
+      | 'saveAuthProtection'
+      | 'logging'
+      | 'authProtection'
+      | 'language'
+      | 'theme'
+      | 'titleSorting'
     > = {
       loadLoggingSettings: jasmine.createSpy('loadLoggingSettings').and.resolveTo(),
       saveGeneral: jasmine.createSpy('saveGeneral').and.callFake(async (value: { language: AppLanguage; theme: AppTheme }) => {
@@ -66,7 +88,11 @@ describe('SettingsGeneralTabWidget', () => {
         themeSignal.set(value.theme);
       }),
       saveLoggingSettings: jasmine.createSpy('saveLoggingSettings').and.resolveTo(),
+      saveAuthProtection: jasmine.createSpy('saveAuthProtection').and.callFake(async (value: AuthProtectionSettings) => {
+        authProtectionSignal.set(value);
+      }),
       logging: loggingSignal,
+      authProtection: authProtectionSignal,
       language: languageSignal,
       theme: themeSignal,
       titleSorting: signal({ enabled: false, ignoredLeadingWords: [] }),

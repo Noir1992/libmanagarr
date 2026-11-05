@@ -1,0 +1,13 @@
+@if (accountLockLine(); as accountLock) {
+  <p class="auth-wait-line">
+    <span class="auth-wait-countdown" aria-hidden="true">{{ accountLock.retry }}</span>
+    <span class="auth-wait-detail">{{ accountLock.detail }}</span>
+  </p>
+}
+
+@if (ipLimitLine(); as ipLimit) {
+  <p class="auth-wait-line">
+    <span class="auth-wait-countdown" aria-hidden="true">{{ ipLimit.retry }}</span>
+    <span class="auth-wait-detail">{{ ipLimit.detail }}</span>
+  </p>
+}

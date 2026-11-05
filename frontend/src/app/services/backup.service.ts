@@ -8,6 +8,7 @@ import { BackupProofRequest } from '../interfaces/backup/backup-proof-request';
 import { BackupStatus } from '../interfaces/backup/backup-status';
 import { AppI18nService } from './app-i18n.service';
 import { AuthRequestError, toAuthRequestError, translateAuthError } from './auth-error.util';
+import { AuthWaitService } from './auth-wait.service';
 import { TranslationKey } from './i18n/_i18n-key';
 import { AuthService } from './auth.service';
 
@@ -23,6 +24,7 @@ export class BackupService {
   /* Injections */
   private readonly http: HttpClient = inject(HttpClient);
   private readonly authService: AuthService = inject(AuthService);
+  private readonly authWaitService: AuthWaitService = inject(AuthWaitService);
   private readonly i18n: AppI18nService = inject(AppI18nService);
 
   /* Commands */
@@ -101,13 +103,18 @@ export class BackupService {
   /**
    * A failed export answers with a problem document inside the blob, so the body has to be read
    * before the failure can be translated; the decoded document alone reaches the stable problem
-   * code. The antiforgery token is dropped for the same reason the account area does it: a rejected
-   * mutating call may already have consumed it.
+   * code, and the answer header has to be handed over with it because the response object is gone
+   * by then. Both are what tells a locked account from a busy ip address, so the wait is recorded
+   * here as well. The antiforgery token is dropped for the same reason the account area does it: a
+   * rejected mutating call may already have consumed it.
    */
   private async toErrorAsync(error: unknown): Promise<AuthRequestError> {
     const decoded: unknown =
       error instanceof HttpErrorResponse && error.error instanceof Blob ? await readBlobAsProblem(error.error) : error;
-    const requestError: AuthRequestError = toAuthRequestError(decoded, this.i18n.t('settings.backup.error'));
+    const retryAfter: string | null = error instanceof HttpErrorResponse ? error.headers.get('Retry-After') : null;
+    const requestError: AuthRequestError = this.authWaitService.record(
+      toAuthRequestError(decoded, this.i18n.t('settings.backup.error'), retryAfter),
+    );
 
     this.authService.invalidateCsrfToken();
 

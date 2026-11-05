@@ -10,6 +10,7 @@ import { detectBrowserLanguage } from '../utils/browser-language-utils';
 import { AppI18nService } from './app-i18n.service';
 import { BACKEND_LANGUAGE_TO_APP_LANGUAGE } from './app-settings.service';
 import { AuthRequestError, toAuthRequestError, translateAuthError } from './auth-error.util';
+import { AuthWaitService } from './auth-wait.service';
 
 /**
  * Client-side truth about the sign-in flow. The state comes exclusively from the backend
@@ -23,6 +24,7 @@ export class AuthService {
   /* Injections */
   private readonly http: HttpClient = inject(HttpClient);
   private readonly i18n: AppI18nService = inject(AppI18nService);
+  private readonly authWaitService: AuthWaitService = inject(AuthWaitService);
 
   /* Constants */
   private static readonly csrfCookieName: string = 'XSRF-TOKEN';
@@ -72,7 +74,7 @@ export class AuthService {
 
       return response.requiresTwoFactor;
     } catch (error) {
-      throw toAuthRequestError(error, this.i18n.t('auth.invalidCredentials'));
+      throw this.authWaitService.record(toAuthRequestError(error, this.i18n.t('auth.invalidCredentials')));
     }
   }
 
@@ -81,7 +83,7 @@ export class AuthService {
       await firstValueFrom(this.http.post<LoginResponseBackend>('/api/auth/two-factor/verify', { code, useRecoveryCode, remember }));
       this.onAuthenticated();
     } catch (error) {
-      throw toAuthRequestError(error, this.i18n.t('auth.invalidCode'));
+      throw this.authWaitService.record(toAuthRequestError(error, this.i18n.t('auth.invalidCode')));
     }
   }
 
@@ -92,7 +94,7 @@ export class AuthService {
       );
       this.onAuthenticated();
     } catch (error) {
-      throw toAuthRequestError(error, this.i18n.t('auth.loadFailed'));
+      throw this.authWaitService.record(toAuthRequestError(error, this.i18n.t('auth.loadFailed')));
     }
   }
 
@@ -181,6 +183,7 @@ export class AuthService {
     this.csrfTokenSignal.set(null);
     this.sessionExpiredHandled = false;
     this.errorLabelSignal.set(null);
+    this.authWaitService.clear();
     this.stateSignal.set('authenticated');
   }
 

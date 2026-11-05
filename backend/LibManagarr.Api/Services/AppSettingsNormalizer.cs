@@ -18,8 +18,18 @@ public static class AppSettingsNormalizer
             SonarrSnapshots = settings.SonarrSnapshots ?? [],
             RadarrSnapshots = settings.RadarrSnapshots ?? [],
             LibraryFilterValues = settings.LibraryFilterValues ?? [],
-            Logging = NormalizeLogging(settings.Logging)
+            Logging = NormalizeLogging(settings.Logging),
+            AuthProtection = NormalizeAuthProtection(settings.AuthProtection)
         };
+    }
+
+    /// <summary>
+    /// Only a missing section gains the defaults here. A value that is present but out of range is
+    /// left untouched so the validator can refuse it instead of the write silently repairing it.
+    /// </summary>
+    private static AuthProtectionSettings NormalizeAuthProtection(AuthProtectionSettings? settings)
+    {
+        return settings ?? new AuthProtectionSettings();
     }
 
     private static SeerrInstanceSettings? NormalizeSeerrInstance(SeerrInstanceSettings? instance)

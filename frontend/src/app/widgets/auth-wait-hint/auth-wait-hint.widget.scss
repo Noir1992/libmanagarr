@@ -1,0 +1,16 @@
+.auth-wait-line {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 12px;
+}
+
+.auth-wait-countdown {
+  color: var(--theme-text);
+}
+
+/* Secondary to the refusal above it, so the wait reads as detail, not as a second error. */
+.auth-wait-detail {
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+}

@@ -8,6 +8,7 @@ import { TwoFactorProofRequest } from '../interfaces/auth/two-factor-proof-reque
 import { TwoFactorSetupBackend } from '../interfaces/auth/two-factor-setup-backend';
 import { AppI18nService } from './app-i18n.service';
 import { toAuthRequestError } from './auth-error.util';
+import { AuthWaitService } from './auth-wait.service';
 import { AuthService } from './auth.service';
 
 /**
@@ -22,6 +23,7 @@ export class AccountService {
   /* Injections */
   private readonly http: HttpClient = inject(HttpClient);
   private readonly authService: AuthService = inject(AuthService);
+  private readonly authWaitService: AuthWaitService = inject(AuthWaitService);
   private readonly i18n: AppI18nService = inject(AppI18nService);
 
   /* Queries */
@@ -29,7 +31,7 @@ export class AccountService {
     try {
       return await firstValueFrom(this.http.get<AccountBackend>('/api/account'));
     } catch (error) {
-      throw toAuthRequestError(error, this.i18n.t('auth.loadFailed'));
+      throw this.authWaitService.record(toAuthRequestError(error, this.i18n.t('auth.loadFailed')));
     }
   }
 
@@ -39,7 +41,7 @@ export class AccountService {
       await firstValueFrom(this.http.post<void>('/api/account/password', request));
       this.authService.invalidateCsrfToken();
     } catch (error) {
-      throw toAuthRequestError(error, this.i18n.t('auth.loadFailed'));
+      throw this.authWaitService.record(toAuthRequestError(error, this.i18n.t('auth.loadFailed')));
     }
   }
 
@@ -48,7 +50,7 @@ export class AccountService {
     try {
       return await firstValueFrom(this.http.post<TwoFactorSetupBackend>('/api/account/two-factor/setup', null));
     } catch (error) {
-      throw toAuthRequestError(error, this.i18n.t('auth.loadFailed'));
+      throw this.authWaitService.record(toAuthRequestError(error, this.i18n.t('auth.loadFailed')));
     }
   }
 
@@ -60,7 +62,7 @@ export class AccountService {
       this.authService.invalidateCsrfToken();
       return response;
     } catch (error) {
-      throw toAuthRequestError(error, this.i18n.t('auth.loadFailed'));
+      throw this.authWaitService.record(toAuthRequestError(error, this.i18n.t('auth.loadFailed')));
     }
   }
 
@@ -68,7 +70,7 @@ export class AccountService {
     try {
       await firstValueFrom(this.http.delete<void>('/api/account/two-factor/setup'));
     } catch (error) {
-      throw toAuthRequestError(error, this.i18n.t('auth.loadFailed'));
+      throw this.authWaitService.record(toAuthRequestError(error, this.i18n.t('auth.loadFailed')));
     }
   }
 
@@ -77,7 +79,7 @@ export class AccountService {
       await firstValueFrom(this.http.post<void>('/api/account/two-factor/disable', request));
       this.authService.invalidateCsrfToken();
     } catch (error) {
-      throw toAuthRequestError(error, this.i18n.t('auth.loadFailed'));
+      throw this.authWaitService.record(toAuthRequestError(error, this.i18n.t('auth.loadFailed')));
     }
   }
 
@@ -85,7 +87,7 @@ export class AccountService {
     try {
       return await firstValueFrom(this.http.post<RecoveryCodesBackend>('/api/account/two-factor/recovery-codes', request));
     } catch (error) {
-      throw toAuthRequestError(error, this.i18n.t('auth.loadFailed'));
+      throw this.authWaitService.record(toAuthRequestError(error, this.i18n.t('auth.loadFailed')));
     }
   }
 }

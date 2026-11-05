@@ -48,15 +48,15 @@ public static class BackupEndpoints
 
     private static async Task<IResult> ExportAsync(
         BackupExportRequest request,
+        HttpContext httpContext,
         ClaimsPrincipal user,
         AccountService accountService,
-        TwoFactorService twoFactorService,
         BackupExportService exportService,
         CancellationToken cancellationToken)
     {
         if (!TryGetSession(user, out int accountId)) return AuthProblems.NoAccount();
         ProblemHttpResult? identityFailure = await VerifyIdentityAsync(
-            request.CurrentPassword, request.Code, request.UseRecoveryCode, accountId, accountService, twoFactorService, cancellationToken);
+            request.CurrentPassword, request.Code, request.UseRecoveryCode, accountId, accountService, httpContext, cancellationToken);
         if (identityFailure is not null) return identityFailure;
 
         try
@@ -115,7 +115,6 @@ public static class BackupEndpoints
         HttpContext httpContext,
         ClaimsPrincipal user,
         AccountService accountService,
-        TwoFactorService twoFactorService,
         BackupImportService importService,
         IHostApplicationLifetime lifetime,
         ApplicationRestart restart,
@@ -123,7 +122,7 @@ public static class BackupEndpoints
     {
         if (!TryGetSession(user, out int accountId)) return AuthProblems.NoAccount();
         ProblemHttpResult? identityFailure = await VerifyIdentityAsync(
-            request.CurrentPassword, request.Code, request.UseRecoveryCode, accountId, accountService, twoFactorService, cancellationToken);
+            request.CurrentPassword, request.Code, request.UseRecoveryCode, accountId, accountService, httpContext, cancellationToken);
         if (identityFailure is not null) return identityFailure;
 
         try
@@ -163,34 +162,33 @@ public static class BackupEndpoints
     /// <summary>
     /// Password first, then the second factor, exactly as in the account area: a wrong password must
     /// never burn a recovery code, and an account without a second factor is proved by the password
-    /// alone - demanding a code it cannot have would lock the route shut. Failures count toward the
-    /// lockout, so this route is protected against guessing like a password change is.
+    /// alone - demanding a code it cannot have would lock the route shut. The shared proof counts a
+    /// failed server-side check once and reports the state it produced, so this route is protected
+    /// against guessing like a password change is and the endpoint only translates the outcome.
     /// </summary>
     private static async Task<ProblemHttpResult?> VerifyIdentityAsync(
         string? currentPassword, string? code, bool useRecoveryCode, int accountId,
-        AccountService accountService, TwoFactorService twoFactorService, CancellationToken cancellationToken)
+        AccountService accountService, HttpContext httpContext, CancellationToken cancellationToken)
     {
         AccountRecord? account = await accountService.GetAccountAsync(cancellationToken);
         if (account is null || account.Id != accountId) return AuthProblems.NoAccount();
 
-        if (!await accountService.VerifyCurrentPasswordAsync(account.Id, currentPassword, cancellationToken))
+        (SecondFactorProbe? _, AccountOperationResult result) = await accountService.VerifyIdentityProofAsync(
+            account, currentPassword, code, useRecoveryCode, cancellationToken);
+        return result.Status switch
         {
-            await accountService.RecordFailedAccessAsync(account.Id, cancellationToken);
-            return IdentityProblem("The current password is incorrect.");
-        }
-
-        if (!account.TwoFactorEnabled) return null;
-
-        SecondFactorProbe probe = await twoFactorService.ProbeSecondFactorAsync(account, code, useRecoveryCode, cancellationToken);
-        if (probe.Status == SecondFactorProofStatus.Success) return null;
-        await accountService.RecordFailedAccessAsync(account.Id, cancellationToken);
-        return probe.Status == SecondFactorProofStatus.MissingCode
-            ? IdentityProblem("A current two-factor code or recovery code is required.")
-            : IdentityProblem("The two-factor code is incorrect or already used.");
+            AccountOperationStatus.Success => null,
+            AccountOperationStatus.LockedOut => AuthProblems.LockedOut(result.LockedUntil!.Value, httpContext, accountService.GetUtcNow()),
+            AccountOperationStatus.SecondFactorRequired => IdentityProblem("A current two-factor code or recovery code is required.", AuthFailureKinds.SecondFactor, result.RemainingAttempts),
+            AccountOperationStatus.InvalidSecondFactor => IdentityProblem("The two-factor code is incorrect or already used.", AuthFailureKinds.SecondFactor, result.RemainingAttempts),
+            _ => IdentityProblem("The current password is incorrect.", AuthFailureKinds.BackupPassword, result.RemainingAttempts)
+        };
     }
 
-    private static ProblemHttpResult IdentityProblem(string title) =>
-        AuthProblems.Problem(StatusCodes.Status400BadRequest, title, BackupErrorCodes.IdentityVerificationFailed);
+    // The credential this form asked for, never the archive password: a wrong archive password is a
+    // separate error of its own and cannot lock the local account, so it carries no identity state.
+    private static ProblemHttpResult IdentityProblem(string title, string failureKind, int? remainingAttempts) =>
+        AuthProblems.ProofFailure(StatusCodes.Status400BadRequest, title, BackupErrorCodes.IdentityVerificationFailed, failureKind, remainingAttempts);
 
     private static ProblemHttpResult BackupProblem(BackupException exception) =>
         AuthProblems.Problem(exception.StatusCode, exception.Message, exception.Code);

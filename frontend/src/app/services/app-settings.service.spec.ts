@@ -268,6 +268,20 @@ describe('AppSettingsService', () => {
     expect(service.titleSorting()).toEqual({ enabled: false, ignoredLeadingWords: [] });
   });
 
+  it('loads sign-in protection limits with defaults for old installations', async () => {
+    const pending = service.load();
+    http.expectOne('/api/settings/general').flush({ language: 'En', theme: 'System' });
+    await pending;
+    expect(service.authProtection()).toEqual({ requestsPerMinute: 10, maxFailedAttempts: 5 });
+  });
+
+  it('fills only the missing half of a partial sign-in protection section', async () => {
+    const pending = service.load();
+    http.expectOne('/api/settings/general').flush({ language: 'En', theme: 'System', authProtection: { requestsPerMinute: 3 } });
+    await pending;
+    expect(service.authProtection()).toEqual({ requestsPerMinute: 3, maxFailedAttempts: 5 });
+  });
+
   it('uses confirmed normalized title rules and preserves them during general saves', async () => {
     const rules = { enabled: true, ignoredLeadingWords: ['  The ', 'the', 'A'] };
     const pending = service.saveTitleSorting(rules);
