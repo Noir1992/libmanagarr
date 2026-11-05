@@ -73,6 +73,15 @@ describe('InfoIconWidget', () => {
   });
 
   it('opens the popover right of the trigger with an arrow pointing at the icon', async () => {
+    // The panel is clamped inside the viewport and the arrow only follows along its facing edge, so
+    // the arrow can point at the icon only while the icon is inside the viewport. Nodes earlier
+    // specs left in the page push this fixture down the body, which would let the page position
+    // decide the test instead of the layout it is here to measure.
+    const host: HTMLElement = fixture.nativeElement;
+    host.style.position = 'fixed';
+    host.style.top = '100px';
+    host.style.left = '100px';
+
     const button: HTMLButtonElement | null = fixture.nativeElement.querySelector('button');
     button?.click();
     fixture.detectChanges();

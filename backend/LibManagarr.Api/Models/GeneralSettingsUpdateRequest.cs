@@ -6,6 +6,8 @@ public sealed class GeneralSettingsUpdateRequest
 
     public ThemeMode Theme { get; set; }
 
+    public AuthProtectionSettings? AuthProtection { get; set; }
+
     [System.Text.Json.Serialization.JsonExtensionData]
     public Dictionary<string, System.Text.Json.JsonElement>? AdditionalProperties { get; set; }
 }

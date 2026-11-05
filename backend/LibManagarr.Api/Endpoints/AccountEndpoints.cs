@@ -29,7 +29,7 @@ public static class AccountEndpoints
                 AccountService service = context.HttpContext.RequestServices.GetRequiredService<AccountService>();
                 AccountRecord? account = await service.GetAccountAsync(context.HttpContext.RequestAborted);
                 if (account is not null && account.IsLockedOut(service.GetUtcNow()))
-                    return AuthProblems.LockedOut(account.LockoutUntil!.Value, context.HttpContext);
+                    return AuthProblems.LockedOut(account.LockoutUntil!.Value, context.HttpContext, service.GetUtcNow());
             }
             return await next(context);
         });
@@ -91,10 +91,10 @@ public static class AccountEndpoints
         return result.Status switch
         {
             AccountOperationStatus.ValidationFailed => AuthProblems.Validation(result.Errors!),
-            AccountOperationStatus.InvalidCredentials => CurrentPasswordIncorrectProblem(),
-            AccountOperationStatus.SecondFactorRequired => SecondFactorRequiredProblem(),
-            AccountOperationStatus.InvalidSecondFactor => InvalidTwoFactorCodeProblem(),
-            AccountOperationStatus.LockedOut => AuthProblems.LockedOut(result.LockedUntil!.Value, httpContext),
+            AccountOperationStatus.InvalidCredentials => CurrentPasswordIncorrectProblem(result.RemainingAttempts),
+            AccountOperationStatus.SecondFactorRequired => SecondFactorRequiredProblem(result.RemainingAttempts),
+            AccountOperationStatus.InvalidSecondFactor => InvalidTwoFactorCodeProblem(result.RemainingAttempts),
+            AccountOperationStatus.LockedOut => AuthProblems.LockedOut(result.LockedUntil!.Value, httpContext, accountService.GetUtcNow()),
             AccountOperationStatus.StateChanged => SecurityStateChangedProblem(),
             _ => AuthProblems.NoAccount()
         };
@@ -167,14 +167,13 @@ public static class AccountEndpoints
 
         if (!twoFactorService.TryVerifySetupCode(setup, request.Code, out long firstStep))
         {
-            await twoFactorService.RecordSetupFailureAsync(setup, cancellationToken);
-            AccountRecord? freshAccount = await accountService.GetAccountAsync(cancellationToken);
-            if (freshAccount is not null && freshAccount.IsLockedOut(accountService.GetUtcNow()))
+            AccountOperationResult failure = await twoFactorService.RecordSetupFailureAsync(setup, cancellationToken);
+            if (failure.Status == AccountOperationStatus.LockedOut)
             {
-                return AuthProblems.LockedOut(freshAccount.LockoutUntil!.Value, httpContext);
+                return AuthProblems.LockedOut(failure.LockedUntil!.Value, httpContext, accountService.GetUtcNow());
             }
 
-            return InvalidTwoFactorCodeProblem();
+            return InvalidTwoFactorCodeProblem(failure.RemainingAttempts);
         }
 
         IReadOnlyList<string>? recoveryCodes = await twoFactorService.EnableFromSetupAsync(account, setup, firstStep, cancellationToken);
@@ -229,13 +228,13 @@ public static class AccountEndpoints
             return TwoFactorNotEnabledProblem();
         }
 
-        (SecondFactorProbe? proof, ProblemHttpResult? proofFailure) = await ProbeSecondFactorProofAsync(
+        (SecondFactorProbe? proof, ProblemHttpResult? proofFailure) = await ProveIdentityAsync(
             account,
             request.CurrentPassword,
             request.Code,
             request.UseRecoveryCode,
             accountService,
-            twoFactorService,
+            httpContext,
             cancellationToken);
         if (proofFailure is not null)
         {
@@ -259,6 +258,7 @@ public static class AccountEndpoints
 
     private static async Task<Results<Ok<RecoveryCodesResponse>, ProblemHttpResult>> RotateRecoveryCodesAsync(
         TwoFactorProofRequest request,
+        HttpContext httpContext,
         ClaimsPrincipal user,
         AccountService accountService,
         TwoFactorService twoFactorService,
@@ -280,13 +280,13 @@ public static class AccountEndpoints
             return TwoFactorNotEnabledProblem();
         }
 
-        (SecondFactorProbe? proof, ProblemHttpResult? proofFailure) = await ProbeSecondFactorProofAsync(
+        (SecondFactorProbe? proof, ProblemHttpResult? proofFailure) = await ProveIdentityAsync(
             account,
             request.CurrentPassword,
             request.Code,
             request.UseRecoveryCode,
             accountService,
-            twoFactorService,
+            httpContext,
             cancellationToken);
         if (proofFailure is not null)
         {
@@ -298,20 +298,33 @@ public static class AccountEndpoints
         return TypedResults.Ok(new RecoveryCodesResponse { RecoveryCodes = recoveryCodes });
     }
 
-    private static async Task<(SecondFactorProbe? Proof, ProblemHttpResult? Failure)> ProbeSecondFactorProofAsync(
+    /// <summary>
+    /// Translates the shared identity proof into the problems of this area: a wrong password and a
+    /// wrong code keep their own codes, and the request that exhausted the attempts answers the
+    /// lockout itself.
+    /// </summary>
+    private static async Task<(SecondFactorProbe? Proof, ProblemHttpResult? Failure)> ProveIdentityAsync(
         AccountRecord account, string? currentPassword, string? code, bool useRecoveryCode,
-        AccountService accountService, TwoFactorService twoFactorService, CancellationToken cancellationToken)
+        AccountService accountService, HttpContext httpContext, CancellationToken cancellationToken)
     {
-        if (!await accountService.VerifyCurrentPasswordAsync(account.Id, currentPassword, cancellationToken))
-            return (null, CurrentPasswordIncorrectProblem());
-        SecondFactorProbe proof = await twoFactorService.ProbeSecondFactorAsync(account, code, useRecoveryCode, cancellationToken);
-        if (proof.Status == SecondFactorProofStatus.Success) return (proof, null);
-        await accountService.RecordFailedAccessAsync(account.Id, cancellationToken);
-        return (null, proof.Status == SecondFactorProofStatus.MissingCode ? SecondFactorRequiredProblem() : InvalidTwoFactorCodeProblem());
+        (SecondFactorProbe? proof, AccountOperationResult result) = await accountService.VerifyIdentityProofAsync(
+            account, currentPassword, code, useRecoveryCode, cancellationToken);
+        if (result.Status == AccountOperationStatus.Success) return (proof, null);
+        return result.Status switch
+        {
+            AccountOperationStatus.LockedOut => (null, AuthProblems.LockedOut(result.LockedUntil!.Value, httpContext, accountService.GetUtcNow())),
+            AccountOperationStatus.SecondFactorRequired => (null, SecondFactorRequiredProblem(result.RemainingAttempts)),
+            AccountOperationStatus.InvalidSecondFactor => (null, InvalidTwoFactorCodeProblem(result.RemainingAttempts)),
+            _ => (null, CurrentPasswordIncorrectProblem(result.RemainingAttempts))
+        };
     }
 
-    private static ProblemHttpResult SecondFactorRequiredProblem() => AuthProblems.Problem(
-        StatusCodes.Status400BadRequest, "A current two-factor code or recovery code is required.", AuthErrorCodes.SecondFactorRequired);
+    private static ProblemHttpResult SecondFactorRequiredProblem(int? remainingAttempts) => AuthProblems.ProofFailure(
+        StatusCodes.Status400BadRequest,
+        "A current two-factor code or recovery code is required.",
+        AuthErrorCodes.SecondFactorRequired,
+        AuthFailureKinds.SecondFactor,
+        remainingAttempts);
 
     private static ProblemHttpResult SecurityStateChangedProblem() => AuthProblems.Problem(
         StatusCodes.Status409Conflict, "The account state changed. Please sign in again and retry.", AuthErrorCodes.SecurityStateChanged);
@@ -327,15 +340,19 @@ public static class AccountEndpoints
         await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, session.Principal, properties);
     }
 
-    private static ProblemHttpResult CurrentPasswordIncorrectProblem() => AuthProblems.Problem(
+    private static ProblemHttpResult CurrentPasswordIncorrectProblem(int? remainingAttempts) => AuthProblems.ProofFailure(
         StatusCodes.Status400BadRequest,
         "The current password is incorrect.",
-        AuthErrorCodes.CurrentPasswordIncorrect);
+        AuthErrorCodes.CurrentPasswordIncorrect,
+        AuthFailureKinds.Password,
+        remainingAttempts);
 
-    private static ProblemHttpResult InvalidTwoFactorCodeProblem() => AuthProblems.Problem(
+    private static ProblemHttpResult InvalidTwoFactorCodeProblem(int? remainingAttempts) => AuthProblems.ProofFailure(
         StatusCodes.Status400BadRequest,
         "The two-factor code is incorrect or already used.",
-        AuthErrorCodes.InvalidTwoFactorCode);
+        AuthErrorCodes.InvalidTwoFactorCode,
+        AuthFailureKinds.SecondFactor,
+        remainingAttempts);
 
     private static ProblemHttpResult TwoFactorAlreadyEnabledProblem() => AuthProblems.Problem(
         StatusCodes.Status409Conflict,

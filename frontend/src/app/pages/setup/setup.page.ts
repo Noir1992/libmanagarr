@@ -14,7 +14,9 @@ import { Router } from '@angular/router';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { AppSettingsService } from '../../services/app-settings.service';
 import { AuthRequestError, translateAuthError, translateAuthFieldError } from '../../services/auth-error.util';
+import { AuthWaitService } from '../../services/auth-wait.service';
 import { AuthService } from '../../services/auth.service';
+import { AuthWaitHintWidget } from '../../widgets/auth-wait-hint/auth-wait-hint.widget';
 import { InfoIconWidget } from '../../widgets/info-icon/info-icon.widget';
 
 type SetupFormGroup = FormGroup<{
@@ -38,7 +40,7 @@ const NO_FIELD_ERRORS: SetupFieldErrors = { username: null, password: null, conf
  */
 @Component({
   selector: 'app-setup-page',
-  imports: [ReactiveFormsModule, MatButtonModule, MatInput, InfoIconWidget],
+  imports: [ReactiveFormsModule, MatButtonModule, MatInput, AuthWaitHintWidget, InfoIconWidget],
   templateUrl: './setup.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './setup.page.scss',
@@ -47,6 +49,7 @@ export class SetupPage {
   /* Injections */
   private readonly i18n: AppI18nService = inject(AppI18nService);
   private readonly authService: AuthService = inject(AuthService);
+  private readonly authWaitService: AuthWaitService = inject(AuthWaitService);
   private readonly appSettingsService: AppSettingsService = inject(AppSettingsService);
   private readonly router: Router = inject(Router);
   private readonly formBuilder: NonNullableFormBuilder = inject(NonNullableFormBuilder);
@@ -68,6 +71,9 @@ export class SetupPage {
   protected readonly busy: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly formError: WritableSignal<string | null> = signal<string | null>(null);
   protected readonly fieldErrors: WritableSignal<SetupFieldErrors> = signal<SetupFieldErrors>(NO_FIELD_ERRORS);
+  // Only the ip limit can refuse a creation, because no account exists yet. The fields stay
+  // editable so the typed values are there the moment the wait lapses.
+  protected readonly waiting: Signal<boolean> = this.authWaitService.waiting;
 
   /* Forms */
   protected readonly setupForm: SetupFormGroup = this.formBuilder.group(

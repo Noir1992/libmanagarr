@@ -15,20 +15,21 @@ public sealed class AccountService
     public const int UsernameMaxLength = 64;
     public const int PasswordMinLength = 12;
     public const int PasswordMaxLength = 128;
-    public const int MaxFailedAccessAttempts = 5;
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(5);
 
     private readonly IAccountStore accountStore;
     private readonly IPasswordHasher<AccountRecord> passwordHasher;
     private readonly TimeProvider timeProvider;
     private readonly TwoFactorService twoFactorService;
+    private readonly ISettingsService settingsService;
 
-    public AccountService(IAccountStore accountStore, IPasswordHasher<AccountRecord> passwordHasher, TimeProvider timeProvider, TwoFactorService twoFactorService)
+    public AccountService(IAccountStore accountStore, IPasswordHasher<AccountRecord> passwordHasher, TimeProvider timeProvider, TwoFactorService twoFactorService, ISettingsService settingsService)
     {
         this.accountStore = accountStore;
         this.passwordHasher = passwordHasher;
         this.timeProvider = timeProvider;
         this.twoFactorService = twoFactorService;
+        this.settingsService = settingsService;
     }
 
     public Task<AccountRecord?> GetAccountAsync(CancellationToken cancellationToken) =>
@@ -37,25 +38,61 @@ public sealed class AccountService
     public DateTimeOffset GetUtcNow() => timeProvider.GetUtcNow();
 
     /// <summary>
-    /// Checks the current password and counts failed sensitive-operation proofs toward the account lockout.
+    /// Shared identity proof of every protected operation: the current password first, then the
+    /// second factor only when the account has one, so a wrong password never burns a recovery
+    /// code. A server-side failure counts exactly once and the request that reaches the limit
+    /// already answers the lockout; a complete proof clears the shared counter.
     /// </summary>
-    public async Task<bool> VerifyCurrentPasswordAsync(int accountId, string? currentPassword, CancellationToken cancellationToken)
+    public async Task<(SecondFactorProbe? Proof, AccountOperationResult Result)> VerifyIdentityProofAsync(
+        AccountRecord account, string? currentPassword, string? code, bool useRecoveryCode, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(currentPassword))
         {
-            return false;
+            return (null, AccountOperationResult.InvalidCredentialsFailure);
         }
 
-        AccountRecord? account = await accountStore.GetAccountAsync(cancellationToken);
-        if (account is null || account.Id != accountId || account.IsLockedOut(timeProvider.GetUtcNow())) return false;
-        bool valid = passwordHasher.VerifyHashedPassword(account, account.PasswordHash, currentPassword) != PasswordVerificationResult.Failed;
-        if (!valid) await RecordFailedAccessAsync(accountId, cancellationToken);
-        return valid;
+        DateTimeOffset now = timeProvider.GetUtcNow();
+        if (account.IsLockedOut(now))
+        {
+            return (null, AccountOperationResult.LockedOutUntil(account.LockoutUntil!.Value));
+        }
+
+        if (passwordHasher.VerifyHashedPassword(account, account.PasswordHash, currentPassword) == PasswordVerificationResult.Failed)
+        {
+            return (null, await RegisterFailureAsync(account.Id, now, AccountOperationStatus.InvalidCredentials, cancellationToken));
+        }
+
+        if (!account.TwoFactorEnabled)
+        {
+            await accountStore.ResetAccessFailuresAsync(account.Id, now, cancellationToken);
+            return (null, AccountOperationResult.Success(account));
+        }
+
+        SecondFactorProbe proof = await twoFactorService.ProbeSecondFactorAsync(account, code, useRecoveryCode, cancellationToken);
+        if (proof.Status == SecondFactorProofStatus.Success)
+        {
+            await accountStore.ResetAccessFailuresAsync(account.Id, now, cancellationToken);
+            return (proof, AccountOperationResult.Success(account));
+        }
+
+        AccountOperationStatus failure = proof.Status == SecondFactorProofStatus.MissingCode
+            ? AccountOperationStatus.SecondFactorRequired
+            : AccountOperationStatus.InvalidSecondFactor;
+        return (null, await RegisterFailureAsync(account.Id, now, failure, cancellationToken));
     }
 
-    public Task RecordFailedAccessAsync(int accountId, CancellationToken cancellationToken) =>
-        accountStore.RegisterFailedAccessAttemptAsync(accountId, MaxFailedAccessAttempts, LockoutDuration,
-            timeProvider.GetUtcNow(), cancellationToken);
+    /// <summary>
+    /// Counts one failed proof with the currently stored limit and reports the state the row really
+    /// holds afterwards, so reaching the limit is answered by the lock itself and not by the
+    /// failure that caused it.
+    /// </summary>
+    private async Task<AccountOperationResult> RegisterFailureAsync(
+        int accountId, DateTimeOffset now, AccountOperationStatus failure, CancellationToken cancellationToken)
+    {
+        int maxFailedAttempts = (await settingsService.GetAsync(cancellationToken)).AuthProtection.MaxFailedAttempts;
+        AccountRecord? state = await accountStore.RegisterFailedAccessAttemptAsync(accountId, maxFailedAttempts, LockoutDuration, now, cancellationToken);
+        return AccountOperationResult.FromFailure(state, now, failure, maxFailedAttempts);
+    }
 
     public async Task<AccountOperationResult> SetupAsync(string? username, string? password, string? confirmPassword, CancellationToken cancellationToken)
     {
@@ -126,8 +163,7 @@ public sealed class AccountService
         PasswordVerificationResult verification = passwordHasher.VerifyHashedPassword(account, account.PasswordHash, password);
         if (verification == PasswordVerificationResult.Failed)
         {
-            await accountStore.RegisterFailedAccessAttemptAsync(account.Id, MaxFailedAccessAttempts, LockoutDuration, now, cancellationToken);
-            return AccountOperationResult.InvalidCredentialsFailure;
+            return await RegisterFailureAsync(account.Id, now, AccountOperationStatus.InvalidCredentials, cancellationToken);
         }
 
         if (verification == PasswordVerificationResult.SuccessRehashNeeded)
@@ -176,25 +212,10 @@ public sealed class AccountService
             return AccountOperationResult.ValidationFailure(errors);
         }
 
-        if (account.IsLockedOut(timeProvider.GetUtcNow()))
-            return AccountOperationResult.LockedOutUntil(account.LockoutUntil!.Value);
-        PasswordVerificationResult verification = passwordHasher.VerifyHashedPassword(account, account.PasswordHash, currentPassword!);
-        if (verification == PasswordVerificationResult.Failed)
-        {
-            await RecordFailedAccessAsync(account.Id, cancellationToken);
-            return AccountOperationResult.InvalidCredentialsFailure;
-        }
-        SecondFactorProbe? proof = null;
-        if (account.TwoFactorEnabled)
-        {
-            proof = await twoFactorService.ProbeSecondFactorAsync(account, code, useRecoveryCode, cancellationToken);
-            if (proof.Status != SecondFactorProofStatus.Success)
-            {
-                await RecordFailedAccessAsync(account.Id, cancellationToken);
-                return new AccountOperationResult(proof.Status == SecondFactorProofStatus.MissingCode
-                    ? AccountOperationStatus.SecondFactorRequired : AccountOperationStatus.InvalidSecondFactor);
-            }
-        }
+        (SecondFactorProbe? proof, AccountOperationResult proofResult) = await VerifyIdentityProofAsync(
+            account, currentPassword, code, useRecoveryCode, cancellationToken);
+        if (proofResult.Status != AccountOperationStatus.Success) return proofResult;
+
         string newPasswordHash = passwordHasher.HashPassword(account, newPassword!);
         bool changed = await accountStore.TryChangePasswordAsync(account, AuthSessionService.HashToken(sessionToken),
             newPasswordHash, proof, timeProvider.GetUtcNow(), cancellationToken);

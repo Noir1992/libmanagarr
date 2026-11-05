@@ -75,7 +75,14 @@
             <p class="field-error">{{ formError() }}</p>
           }
 
-          <button type="submit" mat-stroked-button class="auth-submit secondary-button" [disabled]="busy() || credentialsForm.invalid">
+          <app-auth-wait-hint />
+
+          <button
+            type="submit"
+            mat-stroked-button
+            class="auth-submit secondary-button"
+            [disabled]="busy() || credentialsForm.invalid || waiting()"
+          >
             {{ signInLabel() }}
           </button>
 
@@ -111,7 +118,14 @@
             <p class="field-error">{{ formError() }}</p>
           }
 
-          <button type="submit" mat-stroked-button class="auth-submit secondary-button" [disabled]="busy() || codeForm.invalid">
+          <app-auth-wait-hint />
+
+          <button
+            type="submit"
+            mat-stroked-button
+            class="auth-submit secondary-button"
+            [disabled]="busy() || codeForm.invalid || waiting()"
+          >
             {{ verifyLabel() }}
           </button>
         </form>

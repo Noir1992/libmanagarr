@@ -111,26 +111,31 @@ public sealed partial class SqliteAccountStore : IAccountStore
         try
         {
             await using SqliteConnection connection = await OpenConnectionAsync(cancellationToken);
-            await using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = """
-                SELECT id, username, normalized_username, password_hash, security_version,
-                    created_at, updated_at, failed_access_count, lockout_until,
-                    totp_secret, two_factor_enabled, last_used_step
-                FROM accounts
-                WHERE id = 1
-                """;
-            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
-            if (!await reader.ReadAsync(cancellationToken))
-            {
-                return null;
-            }
-
-            return ReadAccount(reader);
+            return await ReadAccountRowAsync(connection, cancellationToken);
         }
         finally
         {
             storageGate.Release();
         }
+    }
+
+    private static async Task<AccountRecord?> ReadAccountRowAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, username, normalized_username, password_hash, security_version,
+                created_at, updated_at, failed_access_count, lockout_until,
+                totp_secret, two_factor_enabled, last_used_step
+            FROM accounts
+            WHERE id = 1
+            """;
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return ReadAccount(reader);
     }
 
     public async Task<bool> TryCreateAccountAsync(string username, string normalizedUsername, string passwordHash, DateTimeOffset now, CancellationToken cancellationToken)
@@ -183,31 +188,39 @@ public sealed partial class SqliteAccountStore : IAccountStore
         }
     }
 
-    public async Task RegisterFailedAccessAttemptAsync(int accountId, int maxFailedAttempts, TimeSpan lockoutDuration, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<AccountRecord?> RegisterFailedAccessAttemptAsync(int accountId, int maxFailedAttempts, TimeSpan lockoutDuration, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await storageGate.WaitAsync(cancellationToken);
         try
         {
             await using SqliteConnection connection = await OpenConnectionAsync(cancellationToken);
-            await using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = """
-                UPDATE accounts
-                SET failed_access_count = CASE
-                        WHEN failed_access_count + 1 >= $maxFailedAttempts THEN 0
-                        ELSE failed_access_count + 1
-                    END,
-                    lockout_until = CASE
-                        WHEN failed_access_count + 1 >= $maxFailedAttempts THEN $lockoutUntil
-                        ELSE lockout_until
-                    END,
-                    updated_at = $now
-                WHERE id = $accountId
-                """;
-            command.Parameters.AddWithValue("$maxFailedAttempts", maxFailedAttempts);
-            command.Parameters.AddWithValue("$lockoutUntil", FormatDate(now + lockoutDuration));
-            command.Parameters.AddWithValue("$now", FormatDate(now));
-            command.Parameters.AddWithValue("$accountId", accountId);
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            await using (SqliteCommand command = connection.CreateCommand())
+            {
+                // The row is only counted while it is not locked: a request that races with another one
+                // that already locked the account must neither add a failure nor move the stored end.
+                command.CommandText = """
+                    UPDATE accounts
+                    SET failed_access_count = CASE
+                            WHEN failed_access_count + 1 >= $maxFailedAttempts THEN 0
+                            ELSE failed_access_count + 1
+                        END,
+                        lockout_until = CASE
+                            WHEN failed_access_count + 1 >= $maxFailedAttempts THEN $lockoutUntil
+                            ELSE lockout_until
+                        END,
+                        updated_at = $now
+                    WHERE id = $accountId AND (lockout_until IS NULL OR lockout_until <= $now)
+                    """;
+                command.Parameters.AddWithValue("$maxFailedAttempts", maxFailedAttempts);
+                command.Parameters.AddWithValue("$lockoutUntil", FormatDate(now + lockoutDuration));
+                command.Parameters.AddWithValue("$now", FormatDate(now));
+                command.Parameters.AddWithValue("$accountId", accountId);
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            // The counter is zeroed by the very attempt that locks the account, so the remaining
+            // attempts can only be read from the row that the update just produced.
+            return await ReadAccountRowAsync(connection, cancellationToken);
         }
         finally
         {
@@ -222,10 +235,12 @@ public sealed partial class SqliteAccountStore : IAccountStore
         {
             await using SqliteConnection connection = await OpenConnectionAsync(cancellationToken);
             await using SqliteCommand command = connection.CreateCommand();
+            // A successful proof clears the counter, but a lockout another request opened in the
+            // meantime stays in place: only an expired one may be wiped here.
             command.CommandText = """
                 UPDATE accounts
                 SET failed_access_count = 0, lockout_until = NULL, updated_at = $now
-                WHERE id = $accountId
+                WHERE id = $accountId AND (lockout_until IS NULL OR lockout_until <= $now)
                 """;
             command.Parameters.AddWithValue("$now", FormatDate(now));
             command.Parameters.AddWithValue("$accountId", accountId);

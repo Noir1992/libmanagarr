@@ -103,9 +103,22 @@ statistics endpoints stay locked.
   30 days** – there is no sliding renewal, so expect a sign-in about once a month.
 - **Two-factor (optional):** TOTP authenticator apps plus **10 one-time recovery codes** shown
   once when you enable it. Enable it in **Settings → Account**.
-- **Brute-force guards:** the auth endpoints allow 10 requests per minute per IP (HTTP 429), and
-  5 failed password or second-factor proofs lock sensitive account operations for 5 minutes.
-  Password changes use the same per-IP rate limit and require fresh proof when 2FA is enabled.
+- **Brute-force guards:** two limits, both editable in **Settings → General → Sign-in protection** and
+  stored in `settings.json` (`authProtection.requestsPerMinute`, `authProtection.maxFailedAttempts`).
+  The request budget allows 10 protected requests per minute per IP by default (1–1000) and answers
+  HTTP 429; it is shared by every protected route – sign-in, initial setup, second-factor verification,
+  password change, the two-factor setup/confirm/disable and recovery-code routes, and the backup export,
+  import validation and apply routes. The failure budget allows 5 wrong passwords or second-factor
+  proofs per account by default (1–100), counted across all of those identity checks, and then locks the
+  account for 5 minutes. A stored `settings.json` without that section keeps the defaults 10 and 5.
+- **Limits apply immediately:** saving the card takes effect without a restart, because the budget is
+  read per request. Saving never resets the failed-attempt counter and never lifts a running lockout.
+  The lockout duration itself is not configurable and stays 5 minutes.
+- **The archive password is a separate credential:** a wrong password for an imported archive is
+  reported as an archive error, is not counted as an account failure and cannot lock the account. The
+  account password a backup form asks for is the identity proof and is counted like every other proof.
+- **Counters and lockouts live in `auth.db`:** they are excluded from backup archives, so an import never
+  unlocks an account, resets a counter, or lifts a lockout on the target installation.
 - **Clock sync:** TOTP codes are time-based (±90 seconds tolerance). Keep the host clock on NTP,
   otherwise valid codes get rejected.
 
@@ -152,6 +165,12 @@ and a manifest with the application version, library schema version and a checks
 stay on the target installation. Set up the desired account before importing on a new installation.
 The archive is AES-256-GCM encrypted with a key derived from the backup password
 (PBKDF2-SHA512, 600 000 iterations) and capped at 512 MB.
+
+The two **sign-in protection limits travel with `settings.json`**, so an archive carries them and the
+imported values apply once the restore finished. A `settings.json` written by an older build has no
+`authProtection` section at all; that is treated as "nothing configured" and keeps the defaults 10 and 5
+rather than failing the import. Failed-attempt counters and running lockouts are in `auth.db` and therefore
+never part of an archive: restoring neither unlocks an account nor resets its counter.
 
 **Export** requires a fresh identity proof – account password, plus a 2FA or recovery code when 2FA
 is on – and a backup password of at least 12 characters, typed twice. That password is not stored

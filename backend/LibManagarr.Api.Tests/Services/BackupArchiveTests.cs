@@ -184,6 +184,58 @@ public sealed class BackupArchiveTests : IDisposable
     }
 
     [Theory]
+    [InlineData("""{"language":"De","authProtection":{"requestsPerMinute":0,"maxFailedAttempts":5}}""")]
+    [InlineData("""{"language":"De","authProtection":{"requestsPerMinute":1001,"maxFailedAttempts":5}}""")]
+    [InlineData("""{"language":"De","authProtection":{"requestsPerMinute":10,"maxFailedAttempts":0}}""")]
+    [InlineData("""{"language":"De","authProtection":{"requestsPerMinute":10,"maxFailedAttempts":101}}""")]
+    [InlineData("""{"language":"De","authProtection":{"requestsPerMinute":"ten"}}""")]
+    [InlineData("""{"language":"De","authProtection":"sign-in protection"}""")]
+    public async Task Validate_RefusesAnArchiveWhoseSignInProtectionLimitsCannotBeLivedWith(string settingsAtExport)
+    {
+        // A zero budget turns down every protected route, and the form that would raise it again
+        // sits behind that same budget, so such an archive may never reach the target installation.
+        await File.WriteAllTextAsync(paths.SettingsFilePath, settingsAtExport);
+        string upload = ExportToUploadFile();
+
+        BackupException failure = await Assert.ThrowsAsync<BackupException>(
+            () => imports.ValidateAsync(upload, BackupPassword, 7, "session-hash", CancellationToken.None));
+
+        Assert.Equal(BackupErrorCodes.IntegrityCheckFailed, failure.Code);
+        Assert.Empty(StagingAreas("import-"));
+    }
+
+    [Fact]
+    public async Task Validate_AcceptsTheSignInProtectionLimitsAnOlderBuildNeverWrote()
+    {
+        // Every archive written before the two limits existed carries no authProtection section at
+        // all. That is nothing configured, not a broken backup, and must stay restorable.
+        string upload = ExportToUploadFile();
+        Assert.DoesNotContain("authProtection", await File.ReadAllTextAsync(paths.SettingsFilePath), StringComparison.Ordinal);
+
+        BackupImportPreview preview = await imports.ValidateAsync(upload, BackupPassword, 7, "session-hash", CancellationToken.None);
+
+        Assert.Equal(2, preview.SonarrInstanceCount);
+    }
+
+    [Fact]
+    public async Task Restore_TakesTheSignInProtectionLimitsFromTheArchive()
+    {
+        await File.WriteAllTextAsync(paths.SettingsFilePath,
+            """{"language":"De","sonarrInstances":[],"radarrInstances":[],"authProtection":{"requestsPerMinute":3,"maxFailedAttempts":2}}""");
+        string upload = ExportToUploadFile();
+        await File.WriteAllTextAsync(paths.SettingsFilePath,
+            """{"language":"Fr","sonarrInstances":[],"radarrInstances":[],"authProtection":{"requestsPerMinute":40,"maxFailedAttempts":9}}""");
+        SqliteConnection.ClearAllPools();
+
+        BackupImportPreview preview = await imports.ValidateAsync(upload, BackupPassword, 7, "session-hash", CancellationToken.None);
+        await imports.PrepareRestoreAsync(preview.ImportId, 7, "session-hash", "restore-sign-in-protection", CancellationToken.None);
+        RestoreBootstrapper bootstrap = new(paths, journals, NullLogger<RestoreBootstrapper>.Instance);
+
+        Assert.Equal(RestoreBootstrapOutcome.Applied, bootstrap.Run(CancellationToken.None));
+        Assert.Contains("\"requestsPerMinute\":3", await File.ReadAllTextAsync(paths.SettingsFilePath), StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Restore_ReplacesApplicationData_AndPreservesTheTargetAccountAndKeys(bool failVerification)

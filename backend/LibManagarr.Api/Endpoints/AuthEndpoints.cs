@@ -113,7 +113,7 @@ public static class AuthEndpoints
             AccountOperationStatus.Success => await SignInWithNewSessionAsync(httpContext, result.Account!, StatusCodes.Status201Created, authSessionService, cancellationToken),
             AccountOperationStatus.ValidationFailed => AuthProblems.Validation(result.Errors!),
             AccountOperationStatus.AlreadyExists => AuthProblems.Problem(StatusCodes.Status409Conflict, "The initial setup is not available anymore.", AuthErrorCodes.SetupNotAvailable),
-            AccountOperationStatus.LockedOut => AuthProblems.LockedOut(result.LockedUntil!.Value, httpContext),
+            AccountOperationStatus.LockedOut => AuthProblems.LockedOut(result.LockedUntil!.Value, httpContext, accountService.GetUtcNow()),
             _ => AuthProblems.StorageUnavailable()
         };
     }
@@ -143,8 +143,8 @@ public static class AuthEndpoints
         }
 
         return result.Status == AccountOperationStatus.LockedOut
-            ? AuthProblems.LockedOut(result.LockedUntil!.Value, httpContext)
-            : AuthProblems.InvalidCredentials();
+            ? AuthProblems.LockedOut(result.LockedUntil!.Value, httpContext, accountService.GetUtcNow())
+            : AuthProblems.InvalidCredentials(result.RemainingAttempts);
     }
 
     private static async Task<Ok<TwoFactorStateResponse>> TwoFactorStateAsync(
@@ -190,23 +190,26 @@ public static class AuthEndpoints
 
         if (account.IsLockedOut(accountService.GetUtcNow()))
         {
-            return AuthProblems.LockedOut(account.LockoutUntil!.Value, httpContext);
+            return AuthProblems.LockedOut(account.LockoutUntil!.Value, httpContext, accountService.GetUtcNow());
         }
 
         SecondFactorProbe proof = await twoFactorService.ProbeSecondFactorAsync(account, request.Code, request.UseRecoveryCode, cancellationToken);
         if (proof.Status != SecondFactorProofStatus.Success)
         {
-            await twoFactorService.RecordChallengeFailureAsync(challenge, cancellationToken);
-            AccountRecord? freshAccount = await accountService.GetAccountAsync(cancellationToken);
-            if (freshAccount is not null && freshAccount.IsLockedOut(accountService.GetUtcNow()))
+            // The recorder answers with the state the counter really holds afterwards, so the
+            // request reaching the limit is answered by the lock instead of another wrong code.
+            AccountOperationResult failure = await twoFactorService.RecordChallengeFailureAsync(challenge, cancellationToken);
+            if (failure.Status == AccountOperationStatus.LockedOut)
             {
-                return AuthProblems.LockedOut(freshAccount.LockoutUntil!.Value, httpContext);
+                return AuthProblems.LockedOut(failure.LockedUntil!.Value, httpContext, accountService.GetUtcNow());
             }
 
-            return AuthProblems.Problem(
+            return AuthProblems.ProofFailure(
                 StatusCodes.Status400BadRequest,
                 "The two-factor code is incorrect.",
-                AuthErrorCodes.InvalidTwoFactorCode);
+                AuthErrorCodes.InvalidTwoFactorCode,
+                AuthFailureKinds.SecondFactor,
+                failure.RemainingAttempts);
         }
 
         if (!await twoFactorService.CompleteLoginAsync(account, challenge, proof, cancellationToken))

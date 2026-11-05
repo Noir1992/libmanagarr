@@ -1,0 +1,64 @@
+<section class="card">
+  <div class="card-header">{{ authProtectionTitle() }}</div>
+  <form class="card-content auth-protection-settings-form" [formGroup]="authProtectionForm">
+    <div class="field">
+      <div class="field-label-row">
+        <label for="auth-protection-requests">{{ requestsPerMinuteLabel() }}*</label>
+        <app-info-icon [messageText]="requestsPerMinuteInfoMessage()" />
+      </div>
+
+      <div class="field-control-wrap">
+        <input
+          id="auth-protection-requests"
+          matInput
+          class="no-spinners"
+          type="number"
+          formControlName="requestsPerMinute"
+          [class.has-error]="authProtectionFieldError('requestsPerMinute') !== null"
+          [min]="requestsPerMinuteLimits.min"
+          [max]="requestsPerMinuteLimits.max"
+          (blur)="onSaveAuthProtectionFieldAsync('requestsPerMinute')"
+        />
+        <app-feedback-icon
+          [state]="authProtectionFieldSavingFor('requestsPerMinute') ? 'loading' : authProtectionFieldFeedback('requestsPerMinute')"
+          variant="overlay"
+          [tooltipText]="authProtectionFieldFeedbackMessage('requestsPerMinute')"
+        />
+      </div>
+
+      @if (authProtectionFieldError('requestsPerMinute')) {
+        <p class="field-error">{{ authProtectionFieldError('requestsPerMinute') }}</p>
+      }
+    </div>
+
+    <div class="field">
+      <div class="field-label-row">
+        <label for="auth-protection-attempts">{{ maxFailedAttemptsLabel() }}*</label>
+        <app-info-icon [messageText]="maxFailedAttemptsInfoMessage()" />
+      </div>
+
+      <div class="field-control-wrap">
+        <input
+          id="auth-protection-attempts"
+          matInput
+          class="no-spinners"
+          type="number"
+          formControlName="maxFailedAttempts"
+          [class.has-error]="authProtectionFieldError('maxFailedAttempts') !== null"
+          [min]="maxFailedAttemptsLimits.min"
+          [max]="maxFailedAttemptsLimits.max"
+          (blur)="onSaveAuthProtectionFieldAsync('maxFailedAttempts')"
+        />
+        <app-feedback-icon
+          [state]="authProtectionFieldSavingFor('maxFailedAttempts') ? 'loading' : authProtectionFieldFeedback('maxFailedAttempts')"
+          variant="overlay"
+          [tooltipText]="authProtectionFieldFeedbackMessage('maxFailedAttempts')"
+        />
+      </div>
+
+      @if (authProtectionFieldError('maxFailedAttempts')) {
+        <p class="field-error">{{ authProtectionFieldError('maxFailedAttempts') }}</p>
+      }
+    </div>
+  </form>
+</section>

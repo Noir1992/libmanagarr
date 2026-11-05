@@ -119,20 +119,27 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     builder.Services.AddRateLimiter((options) =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-        options.AddPolicy("auth", (httpContext) => RateLimitPartition.GetFixedWindowLimiter(
-            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            (_) => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 10,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0
-            }));
+        // One window per source address. The framework creates it on the first request from that
+        // address and retires the ones that stayed idle; the permit count inside it comes from the
+        // settings with every request, so a change there acts without a restart.
+        options.AddPolicy("auth", (httpContext) =>
+        {
+            ISettingsService settingsService = httpContext.RequestServices.GetRequiredService<ISettingsService>();
+            TimeProvider timeProvider = httpContext.RequestServices.GetRequiredService<TimeProvider>();
+            return RateLimitPartition.Get(
+                httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                (_) => new AuthRateLimitWindow(settingsService, timeProvider));
+        });
         options.OnRejected = static async (context, cancellationToken) =>
         {
-            context.HttpContext.Response.Headers.RetryAfter = "60";
-            ProblemDetails problem = new() { Title = "Too many requests, please try again later.", Status = StatusCodes.Status429TooManyRequests };
-            problem.Extensions["code"] = AuthErrorCodes.TooManyRequests;
-            await TypedResults.Problem(problem).ExecuteAsync(context.HttpContext);
+            HttpContext httpContext = context.HttpContext;
+            TimeProvider timeProvider = httpContext.RequestServices.GetRequiredService<TimeProvider>();
+            // The answer names the time the rejecting window really has left instead of a fixed
+            // minute, read from the same clock that counted the requests of that window.
+            TimeSpan remaining = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out TimeSpan retryAfter)
+                ? retryAfter
+                : AuthRateLimitWindow.WindowLength;
+            await AuthProblems.TooManyRequests(remaining, httpContext, timeProvider.GetUtcNow()).ExecuteAsync(httpContext);
         };
     });
 

@@ -213,5 +213,37 @@ public sealed class JsonSettingsServiceTests : IDisposable
         Assert.Contains("titleSorting", persisted);
     }
 
+    [Fact]
+    public async Task GetSnapshotAsync_SuppliesTheDefaultSignInProtection_ForAFileWithoutThatSection()
+    {
+        // Settings files and backups written before the two limits existed carry no such section.
+        // Missing has to mean nothing configured, never a budget of zero, which would turn down
+        // every protected route including the sign-in that could raise the limit again.
+        string path = Path.Combine(environment.ContentRootPath, "data", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, """{"language":"De","theme":"Dark"}""");
+
+        AppSettings loaded = await CreateService().GetSnapshotAsync(CancellationToken.None);
+        AppSettings reloaded = await CreateService().GetSnapshotAsync(CancellationToken.None);
+
+        Assert.Equal(10, loaded.AuthProtection.RequestsPerMinute);
+        Assert.Equal(5, loaded.AuthProtection.MaxFailedAttempts);
+        Assert.Equal(10, reloaded.AuthProtection.RequestsPerMinute);
+        Assert.Equal(5, reloaded.AuthProtection.MaxFailedAttempts);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_KeepsTheDefaultForTheMissingHalfOfAPartialSignInProtectionSection()
+    {
+        string path = Path.Combine(environment.ContentRootPath, "data", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, """{"authProtection":{"requestsPerMinute":3}}""");
+
+        AppSettings loaded = await CreateService().GetSnapshotAsync(CancellationToken.None);
+
+        Assert.Equal(3, loaded.AuthProtection.RequestsPerMinute);
+        Assert.Equal(5, loaded.AuthProtection.MaxFailedAttempts);
+    }
+
     public void Dispose() => environment.Dispose();
 }

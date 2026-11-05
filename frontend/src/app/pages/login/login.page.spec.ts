@@ -6,6 +6,7 @@ import { provideRouter, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { AppSettingsService } from '../../services/app-settings.service';
+import { AuthWaitService } from '../../services/auth-wait.service';
 import { AuthService } from '../../services/auth.service';
 import { ForgotPasswordDialogComponent } from './forgot-password-dialog/forgot-password-dialog.component';
 import { LoginPage } from './login.page';
@@ -34,7 +35,7 @@ describe('LoginPage', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: AppI18nService, useValue: i18nSpy },
-        { provide: AppSettingsService, useValue: { load: settingsLoadSpy } },
+        { provide: AppSettingsService, useValue: { load: settingsLoadSpy, localeId: (): string => 'en-US' } },
       ],
     });
 
@@ -158,6 +159,55 @@ describe('LoginPage', () => {
 
     expect(errorText).toContain('auth.invalidCredentials');
     expect(authService.state()).not.toBe('authenticated');
+  });
+
+  it('keeps the fields editable and quietens the submit while the account is locked', async () => {
+    const fixture = await createPage(false);
+
+    setValue(fixture, '#login-username', 'admin');
+    setValue(fixture, '#login-password', 'wrong-password');
+    (fixture.nativeElement.querySelector('form button[type="submit"]') as HTMLButtonElement).click();
+
+    httpController
+      .expectOne('/api/auth/login')
+      .flush(
+        { detail: 'Locked.', code: 'account_locked', remainingAttempts: 0, retryAfterSeconds: 300 },
+        { status: 429, statusText: 'Too Many Requests' },
+      );
+    await settle();
+    fixture.detectChanges();
+
+    const submit: HTMLButtonElement = fixture.nativeElement.querySelector('form button[type="submit"]');
+    const username: HTMLInputElement = fixture.nativeElement.querySelector('#login-username');
+
+    expect(submit.disabled).toBeTrue();
+    expect(username.disabled).toBeFalse();
+    expect(fixture.nativeElement.querySelector('.auth-wait-line')).not.toBeNull();
+  });
+
+  it('gives the submit back the moment the known wait is gone', async () => {
+    const fixture = await createPage(false);
+
+    setValue(fixture, '#login-username', 'admin');
+    setValue(fixture, '#login-password', 'wrong-password');
+    (fixture.nativeElement.querySelector('form button[type="submit"]') as HTMLButtonElement).click();
+
+    httpController
+      .expectOne('/api/auth/login')
+      .flush(
+        { detail: 'Locked.', code: 'account_locked', remainingAttempts: 0, retryAfterSeconds: 300 },
+        { status: 429, statusText: 'Too Many Requests' },
+      );
+    await settle();
+    fixture.detectChanges();
+
+    TestBed.inject(AuthWaitService).clear();
+    fixture.detectChanges();
+
+    const submit: HTMLButtonElement = fixture.nativeElement.querySelector('form button[type="submit"]');
+
+    expect(submit.disabled).toBeFalse();
+    expect(fixture.nativeElement.querySelector('.auth-wait-line')).toBeNull();
   });
 
   it('opens the password recovery dialog from the credentials form', async () => {

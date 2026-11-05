@@ -7,4 +7,6 @@ public sealed class GeneralSettingsDto
     public ThemeMode Theme { get; set; }
 
     public TitleSortingSettings TitleSorting { get; set; } = new();
+
+    public AuthProtectionSettings AuthProtection { get; set; } = new();
 }

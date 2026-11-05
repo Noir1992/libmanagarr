@@ -19,6 +19,11 @@ public static class AppSettingsDefaults
                 Path = "./logs",
                 RetentionDays = 30,
                 MinimumLevel = LogLevel.Information
+            },
+            AuthProtection = new AuthProtectionSettings
+            {
+                RequestsPerMinute = 10,
+                MaxFailedAttempts = 5
             }
         };
     }

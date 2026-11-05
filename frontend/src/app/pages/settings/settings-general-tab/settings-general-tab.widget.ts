@@ -21,6 +21,7 @@ import { AppSettingsService, ValidationProblemError } from '../../../services/ap
 import { FeedbackIconWidget } from '../../../widgets/feedback-icon/feedback-icon.widget';
 import { InfoIconWidget } from '../../../widgets/info-icon/info-icon.widget';
 import { SettingsUnsavedChangesBase } from '../settings-unsaved-changes.base';
+import { AuthProtectionSettingsCardWidget } from './auth-protection-settings-card/auth-protection-settings-card.widget';
 import { LoggingSettingsCardWidget } from './logging-settings-card/logging-settings-card.widget';
 import { TitleSortingSettingsCardWidget } from './title-sorting-settings-card/title-sorting-settings-card.widget';
 import {
@@ -42,6 +43,7 @@ type GeneralSettingsFormGroup = FormGroup<{
     MatSelectModule,
     FeedbackIconWidget,
     InfoIconWidget,
+    AuthProtectionSettingsCardWidget,
     LoggingSettingsCardWidget,
     TitleSortingSettingsCardWidget,
   ],
@@ -57,6 +59,8 @@ export class SettingsGeneralTabWidget extends SettingsUnsavedChangesBase impleme
   private readonly generalFieldAutoSaveVersion: Record<GeneralField, number> = { language: 0, theme: 0 };
   @ViewChild(LoggingSettingsCardWidget)
   private readonly loggingSettingsCardWidget?: LoggingSettingsCardWidget;
+  @ViewChild(AuthProtectionSettingsCardWidget)
+  private readonly authProtectionSettingsCardWidget?: AuthProtectionSettingsCardWidget;
   @ViewChild(TitleSortingSettingsCardWidget)
   private readonly titleSortingSettingsCardWidget?: TitleSortingSettingsCardWidget;
 
@@ -227,6 +231,7 @@ export class SettingsGeneralTabWidget extends SettingsUnsavedChangesBase impleme
     return (
       this.generalFieldSavingState().language ||
       this.generalFieldSavingState().theme ||
+      this.authProtectionSettingsCardWidget?.isBusy() === true ||
       this.loggingSettingsCardWidget?.isBusy() === true ||
       this.titleSortingSettingsCardWidget?.isBusy() === true
     );
@@ -235,6 +240,7 @@ export class SettingsGeneralTabWidget extends SettingsUnsavedChangesBase impleme
   protected override hasUnsavedChanges(): boolean {
     return (
       this.settingsForm.dirty ||
+      this.authProtectionSettingsCardWidget?.hasUnsavedChanges() === true ||
       this.loggingSettingsCardWidget?.hasUnsavedChanges() === true ||
       this.titleSortingSettingsCardWidget?.hasUnsavedChanges() === true
     );
@@ -242,6 +248,7 @@ export class SettingsGeneralTabWidget extends SettingsUnsavedChangesBase impleme
 
   protected override discardUnsavedChanges(): void {
     this.hydrateForm(this.appSettingsService.language(), this.appSettingsService.theme());
+    this.authProtectionSettingsCardWidget?.discardUnsavedChanges();
     this.loggingSettingsCardWidget?.discardUnsavedChanges();
     this.titleSortingSettingsCardWidget?.discardUnsavedChanges();
     this.generalFieldSavingState.set({ language: false, theme: false });

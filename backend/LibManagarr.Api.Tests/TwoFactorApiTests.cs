@@ -410,6 +410,34 @@ public sealed class TwoFactorApiTests
         Assert.Equal("second_factor_required", await GetErrorCodeAsync(change));
     }
 
+    /// <summary>
+    /// A wrong code is never answered as a wrong password: the refusal names the second factor as the
+    /// credential that failed, so the form can mark the code field while the password stays intact.
+    /// </summary>
+    [Fact]
+    public async Task Verify_WithWrongCode_ShouldNameTheSecondFactor_AndNotThePassword()
+    {
+        using AuthTestAppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        (string sharedKey, _) = await EnableTwoFactorAsync(factory, client);
+        using HttpClient loginClient = factory.CreateClient();
+        await LoginWithChallengeAsync(loginClient);
+        string verifyToken = await FetchCsrfTokenAsync(loginClient);
+
+        // A well-formed code from a distant time step: wrong in the same way a mistyped one is, while
+        // the shape of the value keeps the answer on the code path instead of the missing-code path.
+        using HttpResponseMessage verify = await PostJsonAsync(
+            loginClient,
+            "/api/auth/two-factor/verify",
+            verifyToken,
+            new { code = ComputeTotpCode(sharedKey, factory.FakeTime.Current.AddHours(1)) });
+
+        Assert.Equal(HttpStatusCode.BadRequest, verify.StatusCode);
+        using JsonDocument body = await ReadJsonAsync(verify);
+        Assert.Equal("invalid_two_factor_code", body.RootElement.GetProperty("code").GetString());
+        Assert.Equal("second_factor", body.RootElement.GetProperty("failureKind").GetString());
+    }
+
     [Fact]
     public async Task PasswordChange_WithRecoveryProof_ShouldChangeAndConsumeCode()
     {
@@ -593,7 +621,7 @@ public sealed class TwoFactorApiTests
         using HttpClient client = factory.CreateClient();
         await EnableTwoFactorAsync(factory, client);
         string token = await FetchCsrfTokenAsync(client);
-        for (int attempt = 0; attempt < 5; attempt++)
+        for (int attempt = 1; attempt <= 4; attempt++)
         {
             using HttpResponseMessage rejected = await PostJsonAsync(client, "/api/account/password", token,
                 new { currentPassword = ValidPassword, newPassword = OtherPassword, confirmPassword = OtherPassword, code = "not-a-code" });

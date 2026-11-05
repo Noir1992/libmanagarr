@@ -25,7 +25,9 @@ import { FeedbackState } from '../../../interfaces/general/feedback-state';
 import { AppDatePipe } from '../../../pipes/app-date.pipe';
 import { AccountService } from '../../../services/account.service';
 import { AuthRequestError } from '../../../services/auth-error.util';
+import { AuthWaitService } from '../../../services/auth-wait.service';
 import { BackupDownload, BackupService } from '../../../services/backup.service';
+import { AuthWaitHintWidget } from '../../../widgets/auth-wait-hint/auth-wait-hint.widget';
 import { FeedbackIconWidget } from '../../../widgets/feedback-icon/feedback-icon.widget';
 import { InfoIconWidget } from '../../../widgets/info-icon/info-icon.widget';
 import { SettingsUnsavedChangesBase } from '../settings-unsaved-changes.base';
@@ -106,7 +108,7 @@ interface FeedbackSlot {
  */
 @Component({
   selector: 'app-settings-backup-tab-widget',
-  imports: [ReactiveFormsModule, MatButtonModule, MatInput, InfoIconWidget, FeedbackIconWidget, AppDatePipe],
+  imports: [ReactiveFormsModule, MatButtonModule, MatInput, AuthWaitHintWidget, InfoIconWidget, FeedbackIconWidget, AppDatePipe],
   templateUrl: './settings-backup-tab.widget.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './settings-backup-tab.widget.scss',
@@ -116,6 +118,7 @@ export class SettingsBackupTabWidget extends SettingsUnsavedChangesBase implemen
   private readonly formBuilder: NonNullableFormBuilder = inject(NonNullableFormBuilder);
   private readonly backupService: BackupService = inject(BackupService);
   private readonly accountService: AccountService = inject(AccountService);
+  private readonly authWaitService: AuthWaitService = inject(AuthWaitService);
   private readonly zone: NgZone = inject(NgZone);
   private restartPollTimer?: ReturnType<typeof setTimeout>;
   private restartDeadline: number = 0;
@@ -226,6 +229,11 @@ export class SettingsBackupTabWidget extends SettingsUnsavedChangesBase implemen
   protected readonly actionsBlocked: Signal<boolean> = computed(
     (): boolean => this.busy() || this.restoreState() === 'restarting' || this.restoreState() === 'restartDelayed',
   );
+
+  // The three proof-bearing actions share the account behind them, so one known wait quietens all of
+  // them. Choosing a file and dropping a checked archive stay allowed: neither asks anything the
+  // limits protect, and a half-picked upload would otherwise be lost for nothing.
+  protected readonly waiting: Signal<boolean> = this.authWaitService.waiting;
   protected readonly applySummary: Signal<string> = computed((): string => {
     const checked: BackupImportPreview | null = this.preview();
 
@@ -494,6 +502,13 @@ export class SettingsBackupTabWidget extends SettingsUnsavedChangesBase implemen
       } else {
         this.placeFailure(code, message, passwordFields, failure, passwordErrors);
         this.setActionFeedback(running, 'error', message);
+
+        // A refusal that named a wait is worn until that wait lapses instead of for three seconds,
+        // because the countdown under the buttons would otherwise be all that is left to explain why
+        // retrying is pointless.
+        if (this.authWaitService.waiting()) {
+          this.holdActionFeedback(running);
+        }
       }
     } finally {
       this.busy.set(false);
@@ -525,6 +540,19 @@ export class SettingsBackupTabWidget extends SettingsUnsavedChangesBase implemen
       slot.message.set(null);
       delete this.feedbackTimeouts[action];
     }, 3000);
+  }
+
+  /**
+   * Takes one button's expiry back, so its mark stays while the wait that produced it is still known.
+   * The next call replaces the mark the same way the timed expiry would have.
+   */
+  private holdActionFeedback(action: BackupAction): void {
+    const timeout: ReturnType<typeof setTimeout> | undefined = this.feedbackTimeouts[action];
+
+    if (timeout) {
+      clearTimeout(timeout);
+      delete this.feedbackTimeouts[action];
+    }
   }
 
   /** A password the backend refused belongs to one input; anything else has no field to point at. */

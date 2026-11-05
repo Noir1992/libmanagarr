@@ -163,6 +163,48 @@ public sealed class AppSettingsValidatorTests
         Assert.Contains("theme", validationErrors.Keys);
     }
 
+    [Theory]
+    [InlineData(0, 5, "authProtection.requestsPerMinute")]
+    [InlineData(1001, 5, "authProtection.requestsPerMinute")]
+    [InlineData(10, 0, "authProtection.maxFailedAttempts")]
+    [InlineData(10, 101, "authProtection.maxFailedAttempts")]
+    public void ValidateGeneral_ShouldRejectEachAuthProtectionLimitOutsideItsRange(
+        int requestsPerMinute,
+        int maxFailedAttempts,
+        string expectedKey)
+    {
+        AppSettings settings = new()
+        {
+            AuthProtection = new AuthProtectionSettings
+            {
+                RequestsPerMinute = requestsPerMinute,
+                MaxFailedAttempts = maxFailedAttempts
+            }
+        };
+
+        Dictionary<string, string[]> validationErrors = AppSettingsValidator.ValidateGeneral(settings);
+
+        Assert.Single(validationErrors);
+        Assert.Contains(expectedKey, validationErrors.Keys);
+    }
+
+    [Fact]
+    public void ValidateGeneral_ShouldAllowTheOutermostAuthProtectionLimits()
+    {
+        AppSettings settings = new()
+        {
+            AuthProtection = new AuthProtectionSettings
+            {
+                RequestsPerMinute = 1000,
+                MaxFailedAttempts = 100
+            }
+        };
+
+        Dictionary<string, string[]> validationErrors = AppSettingsValidator.ValidateGeneral(settings);
+
+        Assert.Empty(validationErrors);
+    }
+
     [Fact]
     public void ValidateConnectionRequest_ShouldRejectUnsupportedApplicationKind()
     {

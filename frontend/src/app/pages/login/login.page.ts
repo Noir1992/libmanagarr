@@ -10,7 +10,9 @@ import { TwoFactorStateBackend } from '../../interfaces/auth/two-factor-state-ba
 import { AppI18nService } from '../../services/app-i18n.service';
 import { AppSettingsService } from '../../services/app-settings.service';
 import { AuthRequestError, translateAuthError } from '../../services/auth-error.util';
+import { AuthWaitService } from '../../services/auth-wait.service';
 import { AuthService } from '../../services/auth.service';
+import { AuthWaitHintWidget } from '../../widgets/auth-wait-hint/auth-wait-hint.widget';
 import { ForgotPasswordDialogComponent } from './forgot-password-dialog/forgot-password-dialog.component';
 
 type LoginMode = 'credentials' | 'twoFactor';
@@ -34,7 +36,7 @@ const LOCAL_RETURN_URL_PATTERN: RegExp = /^\/(?!\/|\\)[^\s]*$/;
  */
 @Component({
   selector: 'app-login-page',
-  imports: [ReactiveFormsModule, MatButtonModule, MatCheckbox, MatInput],
+  imports: [ReactiveFormsModule, MatButtonModule, MatCheckbox, MatInput, AuthWaitHintWidget],
   templateUrl: './login.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './login.page.scss',
@@ -43,6 +45,7 @@ export class LoginPage implements OnInit {
   /* Injections */
   private readonly i18n: AppI18nService = inject(AppI18nService);
   private readonly authService: AuthService = inject(AuthService);
+  private readonly authWaitService: AuthWaitService = inject(AuthWaitService);
   private readonly appSettingsService: AppSettingsService = inject(AppSettingsService);
   private readonly router: Router = inject(Router);
   private readonly activatedRoute: ActivatedRoute = inject(ActivatedRoute);
@@ -71,6 +74,9 @@ export class LoginPage implements OnInit {
   protected readonly retryLabel: Signal<string> = computed((): string => this.i18n.t('auth.errorRetry'));
   protected readonly authState: Signal<AuthFlowState> = this.authService.state;
   protected readonly authErrorLabel: Signal<string | null> = this.authService.errorLabel;
+  // The wait belongs to the account or the browser, not to one of the two steps, so both submit
+  // buttons go quiet together while it runs. The fields stay editable for the next attempt.
+  protected readonly waiting: Signal<boolean> = this.authWaitService.waiting;
 
   /* Signals */
   protected readonly passwordVisible: WritableSignal<boolean> = signal<boolean>(false);

@@ -1,6 +1,8 @@
 <section class="tab-header">{{ descriptionLabel() }}</section>
 
 <section class="tab-content">
+  <app-auth-wait-hint />
+
   @if (errorMessage(); as message) {
     <p class="field-error">{{ message }}</p>
     @if (canRetry()) {
@@ -165,7 +167,7 @@
           type="button"
           mat-stroked-button
           class="secondary-button"
-          [disabled]="!canExport || actionsBlocked()"
+          [disabled]="!canExport || actionsBlocked() || waiting()"
           (click)="exportAsync()"
         >
           <span class="button-content">
@@ -235,7 +237,7 @@
               type="button"
               mat-stroked-button
               class="secondary-button"
-              [disabled]="!canImport || actionsBlocked()"
+              [disabled]="!canImport || actionsBlocked() || waiting()"
               (click)="validateAsync()"
             >
               <span class="button-content">
@@ -385,7 +387,7 @@
             type="button"
             mat-stroked-button
             class="secondary-button"
-            [disabled]="!canApply || actionsBlocked()"
+            [disabled]="!canApply || actionsBlocked() || waiting()"
             (click)="applyAsync()"
           >
             <span class="button-content">

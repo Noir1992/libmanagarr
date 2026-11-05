@@ -30,8 +30,15 @@ public interface IAccountStore
 
     Task<bool> UpdatePasswordHashOnlyAsync(AccountRecord account, string newPasswordHash, DateTimeOffset now, CancellationToken cancellationToken);
 
-    Task RegisterFailedAccessAttemptAsync(int accountId, int maxFailedAttempts, TimeSpan lockoutDuration, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <summary>
+    /// Counts one failed identity proof and answers with the account row exactly as it stands
+    /// afterwards, so the caller reports the state the store really produced instead of one it
+    /// read before. A row that is already locked is left untouched: a request racing with the one
+    /// that locked the account neither counts again nor moves the stored end.
+    /// </summary>
+    Task<AccountRecord?> RegisterFailedAccessAttemptAsync(int accountId, int maxFailedAttempts, TimeSpan lockoutDuration, DateTimeOffset now, CancellationToken cancellationToken);
 
+    /// <summary>Clears the failure counter of a proven identity; an active lockout survives it.</summary>
     Task ResetAccessFailuresAsync(int accountId, DateTimeOffset now, CancellationToken cancellationToken);
 
     Task AddSessionAsync(SessionRecord session, CancellationToken cancellationToken);

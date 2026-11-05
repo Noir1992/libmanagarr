@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using LibManagarr.Api.Models;
 using LibManagarr.Api.Services;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -230,15 +231,17 @@ public sealed class AuthApiTests
         using HttpClient client = factory.CreateClient();
         await SetupAccountAsync(client);
 
-        for (int attempt = 1; attempt <= 5; attempt++)
+        for (int attempt = 1; attempt <= 4; attempt++)
         {
             using HttpResponseMessage wrong = await PostJsonAsync(
                 client, "/api/auth/login", await FetchCsrfTokenAsync(client), new { username = Username, password = "definitely-wrong-pass" });
             Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
         }
 
+        // The attempt that reaches the limit is answered by the lock itself, not by another
+        // credential failure that would only show up one request later.
         using HttpResponseMessage locked = await PostJsonAsync(
-            client, "/api/auth/login", await FetchCsrfTokenAsync(client), new { username = Username, password = ValidPassword });
+            client, "/api/auth/login", await FetchCsrfTokenAsync(client), new { username = Username, password = "definitely-wrong-pass" });
         Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
         Assert.Equal("account_locked", await GetErrorCodeAsync(locked));
         Assert.True(locked.Headers.Contains("Retry-After"));
@@ -375,6 +378,175 @@ public sealed class AuthApiTests
         Assert.True(limited.Headers.Contains("Retry-After"));
     }
 
+    /// <summary>
+    /// The budget belongs to the general settings, so changing it takes effect on the running instance,
+    /// and a refusal names the time the window of that address really has left instead of a fixed minute.
+    /// </summary>
+    [Fact]
+    public async Task RateLimit_ShouldFollowTheSettings_AndReportTheTimeTheWindowHasLeft()
+    {
+        using AuthTestAppFactory factory = new();
+        ISettingsService settings = factory.Services.GetRequiredService<ISettingsService>();
+        AppSettings stored = await settings.GetAsync(default);
+        stored.AuthProtection.RequestsPerMinute = 3;
+        await settings.SaveAsync(stored, default);
+        using HttpClient client = factory.CreateClient();
+        string token = await FetchCsrfTokenAsync(client);
+
+        for (int attempt = 1; attempt <= 3; attempt++)
+        {
+            using HttpResponseMessage response = await PostJsonAsync(
+                client, "/api/auth/login", token, new { username = Username, password = "definitely-wrong-pass" });
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+
+        using HttpResponseMessage limited = await PostJsonAsync(
+            client, "/api/auth/login", token, new { username = Username, password = "definitely-wrong-pass" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
+        Assert.Equal("60", RetryAfter(limited));
+        using (JsonDocument body = await ReadProblemAsync(limited))
+        {
+            Assert.Equal("too_many_requests", body.RootElement.GetProperty("code").GetString());
+            // The answer describes the same wait its own header promises and says nothing about the
+            // credentials, because reaching this refusal never examined a proof.
+            Assert.Equal(60, body.RootElement.GetProperty("retryAfterSeconds").GetInt32());
+            Assert.Equal(
+                body.RootElement.GetProperty("serverTime").GetDateTimeOffset().AddSeconds(60),
+                body.RootElement.GetProperty("retryAt").GetDateTimeOffset());
+            Assert.False(body.RootElement.TryGetProperty("failureKind", out JsonElement _));
+            Assert.False(body.RootElement.TryGetProperty("remainingAttempts", out JsonElement _));
+        }
+
+        factory.FakeTime.Advance(TimeSpan.FromSeconds(45));
+
+        using HttpResponseMessage stillLimited = await PostJsonAsync(
+            client, "/api/auth/login", token, new { username = Username, password = "definitely-wrong-pass" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, stillLimited.StatusCode);
+        Assert.Equal("15", RetryAfter(stillLimited));
+        using (JsonDocument body = await ReadProblemAsync(stillLimited))
+        {
+            Assert.Equal(15, body.RootElement.GetProperty("retryAfterSeconds").GetInt32());
+        }
+
+        AppSettings raised = await settings.GetAsync(default);
+        raised.AuthProtection.RequestsPerMinute = 10;
+        await settings.SaveAsync(raised, default);
+
+        using HttpResponseMessage admitted = await PostJsonAsync(
+            client, "/api/auth/login", token, new { username = Username, password = "definitely-wrong-pass" });
+        Assert.Equal(HttpStatusCode.Unauthorized, admitted.StatusCode);
+    }
+
+    /// <summary>
+    /// The attempt warning belongs to the last two tries before a lock, and the request that spends
+    /// the budget answers the lock itself: its end, the seconds it has left and the header naming the
+    /// same wait, all read from the clock that set the lock.
+    /// </summary>
+    [Fact]
+    public async Task Login_WithRepeatedWrongPasswords_ShouldWarnForTheLastTwoAttempts_AndThenNameTheLock()
+    {
+        using AuthTestAppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        await SetupAccountAsync(client);
+        string token = await FetchCsrfTokenAsync(client);
+
+        // The shared default of five attempts leaves 4, 3, 2 and 1: only the last two are named, so
+        // an early guess learns nothing while the owner still gets the warning before a lock.
+        int?[] expectedRemaining = [null, null, 2, 1];
+        foreach (int? expected in expectedRemaining)
+        {
+            using HttpResponseMessage response = await PostJsonAsync(client, "/api/auth/login", token,
+                new { username = Username, password = "definitely-wrong-pass" });
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+            using JsonDocument body = await ReadProblemAsync(response);
+            Assert.Equal("invalid_credentials", body.RootElement.GetProperty("code").GetString());
+            Assert.Equal("password", body.RootElement.GetProperty("failureKind").GetString());
+            if (expected is null)
+            {
+                Assert.False(body.RootElement.TryGetProperty("remainingAttempts", out JsonElement _));
+            }
+            else
+            {
+                Assert.Equal(expected.Value, body.RootElement.GetProperty("remainingAttempts").GetInt32());
+            }
+        }
+
+        DateTimeOffset beforeLastAttempt = factory.FakeTime.Current;
+        using HttpResponseMessage locked = await PostJsonAsync(client, "/api/auth/login", token,
+            new { username = Username, password = "definitely-wrong-pass" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
+        using JsonDocument lockBody = await ReadProblemAsync(locked);
+        Assert.Equal("account_locked", lockBody.RootElement.GetProperty("code").GetString());
+        Assert.Equal(0, lockBody.RootElement.GetProperty("remainingAttempts").GetInt32());
+        DateTimeOffset lockedUntil = beforeLastAttempt.Add(AccountService.LockoutDuration);
+        Assert.Equal(lockedUntil, lockBody.RootElement.GetProperty("lockedUntil").GetDateTimeOffset());
+        Assert.Equal(lockedUntil, lockBody.RootElement.GetProperty("retryAt").GetDateTimeOffset());
+        Assert.Equal(beforeLastAttempt, lockBody.RootElement.GetProperty("serverTime").GetDateTimeOffset());
+        long lockSeconds = (long)AccountService.LockoutDuration.TotalSeconds;
+        Assert.Equal(lockSeconds, lockBody.RootElement.GetProperty("retryAfterSeconds").GetInt64());
+        Assert.Equal(lockSeconds.ToString(CultureInfo.InvariantCulture), RetryAfter(locked));
+    }
+
+    /// <summary>
+    /// A username nobody has chosen is answered exactly like a wrong password and stays without a
+    /// count: the answer gives nothing about the real account away and leaves its attempts untouched.
+    /// </summary>
+    [Fact]
+    public async Task Login_WithUnknownUsername_ShouldStayGeneric_AndLeaveTheAccountAttemptsAlone()
+    {
+        using AuthTestAppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        await SetupAccountAsync(client);
+        string token = await FetchCsrfTokenAsync(client);
+
+        for (int attempt = 1; attempt <= 2; attempt++)
+        {
+            using HttpResponseMessage response = await PostJsonAsync(client, "/api/auth/login", token,
+                new { username = "whoever", password = ValidPassword });
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+            using JsonDocument body = await ReadProblemAsync(response);
+            Assert.Equal("invalid_credentials", body.RootElement.GetProperty("code").GetString());
+            Assert.False(body.RootElement.TryGetProperty("remainingAttempts", out JsonElement _));
+            Assert.False(body.RootElement.TryGetProperty("lockedUntil", out JsonElement _));
+        }
+
+        using HttpResponseMessage signIn = await PostJsonAsync(client, "/api/auth/login", token,
+            new { username = Username, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.OK, signIn.StatusCode);
+    }
+
+    /// <summary>
+    /// The account area shares the counter with the sign-in, so a wrong current password warns there
+    /// with the same last two attempts and names the password as the credential that failed.
+    /// </summary>
+    [Fact]
+    public async Task ChangePassword_WithRepeatedWrongCurrentPasswords_ShouldWarnForTheLastTwoAttempts()
+    {
+        using AuthTestAppFactory factory = new();
+        using HttpClient client = factory.CreateClient();
+        await SetupAccountAsync(client);
+        string token = await FetchCsrfTokenAsync(client);
+
+        int?[] expectedRemaining = [null, null, 2, 1];
+        foreach (int? expected in expectedRemaining)
+        {
+            using HttpResponseMessage response = await PostJsonAsync(client, "/api/account/password", token,
+                new { currentPassword = "wrong", newPassword = OtherPassword, confirmPassword = OtherPassword });
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            using JsonDocument body = await ReadProblemAsync(response);
+            Assert.Equal("current_password_incorrect", body.RootElement.GetProperty("code").GetString());
+            Assert.Equal("password", body.RootElement.GetProperty("failureKind").GetString());
+            if (expected is null)
+            {
+                Assert.False(body.RootElement.TryGetProperty("remainingAttempts", out JsonElement _));
+            }
+            else
+            {
+                Assert.Equal(expected.Value, body.RootElement.GetProperty("remainingAttempts").GetInt32());
+            }
+        }
+    }
+
     [Fact]
     public async Task UnknownApiPath_ShouldReturnProblem404()
     {
@@ -445,16 +617,22 @@ public sealed class AuthApiTests
         using HttpClient client = factory.CreateClient();
         await SetupAccountAsync(client);
         string token = await FetchCsrfTokenAsync(client);
-        for (int attempt = 0; attempt < 5; attempt++)
+        for (int attempt = 1; attempt <= 4; attempt++)
         {
             using HttpResponseMessage rejected = await PostJsonAsync(client, "/api/account/password", token,
                 new { currentPassword = "wrong", newPassword = OtherPassword, confirmPassword = OtherPassword });
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
         }
         using HttpResponseMessage limited = await PostJsonAsync(client, "/api/account/password", token,
-            new { currentPassword = ValidPassword, newPassword = OtherPassword, confirmPassword = OtherPassword });
+            new { currentPassword = "wrong", newPassword = OtherPassword, confirmPassword = OtherPassword });
         Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
         Assert.Equal("account_locked", await GetErrorCodeAsync(limited));
+        // The lock covers the whole account area, so the change stays closed afterwards even for the
+        // password that would have been accepted before the attempts were spent.
+        using HttpResponseMessage withCurrentPassword = await PostJsonAsync(client, "/api/account/password", token,
+            new { currentPassword = ValidPassword, newPassword = OtherPassword, confirmPassword = OtherPassword });
+        Assert.Equal(HttpStatusCode.TooManyRequests, withCurrentPassword.StatusCode);
+        Assert.Equal("account_locked", await GetErrorCodeAsync(withCurrentPassword));
     }
 
     [Fact]
@@ -577,6 +755,17 @@ public sealed class AuthApiTests
         using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return document.RootElement.TryGetProperty("code", out JsonElement code) ? code.GetString() : null;
     }
+
+    /// <summary>
+    /// Reads a refusal whole, because the metadata next to the code is what these tests are about.
+    /// </summary>
+    private static async Task<JsonDocument> ReadProblemAsync(HttpResponseMessage response)
+    {
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    }
+
+    private static string RetryAfter(HttpResponseMessage response) => Assert.Single(response.Headers.GetValues("Retry-After"));
 
     private static string? GetCookieValue(HttpResponseMessage response, string name)
     {

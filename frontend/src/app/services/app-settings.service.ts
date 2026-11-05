@@ -8,6 +8,7 @@ import { firstValueFrom } from 'rxjs';
 import { AppLanguage } from '../interfaces/general/app-language';
 import { ARR_APPLICATION_KINDS, ArrApplicationKind } from '../interfaces/general/arr-application-kind';
 import { ArrInstanceSettings } from '../interfaces/settings/arr-instance-settings';
+import { AuthProtectionSettings } from '../interfaces/settings/auth-protection-settings';
 import { GeneralSettingsBackend } from '../interfaces/settings/general-settings-backend';
 import { InstancesSettingsBackend } from '../interfaces/settings/instances-settings-backend';
 import { LoggingSettings } from '../interfaces/settings/logging-settings';
@@ -37,6 +38,18 @@ const DEFAULT_LOGGING: LoggingSettings = {
   retentionDays: 30,
   minimumLevel: 'Information',
 };
+
+// Mirrors the backend defaults in AuthProtectionSettings, so a settings file or a backup without
+// the section behaves exactly like a fresh installation instead of silently disabling protection.
+const DEFAULT_AUTH_PROTECTION: AuthProtectionSettings = {
+  requestsPerMinute: 10,
+  maxFailedAttempts: 5,
+};
+
+export const APP_SETTINGS_AUTH_PROTECTION_LIMITS = {
+  requestsPerMinute: { min: 1, max: 1000 },
+  maxFailedAttempts: { min: 1, max: 100 },
+} as const;
 
 const DEFAULT_SONARR_INSTANCES: ArrInstanceSettings[] = [];
 const DEFAULT_RADARR_INSTANCES: ArrInstanceSettings[] = [];
@@ -86,6 +99,7 @@ export class AppSettingsService {
   private readonly radarrInstancesState: WritableSignal<ArrInstanceSettings[]> = signal<ArrInstanceSettings[]>(DEFAULT_RADARR_INSTANCES);
   private readonly seerrInstanceState: WritableSignal<SeerrInstanceSettings | null> = signal<SeerrInstanceSettings | null>(null);
   private readonly loggingState: WritableSignal<LoggingSettings> = signal<LoggingSettings>(DEFAULT_LOGGING);
+  private readonly authProtectionState: WritableSignal<AuthProtectionSettings> = signal<AuthProtectionSettings>(DEFAULT_AUTH_PROTECTION);
   private loadingPromise?: Promise<void>;
   private readonly apiUrl: string = '/api/settings/';
   readonly language: Signal<AppLanguage> = computed((): AppLanguage => this.languageState());
@@ -95,6 +109,7 @@ export class AppSettingsService {
   readonly radarrInstances: Signal<ArrInstanceSettings[]> = computed((): ArrInstanceSettings[] => this.radarrInstancesState());
   readonly seerrInstance: Signal<SeerrInstanceSettings | null> = computed((): SeerrInstanceSettings | null => this.seerrInstanceState());
   readonly logging: Signal<LoggingSettings> = computed((): LoggingSettings => this.loggingState());
+  readonly authProtection: Signal<AuthProtectionSettings> = computed((): AuthProtectionSettings => this.authProtectionState());
   readonly loadError: Signal<string | null> = computed((): string | null => this.loadErrorState());
 
   async load(): Promise<void> {
@@ -229,6 +244,26 @@ export class AppSettingsService {
     try {
       await firstValueFrom(this.http.delete<void>(`${this.apiUrl}seerr`));
       this.seerrInstanceState.set(null);
+      this.loadErrorState.set(null);
+    } catch (error) {
+      throw this.mapHttpError(error, this.i18n.t('settings.saveError'));
+    }
+  }
+
+  // The sign-in limits travel in the general payload, which always carries language and theme:
+  // the backend treats an omitted section as "keep the stored limits" and would otherwise fall
+  // back to the first enum value for the two selects.
+  async saveAuthProtection(authProtection: AuthProtectionSettings): Promise<void> {
+    try {
+      await firstValueFrom(
+        this.http.put<void>(`${this.apiUrl}general`, {
+          language: APP_LANGUAGE_TO_BACKEND_LANGUAGE[this.languageState()],
+          theme: APP_THEME_TO_BACKEND_THEME[this.themeState()],
+          authProtection: { ...authProtection },
+        }),
+      );
+
+      this.authProtectionState.set(authProtection);
       this.loadErrorState.set(null);
     } catch (error) {
       throw this.mapHttpError(error, this.i18n.t('settings.saveError'));
@@ -406,12 +441,17 @@ export class AppSettingsService {
         enabled: backendSettings.titleSorting?.enabled ?? false,
         ignoredLeadingWords: [...(backendSettings.titleSorting?.ignoredLeadingWords ?? [])],
       });
+      this.authProtectionState.set({
+        requestsPerMinute: backendSettings.authProtection?.requestsPerMinute ?? DEFAULT_AUTH_PROTECTION.requestsPerMinute,
+        maxFailedAttempts: backendSettings.authProtection?.maxFailedAttempts ?? DEFAULT_AUTH_PROTECTION.maxFailedAttempts,
+      });
       this.loadErrorState.set(null);
     } catch (error) {
       this.applyLanguage(DEFAULT_LANGUAGE);
       this.applyTheme(DEFAULT_THEME);
       this.languageState.set(DEFAULT_LANGUAGE);
       this.themeState.set(DEFAULT_THEME);
+      this.authProtectionState.set(DEFAULT_AUTH_PROTECTION);
       this.loadErrorState.set(this.mapHttpError(error, this.i18n.t('settings.loadError')).message);
     } finally {
       this.loadedState.set(true);

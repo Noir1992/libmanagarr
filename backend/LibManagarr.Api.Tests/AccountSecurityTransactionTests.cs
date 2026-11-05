@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using LibManagarr.Api.Models;
 using LibManagarr.Api.Models.Auth;
 using LibManagarr.Api.Services;
 
@@ -91,6 +92,86 @@ public sealed class AccountSecurityTransactionTests
 
         Assert.False(await store.TryChangePasswordAsync(stale, AuthSessionServiceHash(session), "stale-change", null, factory.FakeTime.Current, default));
         Assert.Equal("first-change", (await accounts.GetAccountAsync(default))!.PasswordHash);
+    }
+
+    [Fact]
+    public async Task FailedProof_ShouldUseTheLimitFromSettingsWithoutRestart()
+    {
+        using AuthTestAppFactory factory = new();
+        using IServiceScope scope = factory.Services.CreateScope();
+        AccountService accounts = scope.ServiceProvider.GetRequiredService<AccountService>();
+        ISettingsService settings = scope.ServiceProvider.GetRequiredService<ISettingsService>();
+        AccountRecord account = (await accounts.SetupAsync("admin", "a-valid-test-password", "a-valid-test-password", default)).Account!;
+        AppSettings stored = await settings.GetAsync(default);
+        stored.AuthProtection.MaxFailedAttempts = 2;
+        await settings.SaveAsync(stored, default);
+
+        Assert.Equal(
+            AccountOperationStatus.InvalidCredentials,
+            (await accounts.VerifyIdentityProofAsync(account, "wrong-password", null, false, default)).Result.Status);
+        AccountOperationResult second = (await accounts.VerifyIdentityProofAsync(account, "wrong-password", null, false, default)).Result;
+
+        Assert.Equal(AccountOperationStatus.LockedOut, second.Status);
+        Assert.Equal(factory.FakeTime.Current + AccountService.LockoutDuration, second.LockedUntil!.Value);
+    }
+
+    [Fact]
+    public async Task SuccessfulProof_ShouldClearTheSharedFailureCounter()
+    {
+        using AuthTestAppFactory factory = new();
+        using IServiceScope scope = factory.Services.CreateScope();
+        AccountService accounts = scope.ServiceProvider.GetRequiredService<AccountService>();
+        AccountRecord account = (await accounts.SetupAsync("admin", "a-valid-test-password", "a-valid-test-password", default)).Account!;
+        for (int attempt = 1; attempt <= 4; attempt++)
+        {
+            Assert.Equal(
+                AccountOperationStatus.InvalidCredentials,
+                (await accounts.VerifyIdentityProofAsync(account, "wrong-password", null, false, default)).Result.Status);
+        }
+
+        Assert.Equal(
+            AccountOperationStatus.Success,
+            (await accounts.VerifyIdentityProofAsync(account, "a-valid-test-password", null, false, default)).Result.Status);
+
+        for (int attempt = 1; attempt <= 4; attempt++)
+        {
+            Assert.Equal(
+                AccountOperationStatus.InvalidCredentials,
+                (await accounts.VerifyIdentityProofAsync(account, "wrong-password", null, false, default)).Result.Status);
+        }
+
+        Assert.Equal(
+            AccountOperationStatus.LockedOut,
+            (await accounts.VerifyIdentityProofAsync(account, "wrong-password", null, false, default)).Result.Status);
+    }
+
+    [Fact]
+    public async Task ProofAgainstLockedAccount_ShouldLeaveTheStoredLockoutAlone()
+    {
+        using AuthTestAppFactory factory = new();
+        using IServiceScope scope = factory.Services.CreateScope();
+        AccountService accounts = scope.ServiceProvider.GetRequiredService<AccountService>();
+        IAccountStore store = scope.ServiceProvider.GetRequiredService<IAccountStore>();
+        AccountRecord account = (await accounts.SetupAsync("admin", "a-valid-test-password", "a-valid-test-password", default)).Account!;
+        for (int attempt = 1; attempt <= 5; attempt++)
+        {
+            await accounts.VerifyIdentityProofAsync(account, "wrong-password", null, false, default);
+        }
+
+        AccountRecord locked = (await accounts.GetAccountAsync(default))!;
+        DateTimeOffset lockedUntil = locked.LockoutUntil!.Value;
+        Assert.True(locked.IsLockedOut(factory.FakeTime.Current));
+        factory.FakeTime.Advance(TimeSpan.FromMinutes(1));
+
+        AccountRecord? afterRacingAttempt = await store.RegisterFailedAccessAttemptAsync(
+            locked.Id, 5, AccountService.LockoutDuration, factory.FakeTime.Current, default);
+        await store.ResetAccessFailuresAsync(locked.Id, factory.FakeTime.Current, default);
+        AccountRecord afterReset = (await accounts.GetAccountAsync(default))!;
+
+        Assert.Equal(lockedUntil, afterRacingAttempt!.LockoutUntil!.Value);
+        Assert.Equal(0, afterRacingAttempt.FailedAccessCount);
+        Assert.Equal(lockedUntil, afterReset.LockoutUntil!.Value);
+        Assert.True(afterReset.IsLockedOut(factory.FakeTime.Current));
     }
 
     private static string AuthSessionServiceHash(IssuedSession session) =>
