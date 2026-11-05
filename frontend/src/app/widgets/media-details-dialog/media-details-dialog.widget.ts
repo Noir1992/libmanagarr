@@ -43,6 +43,10 @@ export class MediaDetailsDialogWidget {
     const target = d.upgradeUntilCustomFormatScore;
     const upgrade =
       score == null || target == null ? na : this.i18n.t(score < target ? 'filter.upgradeTargetBelow' : 'filter.upgradeTargetReached');
+    let upgradeTone: MediaGridDetailTone | undefined;
+    if (score != null && target != null) {
+      upgradeTone = score < target ? 'danger' : 'success';
+    }
     const duration = row(
       'library.details.duration',
       file?.durationSeconds == null
@@ -52,17 +56,17 @@ export class MediaDetailsDialogWidget {
     const libraryStatus = row('filter.fileStatus', flag(d.hasFile, 'filter.filePresent', 'filter.fileMissing'), fileStatusTone(d.hasFile));
     const rows = [];
     if (d.episodeNumber != null) {
+      let airedTone: MediaGridDetailTone | undefined;
+      if (d.hasAired !== undefined) {
+        airedTone = d.hasAired ? 'success' : 'warning';
+      }
       rows.push(
         row('common.column.episode', value(d.episodeNumber)),
         row('common.column.season', value(d.seasonNumber)),
         row('filter.episodeType', this.i18n.t(d.seasonNumber === 0 ? 'filter.episodeSpecial' : 'filter.episodeRegular')),
         duration,
         row('common.column.airDate', date(d.airDateUtc)),
-        row(
-          'filter.airStatus',
-          flag(d.hasAired, 'filter.airedYes', 'filter.airedNo'),
-          d.hasAired === undefined ? undefined : d.hasAired ? 'success' : 'warning',
-        ),
+        row('filter.airStatus', flag(d.hasAired, 'filter.airedYes', 'filter.airedNo'), airedTone),
         libraryStatus,
         row('filter.episodeMonitored', flag(d.monitored, 'library.details.yes', 'library.details.no')),
       );
@@ -82,7 +86,7 @@ export class MediaDetailsDialogWidget {
     rows.push(
       row('common.column.targetScore', value(target)),
       row('common.column.score', value(score)),
-      row('filter.upgradeTarget', upgrade, score == null || target == null ? undefined : score < target ? 'danger' : 'success'),
+      row('filter.upgradeTarget', upgrade, upgradeTone),
       row('filter.resolution', value(file?.resolution)),
       row('library.details.originalResolution', value(file?.originalResolution)),
       row('filter.videoCodec', value(file?.videoCodec)),
