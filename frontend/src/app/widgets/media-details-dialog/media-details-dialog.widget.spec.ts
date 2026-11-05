@@ -165,7 +165,7 @@ describe('Media detail dialogs', () => {
     expect(rows['Score']).toBe('N/A');
     expect(rows['Resolution']).toBe('N/A');
     expect(rows['Upgrade target']).toBe('N/A');
-    for (const label of ['Instance', 'Series', 'Series monitored', 'Aired status', 'Profile', 'Genres', 'Tags']) {
+    for (const label of ['Instance', 'Series', 'Series monitored', 'Aired', 'Profile', 'Genres', 'Tags']) {
       expect(rows[label]).withContext(label).toBeUndefined();
     }
     expect(rows['Season']).toBe('0');
@@ -173,6 +173,7 @@ describe('Media detail dialogs', () => {
     expect(rows['Target score']).toBe('0');
     expect(rows['Monitored']).toBe('No');
     expect(rows['Type']).toBe('Specials');
+    expect(rows['Aired status']).toBe('Already aired');
   });
 
   it('opens movie details from the card and episode details from the series dialog', async () => {
