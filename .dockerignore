@@ -24,4 +24,5 @@ backend/LibManagarr.Api/data
 **/*.user
 karma-*.log
 build-prod.log
+tests/e2e
 Fehler.txt

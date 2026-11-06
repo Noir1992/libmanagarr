@@ -1,0 +1,4 @@
+# Keep test formatting stable on Windows and Linux.
+tests/e2e/** text eol=lf
+# Seed checksums cover exact bytes, including generated JSON line endings.
+tests/e2e/seeds/** -text

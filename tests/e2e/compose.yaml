@@ -1,0 +1,70 @@
+services:
+  app:
+    image: ${E2E_APP_IMAGE:?Orchestrator must supply the tested image}
+    volumes:
+      - app-config:/config
+      - app-data:/app/data
+      - media:/media
+    networks: [test]
+  sonarr:
+    image: ${E2E_SONARR_IMAGE:?Pinned image required}
+    environment: { PUID: '1000', PGID: '1000', TZ: UTC }
+    volumes: ['sonarr-config:/config', 'media:/media']
+    networks: [test]
+  radarr:
+    image: ${E2E_RADARR_IMAGE:?Pinned image required}
+    environment: { PUID: '1000', PGID: '1000', TZ: UTC }
+    volumes: ['radarr-config:/config', 'media:/media']
+    networks: [test]
+  seerr:
+    image: ${E2E_SEERR_IMAGE:?Pinned image required}
+    init: true
+    environment:
+      TZ: UTC
+      LOG_LEVEL: debug
+      NODE_EXTRA_CA_CERTS: /certs/metadata.crt
+    volumes: ['seerr-config:/app/config', 'certs:/certs:ro']
+    networks: [test]
+  jellyfin:
+    image: ${E2E_JELLYFIN_IMAGE:?Pinned image required}
+    volumes: ['jellyfin-config:/config', 'jellyfin-cache:/cache']
+    networks: [test]
+  runner:
+    image: ${E2E_RUNNER_IMAGE:?Built runner required}
+    init: true
+    working_dir: /work
+    environment:
+      E2E_BASE_URL: http://app:8080
+      CI: 'true'
+    volumes:
+      [
+        '${E2E_ARTIFACTS:?Artifact path required}:/artifacts',
+        'media:/media',
+        'sonarr-config:/state/sonarr',
+        'radarr-config:/state/radarr',
+        'seerr-config:/state/seerr',
+        'jellyfin-config:/state/jellyfin',
+        'certs:/certs',
+      ]
+    networks: [test]
+    shm_size: 1gb
+  metadata:
+    image: ${E2E_RUNNER_IMAGE:?Built runner required}
+    command: ['node', 'bootstrap/metadata.mjs']
+    volumes: ['certs:/certs:ro']
+    networks:
+      test:
+        aliases: [api.themoviedb.org]
+volumes:
+  app-config:
+  app-data:
+  sonarr-config:
+  radarr-config:
+  seerr-config:
+  jellyfin-config:
+  jellyfin-cache:
+  certs:
+  media:
+networks:
+  test:
+    internal: ${E2E_OFFLINE:-true}
