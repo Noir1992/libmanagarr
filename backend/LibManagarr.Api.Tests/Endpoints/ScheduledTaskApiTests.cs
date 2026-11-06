@@ -31,12 +31,16 @@ public sealed class ScheduledTaskApiTests
         using HttpClient client = factory.CreateClient();
         await SetupAsync(client);
         JsonArray tasks = (await client.GetFromJsonAsync<JsonArray>("/api/settings/tasks"))!;
-        Assert.Equal(2, tasks.Count);
+        Assert.Equal(3, tasks.Count);
         JsonObject sync = tasks.Single(task => task!["taskKey"]!.GetValue<string>() == "arrDataSync")!.AsObject();
         JsonObject cleanup = tasks.Single(task => task!["taskKey"]!.GetValue<string>() == "cleanup")!.AsObject();
+        JsonObject health = tasks.Single(task => task!["taskKey"]!.GetValue<string>() == "symlinkHealthCheck")!.AsObject();
         Assert.True(sync["canRunManually"]!.GetValue<bool>());
         Assert.True(cleanup["readOnly"]!.GetValue<bool>());
         Assert.True(cleanup["canRunManually"]!.GetValue<bool>());
+        Assert.False(health["enabled"]!.GetValue<bool>());
+        Assert.False(health["readOnly"]!.GetValue<bool>());
+        Assert.True(health["canRunManually"]!.GetValue<bool>());
         Assert.Equal(0, sync["revision"]!.GetValue<int>());
         JsonObject payload = Configuration();
         using HttpResponseMessage update = await client.PutAsJsonAsync(TaskRoute, payload);

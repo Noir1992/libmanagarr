@@ -1,0 +1,79 @@
+.dialog-title {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+
+.dialog-content {
+  display: grid;
+  gap: var(--theme-default-gap);
+  font-family: var(--app-font-family), serif;
+}
+
+.plan-pair {
+  margin: 0 0 var(--theme-default-gap-small);
+  font-weight: 600;
+
+  .plan-episode {
+    margin-left: var(--theme-default-gap-small);
+    font-weight: 400;
+    color: var(--theme-muted);
+  }
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  gap: var(--theme-default-gap-small) var(--theme-default-gap);
+  margin: 0;
+
+  dt {
+    font-weight: 600;
+  }
+
+  dd {
+    margin: 0;
+  }
+
+  .plan-path {
+    overflow-wrap: anywhere;
+  }
+}
+
+.plan-findings {
+  margin: var(--theme-default-gap) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--theme-default-gap-small);
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--theme-default-gap-small);
+  }
+
+  mat-icon {
+    font-size: 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    color: var(--theme-muted);
+  }
+
+  .finding-code {
+    font-weight: 600;
+  }
+
+  .finding-detail {
+    color: var(--theme-muted);
+    overflow-wrap: anywhere;
+  }
+}
+
+.plan-refused {
+  margin: var(--theme-default-gap) 0 0;
+  color: var(--theme-muted);
+}

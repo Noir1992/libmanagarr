@@ -92,6 +92,87 @@ LIBMANAGARR_PORT=9000
   the `data` folder below the content root, so config and cache share one directory.
 - The image itself contains **no** data/API keys (`.dockerignore` excludes `backend/LibManagarr.Api/data`).
 
+## Managed media symlinks
+
+LibManagarr can point one Sonarr episode at a Radarr movie file with a symbolic link inside the series
+tree. The register of those links, the suggested pairs and the decline archive live in `libmanagarr.db`;
+the paths they are drawn from are configured in **Settings → Symlinks** (`/settings?tab=symlinks`) and the
+work itself is on **`/symlinks`**. Nothing is written before a storage area, its path mappings and a
+capability test say the tree is usable.
+
+### Mounts the container needs
+
+The backend only ever touches what its own process can see, so the media datasets are mounted into the
+container too – at the paths that then go into the storage area:
+
+```yaml
+services:
+  libmanagarr:
+    volumes:
+      - ./libmanagarr-config:/config
+      - ./libmanagarr-data:/app/data
+      - /mnt/pool/media/movies:/data/movies:ro # films: only ever read through
+      - /mnt/pool/media/series:/data/series # specials: links are created here
+```
+
+- **Write access is needed in the series tree only.** Links are created, renamed and removed below the
+  series root. The movie root is listed and read through, never written to, so it can stay read-only and
+  the film keeps its own name, ownership and timestamps.
+- **Link texts are relative.** A link stores the way from its own folder to the film – for a link at
+  `/data/series/the-series/season-00/s00e04.mkv` that reads `../../../movies/the-special-movie.mkv` – and
+  not an absolute path, so a reader that sees the same two datasets under another prefix still resolves
+  it. That holds only while both roots keep the same relative relation for every process reading the
+  link: mount them under one parent (`/data/movies` and `/data/series` above) and hand that same pair to
+  Sonarr and to the media player.
+- **A path mapping is not a rename.** Each mapping keeps the prefix one Arr instance reports for a part of
+  a storage area (`/media/movies` inside that instance) beside the prefix this container uses for the same
+  files (`/data/movies`). Two equal-looking strings are no proof of one mount, so nothing is rewritten
+  globally and every mapping stays tied to its instance.
+- Every stored path is a path **of the LibManagarr process**. If the container, Sonarr and the player see
+  the shelf under three prefixes, that is three configured views rather than one path with a global
+  replacement.
+
+### The capability test answers before anything is written
+
+**Settings → Symlinks** probes one storage area: it writes throwaway files below the series root, creates
+a link, reads through it, renames it, replaces its target with a second file and cleans up, then lists the
+movie root. The answer is stored with the configuration revision it ran on, so a later mapping change
+marks it outdated instead of leaving a green light standing.
+
+| Answer               | Where to look                                                     |
+| -------------------- | ----------------------------------------------------------------- |
+| `Available`          | Nothing to do – links work in that area and both roots are usable |
+| `StorageUnavailable` | The series or movie root is not mounted, or not readable, here    |
+| `PermissionDenied`   | The rights on the series tree refuse the link (on Windows: the symlink privilege) |
+| `Unsupported`        | The runtime itself refuses file symlinks                          |
+| `Failed`             | The link worked only partly; the detail names the step that stopped |
+| `NotTested`          | Nobody asked yet                                                  |
+
+Creating a symlink on Windows needs a privilege (elevated or Developer Mode), so a development run there
+can report `PermissionDenied` where the same Docker deployment on TrueNAS works. Judge the feature where
+it runs.
+
+### The health pass waits until the tree is ready
+
+The task `symlinkHealthCheck` (**Settings → Tasks**, `/settings?tab=tasks`) walks every managed link with
+limited parallelism. It is seeded **disabled** with a daily 03:00 suggestion, and schedule, activation and
+a manual run all use the existing task editor. It reads the instance snapshots the Arr sync already
+stored instead of syncing a library per link, and reports per row: a link that is gone, a regular file
+where a link belongs, a link that points somewhere else, a missing source, a read the rights refused, a
+share that is not mounted, a movie whose Radarr file moved, a missing Sonarr mapping, file metadata that
+was never confirmed or deviates, a name the instance rewrote, an episode that is monitored again. Where a
+look cannot answer, it says that with the cause instead of guessing. Switching the task off stops the
+periodic pass only: **following Radarr upgrades of an existing link belongs to the feature** and keeps
+running, and a single row can be looked at by hand from **`/symlinks`** through the same logic.
+
+### After a restore
+
+An archive carries `libmanagarr.db`, so the register, the suggested pairs and the decline archive come
+with it; the links themselves live on the shares and are never part of an archive. Mount the datasets the
+same way on the target host, then run a check pass. Rows whose tree or source is missing report it and
+stay as they are: a missing source never deletes a film or a stored pair, and removing a managed link
+deletes the link entry only, never the film. See **Backup export and import** below.
+
 ## Authentication & two-factor
 
 LibManagarr is a single-user tool and protects every API except the auth endpoints with a

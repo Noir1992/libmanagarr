@@ -90,6 +90,12 @@ public sealed class RadarrClient(HttpClient httpClient)
                 MovieId = movie.Id!.Value,
                 Title = movie.Title,
                 TitleSlug = movie.TitleSlug,
+                AlternativeTitles = (movie.AlternativeTitles ?? [])
+                    .Select(alternative => alternative.Title?.Trim())
+                    .Where(title => !string.IsNullOrWhiteSpace(title))
+                    .Select(title => title!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
                 PosterRemoteUrl = movie.GetPosterRemoteUrl(),
                 AddedAt = movie.Added,
                 Status = movie.Status ?? "Unknown",
@@ -125,6 +131,21 @@ public sealed class RadarrClient(HttpClient httpClient)
             PosterUrls = posterUrls
         };
     }
+
+    // The two live reads a confirmation needs: whether the chosen film still exists and which file it
+    // points at right now. A snapshot cannot answer that, and a link must never be built onto a file
+    // that a Radarr upgrade already replaced.
+    public async Task<RadarrMovieResource?> FetchMovieAsync(
+        ArrInstanceSettings instance,
+        int movieId,
+        CancellationToken cancellationToken) =>
+        await GetAsync<RadarrMovieResource>(instance, $"/api/v3/movie/{movieId}", cancellationToken);
+
+    public async Task<IReadOnlyList<RadarrMovieFileResource>> FetchMovieFilesAsync(
+        ArrInstanceSettings instance,
+        int movieId,
+        CancellationToken cancellationToken) =>
+        await GetAsync<List<RadarrMovieFileResource>>(instance, $"/api/v3/moviefile?movieId={movieId}", cancellationToken) ?? [];
 
     private async Task<T?> GetAsync<T>(
         ArrInstanceSettings instance,
@@ -200,7 +221,9 @@ public sealed class RadarrClient(HttpClient httpClient)
             VideoFormat = ResolveDynamicRange(movieFile),
             Resolution = movieFile?.MediaInfo?.Resolution,
             CreatedAt = movieFile?.DateAdded,
-            RelativePath = movieFile?.RelativePath ?? movieFile?.Path
+            RelativePath = movieFile?.RelativePath ?? movieFile?.Path,
+            Id = movieFile?.Id,
+            Path = movieFile?.Path
         };
     }
 

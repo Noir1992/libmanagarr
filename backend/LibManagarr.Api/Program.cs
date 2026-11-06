@@ -76,6 +76,19 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     builder.Services.AddSingleton<ScheduledTaskService>();
     builder.Services.AddSingleton<ScheduledTaskExecutionService>();
     builder.Services.AddHostedService<ScheduledTaskBackgroundService>();
+    builder.Services.AddSingleton<ISymlinkFileSystem, RealSymlinkFileSystem>();
+    builder.Services.AddSingleton<ISymlinkStore, SqliteSymlinkStore>();
+    builder.Services.AddScoped<MediaPathMappingService>();
+    builder.Services.AddScoped<SymlinkCapabilityService>();
+    builder.Services.AddSingleton<SymlinkMatchingRequests>();
+    builder.Services.AddSingleton<SymlinkSetupRequests>();
+    builder.Services.AddScoped<SymlinkSuggestionService>();
+    builder.Services.AddScoped<SymlinkService>();
+    builder.Services.AddScoped<SymlinkHealthService>();
+    builder.Services.AddScoped<SymlinkSetupRunner>();
+    builder.Services.AddScoped<SonarrSpecialIntegrationService>();
+    builder.Services.AddHostedService<SymlinkMatchingBackgroundService>();
+    builder.Services.AddHostedService<SymlinkSetupBackgroundService>();
     builder.Services.AddHttpClient();
     builder.Services.AddHttpClient<SonarrClient>();
     builder.Services.AddHttpClient<RadarrClient>();
@@ -168,6 +181,18 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
             RestoreBootstrapOutcome.RolledBack => BackupOperationPhase.RestoreRolledBack,
             _ => BackupOperationPhase.Idle
         }, operationId: restoreJournal?.OperationId);
+
+    if (restoreOutcome == RestoreBootstrapOutcome.Applied)
+    {
+        // The register that came out of the archive says what was registered there and then, not what the
+        // media tree holds now. Every entry is marked as owing its comparison before anything may be done
+        // to it, which is why this happens here rather than in the import that prepared the files: the
+        // database that has to carry the markers is the one that was just moved in.
+        await using AsyncServiceScope restoreScope = app.Services.CreateAsyncScope();
+        await restoreScope.ServiceProvider
+            .GetRequiredService<SymlinkService>()
+            .MarkRestoredEntriesAsync(CancellationToken.None);
+    }
 
     StoragePaths storagePaths = app.Services.GetRequiredService<StoragePaths>();
     BackupStaging.CleanAbandonedProcessStaging(storagePaths.BackupsDirectory,

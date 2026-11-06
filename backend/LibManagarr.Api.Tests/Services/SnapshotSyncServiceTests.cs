@@ -104,6 +104,7 @@ public sealed class SnapshotSyncServiceTests
                     }
                 }))),
             CreateUnusedRadarrClient(),
+            new SymlinkMatchingRequests(),
             NullLogger<SnapshotSyncService>.Instance);
 
         SyncInstanceResult result = await service.SyncAsync(
@@ -213,6 +214,7 @@ public sealed class SnapshotSyncServiceTests
                         }
                     }
                 }))),
+            new SymlinkMatchingRequests(),
             NullLogger<SnapshotSyncService>.Instance);
 
         SyncInstanceResult result = await service.SyncAsync(
@@ -346,6 +348,7 @@ public sealed class SnapshotSyncServiceTests
                     }
                 }))),
             CreateUnusedRadarrClient(),
+            new SymlinkMatchingRequests(),
             NullLogger<SnapshotSyncService>.Instance);
 
         await service.SyncAsync(
@@ -467,6 +470,7 @@ public sealed class SnapshotSyncServiceTests
                     }
                 }))),
             CreateUnusedRadarrClient(),
+            new SymlinkMatchingRequests(),
             NullLogger<SnapshotSyncService>.Instance);
 
         await service.SyncAsync(
@@ -562,6 +566,7 @@ public sealed class SnapshotSyncServiceTests
                     ["/api/v3/history/since"] = Array.Empty<object>()
                 }))),
             CreateUnusedRadarrClient(),
+            new SymlinkMatchingRequests(),
             NullLogger<SnapshotSyncService>.Instance);
 
         await service.SyncAsync(

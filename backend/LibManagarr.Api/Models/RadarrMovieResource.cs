@@ -28,6 +28,8 @@ public sealed class RadarrMovieResource
 
     public IReadOnlyList<RadarrMovieImage>? Images { get; init; }
 
+    public IReadOnlyList<RadarrAlternativeTitleResource>? AlternativeTitles { get; init; }
+
     public IReadOnlyList<string>? Genres { get; init; }
     public IReadOnlyList<int>? Tags { get; init; }
 
@@ -42,4 +44,12 @@ public sealed class RadarrMovieImage
     public string? CoverType { get; init; }
 
     public string? RemoteUrl { get; init; }
+}
+
+public sealed class RadarrAlternativeTitleResource
+{
+    public string? Title { get; init; }
+
+    /// <summary>Radarr's own label for the variant, for example an official or localized title.</summary>
+    public string? Type { get; init; }
 }

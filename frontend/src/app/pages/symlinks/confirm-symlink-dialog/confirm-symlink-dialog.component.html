@@ -1,0 +1,56 @@
+<h2 mat-dialog-title class="dialog-title">{{ t('symlinks.confirm.title') }}</h2>
+
+<mat-dialog-content class="dialog-content">
+  @if (loading()) {
+    <p>{{ t('common.loading') }}</p>
+  }
+
+  @if (error(); as message) {
+    <p class="feedback error" role="alert">{{ message }}</p>
+  }
+
+  @if (plan(); as proposed) {
+    <p class="plan-pair">
+      {{ data.suggestion.radarrMovieTitle ?? t('common.na') }}
+      <span class="plan-episode">{{ episodeLabel() }}</span>
+    </p>
+
+    <dl class="plan-grid">
+      <dt>{{ t('symlinks.linkPath') }}</dt>
+      <dd class="plan-path">{{ proposed.draft.linkPath }}</dd>
+      <dt>{{ t('symlinks.linkText') }}</dt>
+      <dd class="plan-path">{{ proposed.draft.linkText }}</dd>
+      <dt>{{ t('symlinks.desiredFilename') }}</dt>
+      <dd>{{ proposed.draft.desiredFilename ?? t('common.na') }}</dd>
+    </dl>
+
+    @if (findings(proposed).length > 0) {
+      <ul class="plan-findings">
+        @for (finding of findings(proposed); track finding.code + finding.detail) {
+          <li>
+            <mat-icon class="material-symbols-outlined">{{ proposed.blockers.includes(finding) ? 'block' : 'warning' }}</mat-icon>
+            <span class="finding-code">{{ finding.code }}</span>
+            <span class="finding-detail">{{ finding.detail }}</span>
+          </li>
+        }
+      </ul>
+    }
+
+    @if (!proposed.runnable) {
+      <p class="plan-refused">{{ t('symlinks.confirm.notRunnable') }}</p>
+    }
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" mat-stroked-button class="secondary-button" (click)="close()">{{ t('common.cancel') }}</button>
+  <button
+    type="button"
+    mat-stroked-button
+    class="secondary-button"
+    [disabled]="loading() || busy() || plan()?.runnable !== true"
+    (click)="confirmAsync()"
+  >
+    {{ busy() ? t('common.loading') : t('symlinks.confirm.run') }}
+  </button>
+</mat-dialog-actions>

@@ -1,0 +1,274 @@
+<main class="page-shell">
+  <section class="page-header">
+    <div class="page-title-row">
+      <h1 class="page-title">{{ title() }}</h1>
+    </div>
+    <p class="page-description">{{ description() }}</p>
+  </section>
+
+  <section class="page-content">
+    @if (loadError(); as error) {
+      <app-loading-error-section [error]="error" />
+    }
+
+    @if (settingsFailed(); as error) {
+      <app-loading-error-section [error]="error" />
+    }
+
+    @if (needsConfiguration()) {
+      <p class="configuration-hint">
+        {{ t('symlinks.needsConfiguration') }}
+        <a mat-stroked-button class="secondary-button" routerLink="/settings" [queryParams]="{ tab: 'symlinks' }">{{
+          configureLabel()
+        }}</a>
+      </p>
+    }
+
+    <section class="card">
+      <header class="card-header">
+        <div>
+          <h2 class="card-title">{{ suggestionsTitle() }}</h2>
+          @if (lastRun(); as run) {
+            <p class="card-subtitle">{{ runSummary(run) }}</p>
+          }
+        </div>
+        <div class="card-header-actions">
+          <button
+            type="button"
+            mat-stroked-button
+            class="secondary-button"
+            [disabled]="refreshing() || loading()"
+            (click)="refreshAsync()"
+          >
+            {{ refreshing() ? t('common.loading') : refreshLabel() }}
+          </button>
+        </div>
+      </header>
+
+      <div class="card-content">
+        @if (loading()) {
+          <app-loading-section />
+        } @else if (offeredSuggestions().length === 0) {
+          <p class="rows-empty">{{ suggestionsEmpty() }}</p>
+        } @else {
+          <ul class="items">
+            @for (suggestion of offeredSuggestions(); track suggestion.id) {
+              <li class="item">
+                <div class="item-head">
+                  <p class="item-title">
+                    {{ suggestion.radarrMovieTitle ?? t('common.na') }}
+                    <span class="item-episode">{{ episodeLabel(suggestion.seasonNumber, suggestion.episodeNumber) }}</span>
+                  </p>
+                  <span [class]="suggestionStatusClass(suggestion)">{{ suggestionStatus(suggestion) }}</span>
+                </div>
+
+                <p class="item-series">
+                  {{ suggestion.sonarrSeriesTitle ?? t('common.na') }}
+                  @if (suggestion.sonarrEpisodeTitle) {
+                    <span class="item-episode">{{ suggestion.sonarrEpisodeTitle }}</span>
+                  }
+                </p>
+
+                @if (suggestion.radarrFilePath) {
+                  <p class="item-path">{{ suggestion.radarrFilePath }}</p>
+                }
+
+                @for (reason of suggestion.reasons; track $index) {
+                  <p class="item-reason">{{ reason.detail }}</p>
+                }
+
+                @if (suggestion.alternatives.length > 0) {
+                  <p class="item-alternatives">
+                    {{ t('symlinks.suggestions.alternatives') }}
+                    @for (alternative of suggestion.alternatives; track $index) {
+                      <span class="alternative">{{ alternativeLabel(alternative) }}</span>
+                    }
+                  </p>
+                }
+
+                @if (suggestion.detail) {
+                  <p class="item-detail">{{ suggestion.detail }}</p>
+                }
+
+                @if (suggestion.stale) {
+                  <p class="item-warning">{{ t('symlinks.suggestions.stale') }}</p>
+                }
+
+                @if (suggestionState(suggestion.id).error; as actionError) {
+                  <p class="feedback error" role="alert">{{ actionError }}</p>
+                }
+
+                <div class="item-actions">
+                  <button
+                    type="button"
+                    mat-stroked-button
+                    class="secondary-button"
+                    [disabled]="suggestionState(suggestion.id).busy || revision() === null"
+                    (click)="confirmAsync(suggestion)"
+                  >
+                    {{ t('symlinks.suggestions.confirm') }}
+                  </button>
+                  <button
+                    type="button"
+                    mat-stroked-button
+                    class="secondary-button"
+                    [disabled]="suggestionState(suggestion.id).busy"
+                    (click)="rejectAsync(suggestion)"
+                  >
+                    {{ t('symlinks.suggestions.reject') }}
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </section>
+
+    <section class="card">
+      <header class="card-header">
+        <h2 class="card-title">{{ linksTitle() }}</h2>
+      </header>
+
+      <div class="card-content">
+        @if (loading()) {
+          <app-loading-section />
+        } @else if (links().length === 0) {
+          <p class="rows-empty">{{ linksEmpty() }}</p>
+        } @else {
+          <ul class="items">
+            @for (link of links(); track link.id) {
+              <li class="item">
+                <div class="item-head">
+                  <p class="item-title">
+                    {{ link.radarrMovieTitle ?? t('common.na') }}
+                    <span class="item-episode">{{ episodeLabel(link.seasonNumber, link.episodeNumber) }}</span>
+                  </p>
+                  <span [class]="operationStatusClass(link)">{{ operationStatus(link) }}</span>
+                </div>
+
+                <p class="item-series">
+                  {{ link.sonarrSeriesTitle ?? t('common.na') }}
+                  @if (setupStep(link); as step) {
+                    <span class="item-episode">{{ t('symlinks.links.setupStep', { step }) }}</span>
+                  }
+                </p>
+
+                <dl class="item-facts">
+                  <dt>{{ t('symlinks.linkPath') }}</dt>
+                  <dd class="item-path">{{ link.linkPath }}</dd>
+                  <dt>{{ t('symlinks.sourcePath') }}</dt>
+                  <dd class="item-path">{{ link.sourcePath }}</dd>
+                  @if (link.desiredFilename) {
+                    <dt>{{ t('symlinks.desiredFilename') }}</dt>
+                    <dd>{{ link.desiredFilename }}</dd>
+                  }
+                  @if (link.appliedFilename) {
+                    <dt>{{ t('symlinks.appliedFilename') }}</dt>
+                    <dd>{{ link.appliedFilename }}</dd>
+                  }
+                </dl>
+
+                @if (link.monitoringDisabled) {
+                  <p class="item-detail">{{ t('symlinks.links.monitoringDisabled') }}</p>
+                }
+
+                @if (link.lastCheckedAt) {
+                  <p class="item-meta">
+                    {{ t('symlinks.links.checkedAt', { date: (link.lastCheckedAt | appDate: 'medium') }) }}
+                    @if (link.lastSuccessfulCheckAt && link.lastSuccessfulCheckAt !== link.lastCheckedAt) {
+                      <span class="item-episode">{{ t('symlinks.links.cleanSince', { date: (link.lastSuccessfulCheckAt | appDate: 'medium') }) }}</span>
+                    }
+                  </p>
+                }
+
+                @for (finding of link.findings; track finding.code + $index) {
+                  <p class="item-warning">
+                    <span class="finding-code">{{ finding.code }}</span>
+                    {{ finding.detail ?? t('common.na') }}
+                  </p>
+                }
+
+                @if (linkState(link.id).error; as actionError) {
+                  <p class="feedback error" role="alert">{{ actionError }}</p>
+                }
+
+                <div class="item-actions">
+                  <button
+                    type="button"
+                    mat-stroked-button
+                    class="secondary-button"
+                    [disabled]="linkState(link.id).busy"
+                    (click)="checkAsync(link)"
+                  >
+                    {{ t('symlinks.links.check') }}
+                  </button>
+                  <button
+                    type="button"
+                    mat-stroked-button
+                    class="secondary-button"
+                    [disabled]="linkState(link.id).busy"
+                    (click)="setFollowUpAsync(link, !link.autoFollowUp)"
+                  >
+                    {{ link.autoFollowUp ? t('symlinks.links.followUp.disable') : t('symlinks.links.followUp.enable') }}
+                  </button>
+                  <button
+                    type="button"
+                    mat-stroked-button
+                    class="secondary-button"
+                    [disabled]="linkState(link.id).busy"
+                    (click)="deleteAsync(link)"
+                  >
+                    {{ t('symlinks.links.delete') }}
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </section>
+
+    <section class="card">
+      <header class="card-header">
+        <h2 class="card-title">{{ rejectionsTitle() }}</h2>
+      </header>
+
+      <div class="card-content">
+        @if (loading()) {
+          <app-loading-section />
+        } @else if (rejections().length === 0) {
+          <p class="rows-empty">{{ rejectionsEmpty() }}</p>
+        } @else {
+          <ul class="items">
+            @for (rejection of rejections(); track rejectionKey(rejection)) {
+              <li class="item">
+                <div class="item-head">
+                  <p class="item-title">
+                    {{ rejection.radarrMovieTitle ?? t('common.na') }}
+                    @if (rejection.sonarrEpisodeTitle) {
+                      <span class="item-episode">{{ rejection.sonarrEpisodeTitle }}</span>
+                    }
+                  </p>
+                </div>
+
+                <p class="item-series">{{ rejection.sonarrSeriesTitle ?? t('common.na') }}</p>
+
+                @if (rejection.detail) {
+                  <p class="item-detail">{{ rejection.detail }}</p>
+                }
+                <p class="item-meta">{{ t('symlinks.rejections.declinedAt', { date: (rejection.createdAt | appDate: 'medium') }) }}</p>
+
+                <div class="item-actions">
+                  <button type="button" mat-stroked-button class="secondary-button" (click)="reactivateAsync(rejection)">
+                    {{ t('symlinks.rejections.reactivate') }}
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </section>
+  </section>
+</main>

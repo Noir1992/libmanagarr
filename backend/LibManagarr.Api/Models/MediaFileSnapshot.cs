@@ -29,4 +29,10 @@ public sealed class MediaFileSnapshot
     public DateTimeOffset? CreatedAt { get; set; }
 
     public string? RelativePath { get; set; }
+
+    /// <summary>File id as the reporting instance counts it, so two instances with the same number are still two files.</summary>
+    public int? Id { get; set; }
+
+    /// <summary>Absolute path in the reporting instance's own view, which is what a path mapping is applied to.</summary>
+    public string? Path { get; set; }
 }

@@ -43,6 +43,7 @@ export class App implements OnInit, OnDestroy {
   protected readonly libraryTrendLabel: Signal<string> = computed((): string => this.i18n.t('navigation.libraryTrend'));
   protected readonly requestsLabel: Signal<string> = computed((): string => this.i18n.t('navigation.requests'));
   protected readonly calendarLabel: Signal<string> = computed((): string => this.i18n.t('navigation.calendar'));
+  protected readonly symlinksLabel: Signal<string> = computed((): string => this.i18n.t('navigation.symlinks'));
   protected readonly logsLabel: Signal<string> = computed((): string => this.i18n.t('navigation.logs'));
   protected readonly navigationToggleLabel: Signal<string> = computed((): string => this.i18n.t('navigation.toggle'));
   protected readonly userMenuLabel: Signal<string> = computed((): string => this.i18n.t('navigation.userMenu'));

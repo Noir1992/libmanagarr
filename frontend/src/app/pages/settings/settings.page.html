@@ -29,6 +29,12 @@
         </ng-template>
       </mat-tab>
 
+      <mat-tab [label]="symlinksTabLabel()">
+        <ng-template matTabContent>
+          <app-settings-symlinks-tab-widget />
+        </ng-template>
+      </mat-tab>
+
       <mat-tab [label]="tasksTabLabel()">
         <ng-template matTabContent>
           <app-settings-tasks-tab-widget />

@@ -8,6 +8,12 @@ public sealed class RadarrMovieSnapshot
 
     public string TitleSlug { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Titles Radarr knows the movie under besides its main one. A special is often filed under a
+    /// localized or abbreviated variant, so this is matching input rather than display data.
+    /// </summary>
+    public IReadOnlyList<string> AlternativeTitles { get; init; } = [];
+
     public string? PosterRemoteUrl { get; init; }
 
     public MediaProfileSnapshot Profile { get; init; } = new();

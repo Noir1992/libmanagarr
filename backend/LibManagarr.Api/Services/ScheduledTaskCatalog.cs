@@ -18,8 +18,16 @@ public sealed class ScheduledTaskCatalog(IEnumerable<ScheduledTaskDefinition> de
         {
             Enabled = true, ScheduleMode = ScheduleMode.DailyAtTime
         }));
+        // Nobody asked for a health pass before the feature existed, so it comes in switched off and the
+        // operator turns it on once the media tree is set up. Three in the local morning is the offer the
+        // plan makes: quiet hours for a pass that walks the shares.
+        services.AddSingleton(new ScheduledTaskDefinition("symlinkHealthCheck", false, true, () => new()
+        {
+            Enabled = false, ScheduleMode = ScheduleMode.DailyAtTime, TimeHour = 3, TimeMinute = 0
+        }));
         services.AddScoped<IScheduledTaskHandler, ArrDataSyncTaskHandler>();
         services.AddScoped<IScheduledTaskHandler, LogCleanupTaskHandler>();
+        services.AddScoped<IScheduledTaskHandler, SymlinkHealthCheckTaskHandler>();
         return services;
     }
 }

@@ -1,4 +1,8 @@
 using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using LibManagarr.Api.Models;
 
 namespace LibManagarr.Api.Clients;
@@ -159,6 +163,154 @@ public sealed class SonarrClient(HttpClient httpClient)
         };
     }
 
+    // Every method below this line acts on one instance now, not on the last snapshot. A snapshot is a
+    // claim about a past moment, so the pairing is read again before a link is created and every write
+    // here is checked by reading the same thing back: Sonarr accepting a request is not evidence that
+    // the field changed.
+    public async Task<SonarrSeriesResource?> FetchSeriesAsync(
+        ArrInstanceSettings instance,
+        int seriesId,
+        CancellationToken cancellationToken) =>
+        await GetAsync<SonarrSeriesResource>(instance, $"/api/v3/series/{seriesId}", cancellationToken);
+
+    public async Task<SonarrEpisodeResource?> FetchEpisodeAsync(
+        ArrInstanceSettings instance,
+        int episodeId,
+        CancellationToken cancellationToken) =>
+        await GetAsync<SonarrEpisodeResource>(instance, $"/api/v3/episode/{episodeId}", cancellationToken);
+
+    public async Task<IReadOnlyList<SonarrEpisodeResource>> FetchEpisodesAsync(
+        ArrInstanceSettings instance,
+        int seriesId,
+        CancellationToken cancellationToken) =>
+        await GetAsync<List<SonarrEpisodeResource>>(instance, $"/api/v3/episode?seriesId={seriesId}", cancellationToken) ?? [];
+
+    public async Task<SonarrEpisodeFileResource?> FetchEpisodeFileAsync(
+        ArrInstanceSettings instance,
+        int episodeFileId,
+        CancellationToken cancellationToken) =>
+        await GetAsync<SonarrEpisodeFileResource>(instance, $"/api/v3/episodefile/{episodeFileId}", cancellationToken);
+
+    public async Task<IReadOnlyList<SonarrEpisodeFileResource>> FetchEpisodeFilesAsync(
+        ArrInstanceSettings instance,
+        int seriesId,
+        CancellationToken cancellationToken) =>
+        await GetAsync<List<SonarrEpisodeFileResource>>(instance, $"/api/v3/episodefile?seriesId={seriesId}", cancellationToken) ?? [];
+
+    public async Task<SonarrNamingConfigResource?> FetchNamingConfigAsync(
+        ArrInstanceSettings instance,
+        CancellationToken cancellationToken) =>
+        await GetAsync<SonarrNamingConfigResource>(instance, "/api/v3/config/naming", cancellationToken);
+
+    /// <summary>The names Sonarr's own rules would give the files of a series, per existing episode file.</summary>
+    public async Task<IReadOnlyList<SonarrRenameResource>> FetchRenameProposalsAsync(
+        ArrInstanceSettings instance,
+        int seriesId,
+        CancellationToken cancellationToken) =>
+        await GetAsync<List<SonarrRenameResource>>(instance, $"/api/v3/rename?seriesId={seriesId}", cancellationToken) ?? [];
+
+    /// <summary>
+    /// Read-modify-write on one episode: Sonarr's own document is fetched, only the named field is
+    /// replaced, and the complete document goes back. Sending a partial object instead would let Sonarr
+    /// treat every field this client does not model as absent, so switching monitoring off could blank
+    /// something nobody asked about. The caller reads the episode again to see the change actually stuck.
+    /// </summary>
+    public async Task<SonarrEpisodeResource?> SetEpisodeMonitoredAsync(
+        ArrInstanceSettings instance,
+        int episodeId,
+        bool monitored,
+        CancellationToken cancellationToken)
+    {
+        JsonNode episode = await GetNodeAsync(instance, $"/api/v3/episode/{episodeId}", cancellationToken)
+            ?? throw new InvalidOperationException($"Sonarr answered without an episode document for {episodeId}.");
+        episode["monitored"] = monitored;
+
+        return await PutNodeAsync<SonarrEpisodeResource>(instance, "/api/v3/episode", episode, cancellationToken);
+    }
+
+    /// <summary>
+    /// Same procedure for one episode file, with the fields the caller named. A file's Release Group is
+    /// set without touching the quality, and reading the document first is what keeps that true.
+    /// </summary>
+    public async Task<SonarrEpisodeFileResource?> SetEpisodeFileFieldsAsync(
+        ArrInstanceSettings instance,
+        int episodeFileId,
+        IReadOnlyDictionary<string, object?> fields,
+        CancellationToken cancellationToken)
+    {
+        JsonNode episodeFile = await GetNodeAsync(instance, $"/api/v3/episodefile/{episodeFileId}", cancellationToken)
+            ?? throw new InvalidOperationException($"Sonarr answered without an episode file document for {episodeFileId}.");
+        foreach ((string name, object? value) in fields)
+        {
+            episodeFile[name] = value is null ? null : JsonSerializer.SerializeToNode(value);
+        }
+
+        return await PutNodeAsync<SonarrEpisodeFileResource>(instance, "/api/v3/episodefile", episodeFile, cancellationToken);
+    }
+
+    private async Task<JsonNode?> GetNodeAsync(
+        ArrInstanceSettings instance,
+        string relativeUrl,
+        CancellationToken cancellationToken)
+    {
+        using HttpRequestMessage request = new(HttpMethod.Get, $"{NormalizeBaseUrl(instance.BaseUrl)}{relativeUrl}");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Add("X-Api-Key", instance.ApiKey);
+
+        using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        string body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body);
+    }
+
+    private async Task<T?> PutNodeAsync<T>(
+        ArrInstanceSettings instance,
+        string relativeUrl,
+        JsonNode node,
+        CancellationToken cancellationToken)
+    {
+        using HttpRequestMessage request = new(HttpMethod.Put, $"{NormalizeBaseUrl(instance.BaseUrl)}{relativeUrl}");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Add("X-Api-Key", instance.ApiKey);
+        request.Content = new StringContent(node.ToJsonString(), Encoding.UTF8, "application/json");
+
+        using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<T>(cancellationToken);
+    }
+
+    /// <summary>
+    /// Queues a rescan of one series. The scan reads the files that are already there, which is what a
+    /// newly created link needs; it is not a download and moves nothing.
+    /// </summary>
+    public async Task<SonarrCommandResource?> StartRescanSeriesAsync(
+        ArrInstanceSettings instance,
+        int seriesId,
+        CancellationToken cancellationToken) =>
+        await SendAndReadAsync<SonarrCommandResource>(
+            HttpMethod.Post, instance, "/api/v3/command", new CommandRequest { Name = "RescanSeries", SeriesId = seriesId }, cancellationToken);
+
+    /// <summary>Rename limited to one file, so no other episode of the series is ever touched.</summary>
+    public async Task<SonarrCommandResource?> StartRenameFilesAsync(
+        ArrInstanceSettings instance,
+        int seriesId,
+        IReadOnlyList<int> episodeFileIds,
+        CancellationToken cancellationToken) =>
+        await SendAndReadAsync<SonarrCommandResource>(
+            HttpMethod.Post,
+            instance,
+            "/api/v3/command",
+            new CommandRequest { Name = "RenameFiles", SeriesId = seriesId, FileIds = episodeFileIds },
+            cancellationToken);
+
+    public async Task<SonarrCommandResource?> FetchCommandAsync(
+        ArrInstanceSettings instance,
+        int commandId,
+        CancellationToken cancellationToken) =>
+        await GetAsync<SonarrCommandResource>(instance, $"/api/v3/command/{commandId}", cancellationToken);
+
     private async Task<T?> GetAsync<T>(
         ArrInstanceSettings instance,
         string relativeUrl,
@@ -172,6 +324,36 @@ public sealed class SonarrClient(HttpClient httpClient)
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken);
+    }
+
+    private async Task<T?> SendAndReadAsync<T>(
+        HttpMethod method,
+        ArrInstanceSettings instance,
+        string relativeUrl,
+        object body,
+        CancellationToken cancellationToken)
+    {
+        using HttpRequestMessage request = new(method, $"{NormalizeBaseUrl(instance.BaseUrl)}{relativeUrl}");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Add("X-Api-Key", instance.ApiKey);
+        request.Content = JsonContent.Create(body);
+
+        using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<T>(cancellationToken);
+    }
+
+    /// <summary>Wire shape of Sonarr's command endpoint; fields it does not take stay absent.</summary>
+    private sealed class CommandRequest
+    {
+        public string Name { get; init; } = string.Empty;
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? SeriesId { get; init; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<int>? FileIds { get; init; }
     }
 
     private static SonarrEpisodeSnapshot MapEpisodeSnapshot(
@@ -239,7 +421,9 @@ public sealed class SonarrClient(HttpClient httpClient)
             VideoFormat = ResolveDynamicRange(episodeFile),
             Resolution = episodeFile?.MediaInfo?.Resolution,
             CreatedAt = episodeFile?.DateAdded,
-            RelativePath = episodeFile?.RelativePath ?? episodeFile?.Path
+            RelativePath = episodeFile?.RelativePath ?? episodeFile?.Path,
+            Id = episodeFile?.Id,
+            Path = episodeFile?.Path
         };
     }
 

@@ -9,6 +9,7 @@ public sealed class SnapshotSyncService(
     IHistoryStore historyStore,
     SonarrClient sonarrClient,
     RadarrClient radarrClient,
+    SymlinkMatchingRequests symlinkMatching,
     ILogger<SnapshotSyncService> logger)
     : ISnapshotSyncService
 {
@@ -122,6 +123,10 @@ public sealed class SnapshotSyncService(
             instance.Name,
             snapshot.Series.Count);
 
+        // The specials of this instance may have moved, so the candidate search is asked for it — but
+        // only asked, because the search must not run inside the sync lock.
+        symlinkMatching.Request();
+
         return new SyncInstanceResult
         {
             Message = "Sonarr data synchronized.",
@@ -210,6 +215,9 @@ public sealed class SnapshotSyncService(
             "Completed Radarr snapshot sync for instance {InstanceName} with {ItemCount} items.",
             instance.Name,
             snapshot.Movies.Count);
+
+        // A movie that arrived or changed is exactly what the specials were waiting for.
+        symlinkMatching.Request();
 
         return new SyncInstanceResult
         {
