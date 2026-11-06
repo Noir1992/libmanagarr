@@ -136,8 +136,15 @@ Sekunden mit bereits gebautem App-Image und geladenen Abhängigkeiten.
 Der absichtliche Aufbaufehler endete mit Exitcode 1 und vollständigem Cleanup;
 auch die erfolgreichen Läufe hinterließen keine Container, Volumes oder
 Netzwerke. Sechs Infrastrukturtests, TypeScript, Formatprüfung und actionlint
-für alle drei Workflows bestanden. Ein echter GitHub-Actions-Lauf und die
-Repository-Branch-Regeln sind nach dem Push separat zu prüfen.
+für alle drei Workflows bestanden.
+
+Der Ausbau vom 06.11.2026 umfasst 14 Infrastrukturtests sowie eigene ESLint-
+und Prettier-Prüfungen. Laut Rückmeldung zum Pull Request ist der reguläre
+GitHub-Actions-Lauf erfolgreich; ein anschließend absichtlich fehlschlagender
+Browser-Test hat die Pipeline wie vorgesehen gestoppt. Dieser temporäre Fehler
+ist wieder entfernt. Die Repository-Branch-Regeln sind separat zu konfigurieren
+beziehungsweise zu prüfen. Eine tatsächliche Veröffentlichung nach GHCR über
+Main oder Release wurde mit diesen PR-Prüfläufen nicht ausgeführt.
 
 ## CI und Veröffentlichung
 

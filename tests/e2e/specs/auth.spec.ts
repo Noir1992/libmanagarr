@@ -4,10 +4,6 @@ import { credentials, login } from '../fixtures/app.js';
 test('setup, validation, logout and login protect the library', async ({ page, browser }) => {
   await page.goto('/library');
   await expect(page).toHaveURL(/\/setup$/);
-  // TEMPORARY: remove after verifying that a failing E2E test blocks image publishing in CI.
-  await expect(page, 'Intentional CI failure: verify E2E failures block image publishing').toHaveURL(/\/intentional-ci-failure$/, {
-    timeout: 2000,
-  });
   await expect(page.getByRole('button', { name: 'Create account' })).toBeDisabled();
   await page.getByLabel('Username', { exact: true }).fill(credentials.username);
   await page.getByLabel('Password', { exact: true }).fill('short');
