@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
-export const seedFileNames = ['baseline.json', 'seerr-key.json'];
+export const seedFileNames = ['baseline.json', 'seerr-key.json', 'expected-library.json'];
 const checksum = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 export function createBaselineManifest(archive, versions, accounts, files, generatedAt = new Date().toISOString()) {

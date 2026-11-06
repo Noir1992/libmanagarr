@@ -1,7 +1,7 @@
 {
   "versions": {
     "schemaVersion": 1,
-    "seedVersion": 1,
+    "seedVersion": 2,
     "images": {
       "sonarr": "lscr.io/linuxserver/sonarr@sha256:386c962ee6e260e3a5656b25df2ed056bcc9b6410e197d075f9547fd14c23bca",
       "radarr": "lscr.io/linuxserver/radarr@sha256:ade5937813c6ae415b29db729386e53fea3ecf067a019849bafbe2d2a6ec02ba",
@@ -12,7 +12,9 @@
     "media": {
       "seriesTvdbId": 305082,
       "movieTmdbId": 129,
-      "requestTmdbId": 27205
+      "requestTmdbId": 27205,
+      "secondSeriesTvdbId": 79481,
+      "secondMovieTmdbId": 8392
     }
   },
   "accounts": {
@@ -20,20 +22,27 @@
       "username": "e2e-admin",
       "password": "E2e-test-password-2026!",
       "email": "admin@example.test",
-      "services": ["libmanagarr", "jellyfin", "seerr"]
+      "services": [
+        "libmanagarr",
+        "jellyfin",
+        "seerr"
+      ]
     },
     "requester": {
       "username": "e2e-requester",
       "password": "E2e-test-password-2026!",
       "email": "requester@example.test",
       "permissions": 32,
-      "services": ["seerr"]
+      "services": [
+        "seerr"
+      ]
     }
   },
   "files": {
-    "baseline.json": "e933e810b9836dea3e56576db163161dac3a9bcb948de29b9893eac58d4c45ab",
-    "seerr-key.json": "077934ccf203052c92ace63526ebb321463b706bc447defbd37aec4ea1049e63"
+    "baseline.json": "e7f7ab138fbcb7b53a8d51a95a9a4e97d085bd156fd97ce3d47b3102d14de3c0",
+    "seerr-key.json": "9c8193aafd160041fabbdbcf1208276b12e4043655621b523988cbd464fd4b35",
+    "expected-library.json": "050f85637dd841e2ba47daea28bb5c894a3f98159fd84680e09166593cf4174a"
   },
-  "sha256": "f0146a40714f95cf0cf7db7c8f21cdd4365525ced047b3e4a34c9a24636adc84",
-  "generatedAt": "2026-11-05T13:26:56.189Z"
+  "sha256": "40fc0d92b1cc74f0d83982a37c272c694f657bf12ee24d782d6a70b6dfa33b04",
+  "generatedAt": "2026-11-06T08:00:23.029Z"
 }

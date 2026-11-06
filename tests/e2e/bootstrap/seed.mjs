@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir, chown } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import assert from 'node:assert/strict';
 import { arr, json, until, credentials, accounts } from './http.mjs';
 
 const versions = JSON.parse(await readFile(new URL('../versions.json', import.meta.url)));
@@ -131,6 +132,8 @@ try {
       'ultrafast',
       '-c:a',
       'aac',
+      '-metadata:s:a:0',
+      'language=jpn',
       '-pix_fmt',
       'yuv420p',
       '-y',
@@ -151,6 +154,97 @@ try {
   }
   status.episodeFile = await until('Sonarr episode file', async () => (await arr('sonarr', `/episodefile?seriesId=${series.id}`))[0]);
   status.movieFile = await until('Radarr movie file', async () => (await arr('radarr', `/moviefile?movieId=${movie.id}`))[0]);
+  const secondMovieLookup = await arr('radarr', `/movie/lookup?term=tmdb:${versions.media.secondMovieTmdbId}`);
+  const secondMovie = await arr('radarr', '/movie', {
+    method: 'POST',
+    body: {
+      ...secondMovieLookup[0],
+      qualityProfileId: movieProfiles[0].id,
+      rootFolderPath: '/media/movies',
+      monitored: true,
+      minimumAvailability: 'released',
+      addOptions: { searchForMovie: false },
+    },
+  });
+  const secondSeriesLookup = await arr('sonarr', `/series/lookup?term=tvdb:${versions.media.secondSeriesTvdbId}`);
+  const secondSeries = await arr('sonarr', '/series', {
+    method: 'POST',
+    body: {
+      ...secondSeriesLookup[0],
+      qualityProfileId: profiles[0].id,
+      rootFolderPath: '/media/serien',
+      monitored: true,
+      seasonFolder: true,
+      addOptions: { searchForMissingEpisodes: false },
+    },
+  });
+  const regular = episodes.find((value) => value.seasonNumber === 1 && value.episodeNumber === 1);
+  const missing = episodes.find((value) => value.seasonNumber === 1 && value.episodeNumber === 2);
+  if (!regular || !missing) throw new Error('Baseline requires regular episodes 1 and 2');
+  const regularDir = `${series.path}/Season 01`;
+  await mkdir(regularDir, { recursive: true });
+  const regularPath = `${regularDir}/${series.title} - S01E01 - E2E WEBDL-720p.mkv`;
+  execFileSync('ffmpeg', [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-f',
+    'lavfi',
+    '-i',
+    'color=c=green:s=1280x720:r=24',
+    '-f',
+    'lavfi',
+    '-i',
+    'anullsrc=r=48000:cl=stereo',
+    '-t',
+    '120',
+    '-c:v',
+    'libx264',
+    '-preset',
+    'ultrafast',
+    '-c:a',
+    'aac',
+    '-metadata:s:a:0',
+    'language=jpn',
+    '-y',
+    regularPath,
+  ]);
+  await chown(regularPath, 1000, 1000);
+  await arr('sonarr', '/command', { method: 'POST', body: { name: 'RescanSeries', seriesId: series.id } });
+  await until('regular episode imported', async () => (await arr('sonarr', `/episode/${regular.id}`)).hasFile);
+  await until('second series metadata', async () => (await arr('sonarr', `/episode?seriesId=${secondSeries.id}`)).length);
+  const expected = {
+    titles: [secondSeries.title, series.title, secondMovie.title, movie.title].sort((a, b) => a.localeCompare(b)),
+    presentTitles: [series.title, movie.title].sort((a, b) => a.localeCompare(b)),
+    missingTitles: [secondSeries.title, secondMovie.title].sort((a, b) => a.localeCompare(b)),
+    resolution720Titles: [series.title],
+    resolution1080Titles: [series.title, movie.title].sort((a, b) => a.localeCompare(b)),
+    movies: [
+      { id: movie.id, tmdbId: movie.tmdbId, title: movie.title, genres: movie.genres, hasFile: true, monitored: false },
+      {
+        id: secondMovie.id,
+        tmdbId: secondMovie.tmdbId,
+        title: secondMovie.title,
+        genres: secondMovie.genres,
+        hasFile: false,
+        monitored: true,
+      },
+    ],
+    series: [
+      { id: series.id, tvdbId: series.tvdbId, title: series.title, genres: series.genres, monitored: false },
+      { id: secondSeries.id, tvdbId: secondSeries.tvdbId, title: secondSeries.title, genres: secondSeries.genres, monitored: true },
+    ],
+    files: { total: 3, sonarr: 2, radarr: 1, videoCodec: 'x264', audioCodec: 'AAC', audioLanguage: 'Japanese' },
+    specialEpisode: { id: special.id, season: 0, number: special.episodeNumber, hasFile: true },
+    regularEpisode: { id: regular.id, title: regular.title, season: 1, number: 1, airDateUtc: regular.airDateUtc, hasFile: true },
+    missingEpisode: { id: missing.id, title: missing.title, season: 1, number: 2, hasFile: false },
+  };
+  for (const file of [status.episodeFile, status.movieFile, ...(await arr('sonarr', `/episodefile?seriesId=${series.id}`))]) {
+    assert.equal(file.mediaInfo.videoCodec, expected.files.videoCodec);
+    assert.equal(file.mediaInfo.audioCodec, expected.files.audioCodec);
+    assert.equal(file.mediaInfo.audioLanguages, 'jpn');
+  }
+  await writeFile('/artifacts/expected-library.json', JSON.stringify(expected, null, 2) + '\n');
   console.log('Real video/audio files indexed in Sonarr and Radarr');
   status.media = {
     seriesTitle: series.title,
@@ -158,6 +252,8 @@ try {
     specialEpisode: special.episodeNumber,
     seriesId: series.id,
     movieId: movie.id,
+    secondMovieId: secondMovie.id,
+    secondSeriesId: secondSeries.id,
   };
   await writeFile('/artifacts/baseline.json', JSON.stringify(status.media, null, 2));
 } finally {

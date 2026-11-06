@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "seedVersion": 1,
+  "seedVersion": 2,
   "images": {
     "sonarr": "lscr.io/linuxserver/sonarr@sha256:386c962ee6e260e3a5656b25df2ed056bcc9b6410e197d075f9547fd14c23bca",
     "radarr": "lscr.io/linuxserver/radarr@sha256:ade5937813c6ae415b29db729386e53fea3ecf067a019849bafbe2d2a6ec02ba",
@@ -11,6 +11,8 @@
   "media": {
     "seriesTvdbId": 305082,
     "movieTmdbId": 129,
-    "requestTmdbId": 27205
+    "requestTmdbId": 27205,
+    "secondSeriesTvdbId": 79481,
+    "secondMovieTmdbId": 8392
   }
 }

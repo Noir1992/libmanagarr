@@ -51,7 +51,7 @@
           <mat-slide-toggle
             [checked]="row.enabled"
             [disabled]="taskService.states()[row.taskKey]?.saving"
-            [attr.aria-label]="taskEnabledColumnLabel()"
+            [aria-label]="taskEnabledColumnLabel()"
             (change)="toggleTaskEnabledAsync(row, $event.checked)"
           ></mat-slide-toggle>
         }
