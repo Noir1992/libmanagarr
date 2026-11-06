@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { arr, json, until } from './http.mjs';
 
 const baseline = JSON.parse(await readFile('seeds/baseline.json'));
+const expected = JSON.parse(await readFile('seeds/expected-library.json'));
 const { apiKey } = JSON.parse(await readFile('seeds/seerr-key.json'));
 const status = {};
 try {
@@ -11,6 +12,40 @@ try {
   const movie = await arr('radarr', '/movie');
   assert.equal(series.find((value) => value.id === baseline.seriesId)?.title, baseline.seriesTitle);
   assert.equal(movie.find((value) => value.id === baseline.movieId)?.title, baseline.movieTitle);
+  assert.equal(series.length, 2);
+  assert.equal(movie.length, 2);
+  for (const item of expected.movies) {
+    const actual = movie.find((value) => value.id === item.id);
+    assert.equal(actual?.title, item.title);
+    assert.equal(actual?.hasFile, item.hasFile);
+    assert.equal(actual?.monitored, item.monitored);
+    assert.equal(actual?.tmdbId, item.tmdbId);
+    assert.deepEqual(actual?.genres, item.genres);
+  }
+  for (const item of expected.series) {
+    const actual = series.find((value) => value.id === item.id);
+    assert.equal(actual?.title, item.title);
+    assert.equal(actual?.tvdbId, item.tvdbId);
+    assert.equal(actual?.monitored, item.monitored);
+    assert.deepEqual(actual?.genres, item.genres);
+  }
+  const regular = await arr('sonarr', `/episode/${expected.regularEpisode.id}`);
+  assert.equal(regular.hasFile, true);
+  assert.equal(regular.title, expected.regularEpisode.title);
+  assert.equal(regular.airDateUtc, expected.regularEpisode.airDateUtc);
+  assert.equal(regular.seasonNumber, expected.regularEpisode.season);
+  assert.equal(regular.episodeNumber, expected.regularEpisode.number);
+  assert.equal((await arr('sonarr', `/episode/${expected.missingEpisode.id}`)).hasFile, false);
+  const seriesFiles = await arr('sonarr', `/episodefile?seriesId=${baseline.seriesId}`);
+  const movieFiles = await arr('radarr', `/moviefile?movieId=${baseline.movieId}`);
+  assert.equal(seriesFiles.length, expected.files.sonarr);
+  assert.equal(movieFiles.length, expected.files.radarr);
+  assert.deepEqual(seriesFiles.map((file) => file.mediaInfo.resolution).sort(), ['1280x720', '1920x1080']);
+  for (const file of [...seriesFiles, ...movieFiles]) {
+    assert.equal(file.mediaInfo.videoCodec, expected.files.videoCodec);
+    assert.equal(file.mediaInfo.audioCodec, expected.files.audioCodec);
+    assert.equal(file.mediaInfo.audioLanguages, 'jpn');
+  }
   const episode = (await arr('sonarr', `/episode?seriesId=${baseline.seriesId}`)).find(
     (value) => value.seasonNumber === 0 && value.episodeNumber === baseline.specialEpisode,
   );

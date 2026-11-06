@@ -1,0 +1,35 @@
+import { test, expect } from '@playwright/test';
+import { prepareAccount, login } from '../fixtures/app.js';
+import { configureLibrary, expected, assertTitles } from '../fixtures/library.js';
+import { selectFilter, clearFilters } from '../fixtures/filters.js';
+
+test('E05: include, exclude, search and sorting agree across both library views', async ({ request, page }) => {
+  await prepareAccount(request);
+  await configureLibrary(request);
+  await login(page);
+  await assertTitles(page, expected.titles);
+  await selectFilter(page, 'Resolution', '720p');
+  await assertTitles(page, expected.resolution720Titles);
+  await clearFilters(page);
+  await selectFilter(page, 'Resolution', '1080p', true);
+  await assertTitles(page, [...expected.missingTitles, ...expected.resolution720Titles].sort());
+  await expect(page.getByRole('link', { name: expected.movies[0].title, exact: true })).toBeHidden();
+  await page.getByRole('searchbox', { name: /Search/ }).fill(expected.series[0].title);
+  await assertTitles(page, [expected.series[0].title]);
+  await page.getByRole('button', { name: 'Toggle view', exact: true }).click();
+  await expect(page.getByRole('link', { name: expected.series[0].title, exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: expected.movies[0].title, exact: true })).toBeHidden();
+  await page.getByRole('button', { name: 'Toggle view', exact: true }).click();
+  await clearFilters(page);
+  await page.getByRole('searchbox', { name: /Search/ }).fill('');
+  await assertTitles(page, expected.titles);
+  await page.getByRole('button', { name: 'Sort', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Alphabetical/ }).click();
+  await assertTitles(page, [...expected.titles].reverse());
+  await page.getByRole('button', { name: 'Sort', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Alphabetical/ }).click();
+  await assertTitles(page, expected.titles);
+  await page.getByRole('searchbox', { name: /Search/ }).fill('No-such-E2E-title');
+  await expect(page.getByText('No data available for the current filter', { exact: true })).toBeVisible();
+  await expect(page.getByRole('article')).toHaveCount(0);
+});

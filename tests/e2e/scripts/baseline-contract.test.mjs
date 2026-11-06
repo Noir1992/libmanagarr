@@ -7,16 +7,20 @@ function fixture() {
   const versions = { seedVersion: 1, images: { sonarr: 'image@sha256:original' } };
   const contract = {
     accounts: { administrator: { username: 'test-admin', password: 'synthetic-password' } },
-    files: { 'baseline.json': Buffer.from('{"seriesId":1}'), 'seerr-key.json': Buffer.from('{"apiKey":"synthetic"}') },
+    files: {
+      'baseline.json': Buffer.from('{"seriesId":1}'),
+      'seerr-key.json': Buffer.from('{"apiKey":"synthetic"}'),
+      'expected-library.json': Buffer.from('{"titles":[]}'),
+    },
   };
   const manifest = createBaselineManifest(archive, versions, contract.accounts, contract.files, '2026-11-06T00:00:00.000Z');
   return { archive, versions, contract, manifest };
 }
 
-test('records accounts and both seed sidecars and accepts the complete contract', () => {
+test('records accounts and all seed sidecars and accepts the complete contract', () => {
   const { manifest, archive, versions, contract } = fixture();
   assert.deepEqual(manifest.accounts, contract.accounts);
-  assert.deepEqual(Object.keys(manifest.files), ['baseline.json', 'seerr-key.json']);
+  assert.deepEqual(Object.keys(manifest.files), ['baseline.json', 'seerr-key.json', 'expected-library.json']);
   assert.match(manifest.files['baseline.json'], /^[a-f0-9]{64}$/);
   assert.match(manifest.files['seerr-key.json'], /^[a-f0-9]{64}$/);
   assert.equal(manifest.generatedAt, '2026-11-06T00:00:00.000Z');
@@ -35,7 +39,7 @@ test('rejects a manifest without an account contract', () => {
   assert.throws(() => validateBaseline(manifest, archive, versions, contract), /Seed test accounts differ/);
 });
 
-for (const name of ['baseline.json', 'seerr-key.json']) {
+for (const name of ['baseline.json', 'seerr-key.json', 'expected-library.json']) {
   test(`rejects altered ${name} bytes before restoring state`, () => {
     const { manifest, archive, versions, contract } = fixture();
     contract.files[name] = Buffer.from('tampered');

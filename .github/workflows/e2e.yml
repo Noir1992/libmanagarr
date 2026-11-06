@@ -1,4 +1,4 @@
-name: Browser E2E
+name: E2E tests
 
 on:
   workflow_call:
@@ -10,7 +10,7 @@ jobs:
   e2e:
     name: E2E tests
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v5
         timeout-minutes: 2
@@ -51,11 +51,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Browser tests against candidate
-        timeout-minutes: 15
+        timeout-minutes: 30
         working-directory: tests/e2e
         env:
           E2E_APP_IMAGE: libmanagarr:e2e
-        run: npm run e2e
+        run: npm run e2e -- --suite full
       - name: Export tested image
         timeout-minutes: 3
         run: docker save libmanagarr:e2e -o /tmp/tested-image.tar

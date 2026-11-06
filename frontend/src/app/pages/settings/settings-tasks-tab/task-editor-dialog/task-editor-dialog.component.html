@@ -9,7 +9,7 @@
     <div class="task-grid" formGroupName="task">
       <div class="field task-toggle">
         <label for="task-enabled">{{ taskEnabledLabel() }}</label>
-        <mat-slide-toggle formControlName="enabled" id="task-enabled"></mat-slide-toggle>
+        <mat-slide-toggle formControlName="enabled" id="task-enabled" [aria-label]="taskEnabledLabel()"></mat-slide-toggle>
       </div>
 
       <div class="field">

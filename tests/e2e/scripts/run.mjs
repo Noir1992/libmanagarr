@@ -1,9 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
-import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, copyFile, access } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { execute } from './process.mjs';
 import { validateBaseline, createBaselineManifest, seedFileNames } from './baseline.mjs';
+import { parseOptions, selectScenarios, verifyScenarioFiles } from './scenarios.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const repo = resolve(root, '../..');
@@ -11,8 +12,15 @@ const versions = JSON.parse(await readFile(join(root, 'versions.json')));
 const accounts = JSON.parse(await readFile(join(root, 'fixtures/accounts.json')));
 const readSeedFiles = async () =>
   Object.fromEntries(await Promise.all(seedFileNames.map(async (name) => [name, await readFile(join(root, 'seeds', name))])));
-const bootstrap = process.argv.includes('--bootstrap');
-const debug = process.argv.includes('--debug');
+const options = parseOptions(process.argv.slice(2));
+const { bootstrap, debug } = options;
+const selected = bootstrap ? [] : selectScenarios(options);
+await verifyScenarioFiles(selected, async (spec) =>
+  access(join(root, spec)).then(
+    () => true,
+    () => false,
+  ),
+);
 if (debug && process.env.CI) throw new Error('Debug retention is disabled in CI.');
 const run = `lme2e-${randomUUID().slice(0, 12)}`;
 const startedAt = Date.now();
@@ -60,6 +68,8 @@ const compose = (...args) =>
   });
 const helper = (...args) => compose('run', '--rm', '--no-deps', 'runner', ...args);
 let failed = false;
+const completed = [];
+const timings = [];
 let active = false;
 const cleanup = async () => {
   if (active) {
@@ -99,10 +109,12 @@ try {
     { env },
   );
   if (!process.env.E2E_APP_IMAGE && !bootstrap) await execute('docker', ['build', '-t', env.E2E_APP_IMAGE, repo], { env });
-  const scenarios = bootstrap ? ['bootstrap'] : ['auth', 'instances-library', 'seerr-requests', 'instance-recovery'];
-  for (const scenario of scenarios) {
+  const cases = bootstrap ? [{ id: 'bootstrap', name: 'bootstrap' }] : selected;
+  for (const scenario of cases) {
     if (interrupted) throw new Error('Interrupted');
-    env.E2E_ARTIFACTS = join(artifacts, scenario);
+    const scenarioStartedAt = Date.now();
+    console.log(`Starting ${scenario.id}: ${scenario.name}`);
+    env.E2E_ARTIFACTS = join(artifacts, `${scenario.id}-${scenario.name}`);
     await mkdir(env.E2E_ARTIFACTS, { recursive: true });
     active = true; // Also clean up partially started stacks.
     try {
@@ -115,6 +127,7 @@ try {
         await copyFile(join(env.E2E_ARTIFACTS, 'baseline.tar.gz'), join(root, 'seeds/baseline.tar.gz'));
         await copyFile(join(env.E2E_ARTIFACTS, 'baseline.json'), join(root, 'seeds/baseline.json'));
         await copyFile(join(env.E2E_ARTIFACTS, 'seerr-key.json'), join(root, 'seeds/seerr-key.json'));
+        await copyFile(join(env.E2E_ARTIFACTS, 'expected-library.json'), join(root, 'seeds/expected-library.json'));
         const archive = await readFile(join(root, 'seeds/baseline.tar.gz'));
         await writeFile(
           join(root, 'seeds/manifest.json'),
@@ -123,32 +136,49 @@ try {
       } else {
         await helper('tar', '-xzf', 'seeds/baseline.tar.gz', '-C', '/');
         await compose('up', '-d', 'sonarr', 'radarr', 'seerr', 'jellyfin', 'metadata', 'app');
-        if (process.argv.includes('--fail-after-start')) throw new Error('Intentional E2E lifecycle failure after stack startup');
+        if (options.failAfterStart) throw new Error('Intentional E2E lifecycle failure after stack startup');
         await helper('node', 'bootstrap/verify.mjs');
-        if (scenario === 'instance-recovery') {
-          await compose('stop', 'sonarr');
+        if (scenario.recovery) {
+          const { service, stopBeforeTest } = scenario.recovery;
+          if (stopBeforeTest) await compose('stop', service);
           // The browser test writes a marker after displaying the failure. Only the host controls Docker.
-          const test = helper('npx', 'playwright', 'test', `specs/${scenario}.spec.ts`);
-          const result = test.then(
-            () => null,
-            (error) => error,
-          );
-          const deadline = Date.now() + 120_000;
-          while (true) {
-            try {
-              await readFile(join(env.E2E_ARTIFACTS, 'restart-sonarr'));
-              break;
-            } catch {
-              // The browser has not written its checkpoint yet; keep polling until the deadline.
+          const test = helper('npx', 'playwright', 'test', scenario.spec);
+          let settled = false;
+          const result = test
+            .finally(() => {
+              settled = true;
+            })
+            .then(
+              () => null,
+              (error) => error,
+            );
+          const checkpoint = async (name) => {
+            const deadline = Date.now() + 120_000;
+            while (true) {
+              if (
+                await access(join(env.E2E_ARTIFACTS, name)).then(
+                  () => true,
+                  () => false,
+                )
+              )
+                return;
+              if (settled) throw (await result) ?? new Error(`Test exited before ${name}`);
+              if (Date.now() > deadline || interrupted) throw new Error(`Browser did not reach ${name}`);
+              await new Promise((resolve) => setTimeout(resolve, 500));
             }
-            if (Date.now() > deadline || interrupted) throw new Error('Browser did not reach recovery checkpoint');
-            await new Promise((resolve) => setTimeout(resolve, 500));
+          };
+          if (!stopBeforeTest) {
+            await checkpoint(`stop-${service}`);
+            await compose('stop', service);
+            await writeFile(join(env.E2E_ARTIFACTS, `${service}-stopped`), 'ready');
           }
-          await compose('start', 'sonarr');
+          await checkpoint(`restart-${service}`);
+          await compose('start', service);
           const error = await result;
           if (error) throw error;
-        } else await helper('npx', 'playwright', 'test', `specs/${scenario}.spec.ts`);
+        } else await helper('npx', 'playwright', 'test', scenario.spec);
       }
+      completed.push(scenario.id);
     } finally {
       const logs = await execute('docker', [...composeArgs, 'logs', '--no-color'], { cwd: repo, env, capture: true }).catch(
         (error) => error.output ?? String(error),
@@ -156,6 +186,7 @@ try {
       await writeFile(join(env.E2E_ARTIFACTS, 'containers.log'), logs);
     }
     await cleanup();
+    timings.push({ id: scenario.id, durationSeconds: Math.round((Date.now() - scenarioStartedAt) / 1000) });
   }
 } catch (error) {
   failed = true;
@@ -175,7 +206,17 @@ try {
   await writeFile(
     join(artifacts, 'summary.json'),
     JSON.stringify(
-      { project: run, bootstrap, failed, exitCode: process.exitCode ?? 0, durationSeconds: Math.round((Date.now() - startedAt) / 1000) },
+      {
+        project: run,
+        bootstrap,
+        suite: options.suite,
+        selected: selected.map((item) => item.id),
+        completed,
+        timings,
+        failed,
+        exitCode: process.exitCode ?? 0,
+        durationSeconds: Math.round((Date.now() - startedAt) / 1000),
+      },
       null,
       2,
     ),

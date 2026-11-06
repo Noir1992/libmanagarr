@@ -16,6 +16,8 @@ npm run format:check
 npm test
 npm run typecheck
 npm run e2e
+npm run e2e -- --suite full
+npm run e2e -- --scenario E12
 ```
 
 Der letzte Befehl baut das aktuelle App-Image und den Runner. Browser und
@@ -41,9 +43,34 @@ Jede Spec erhält einen vollständig frischen Stack mit eigener App-Konfiguratio
 und wiederhergestellter Dienst-Baseline. Ein Worker und ein neuer Browserkontext
 pro Test verhindern konkurrierende Schreibzugriffe. Die Reihenfolge der Specs
 ist keine Voraussetzung. Der LibManagarr-Sync-Zeitplan ist standardmäßig
-deaktiviert; Bibliothekstests synchronisieren über die sichtbare UI-Aktion.
+deaktiviert. Vorbereitung darf die regulären APIs verwenden; der jeweils
+geprüfte Benutzerablauf erfolgt im Browser.
 
-Die Kern-Suite verwendet ein internes Docker-Netzwerk ohne externe Route.
+`npm run e2e` führt standardmäßig alle 18 Szenarien aus, genauso wie die CI.
+`--scenario E12` oder `--scenario backup-restore` wählt lokal genau einen
+Fall mit demselben vollständigen Reset. Unbekannte Optionen, leere Auswahl,
+doppelte Katalogeinträge und fehlende Specs führen zum Fehler vor dem Aufbau.
+Der verbindliche Katalog steht in `scripts/scenarios.mjs`.
+
+| IDs     | Abdeckung                                                                                                 | Suite |
+| ------- | --------------------------------------------------------------------------------------------------------- | ----- |
+| S01–S04 | Installation/Auth/Icons, Arr-Sync/Details, Seerr-Ablehnen, Sonarr-Ausfall                                 | core  |
+| E01–E04 | Falsches Passwort, Passwortwechsel und Sitzungswiderruf, TOTP-Einrichtung/Login, einmalige Recovery-Codes | core  |
+| E05–E07 | Filter/Suche/Sortierung/Ansichten, Instanzänderung/Löschen, leere Bibliothek                              | core  |
+| E08–E10 | Seerr-Löschen/Abbrechen, Seerr-Ausfall, Aufgabeneditor/manueller Sync                                     | full  |
+| E11–E12 | Verschlüsselter Backup-Download/Prüfung/Verwerfen, Restore mit Host-Neustart                              | core  |
+| E13–E14 | Monats-/Agendakalender mit festem Datum, Codec-Anzahlen/Prozente/Filter                                   | full  |
+
+`full` enthält sämtliche `core`-Fälle und ist in PR, Main und Release verbindlich.
+Die 13 Fälle von `--suite core` sind ausschließlich eine optionale lokale Auswahl;
+die CI bietet keine verkürzte Suite an. Jeder schreibende Fall besitzt eine
+eigene Spec und frische Volumes. Zwei Kontositzungen sind unabhängige
+Browserkontexte. TOTP nutzt die exakt gepinnte Bibliothek OTPAuth und echte
+30-Sekunden-Zeitschritte; nur der Kalender fixiert die Browser-Anzeigezeit.
+Arr-Löschen hat im aktuellen Produkt keinen Bestätigungsdialog. Bei Seerr-
+Ladefehlern erfolgt die Wiederholung durch Neuladen der Seite.
+
+Die gesamte Suite verwendet ein internes Docker-Netzwerk ohne externe Route.
 `bootstrap/verify.mjs` prüft Dienstzustände, Dateizuordnungen, einen offenen
 Request und den fehlgeschlagenen Zugriff auf eine externe IP. Unbekannte
 TMDB-Endpunkte liefern Fehler. Nur die TMDB-Grenze für den bekannten
@@ -53,7 +80,7 @@ Authentifizierung, Request-Verwaltung und Statusänderung bleiben real.
 
 ## Diagnose und Reset
 
-Unter `artifacts/lme2e-…/<szenario>/` liegen Containerlogs, Bootstrap-Status,
+Unter `artifacts/lme2e-…/<ID>-<szenario>/` liegen Containerlogs, Bootstrap-Status,
 HTML-/JUnit-Report sowie bei Browserfehlern Screenshot und Playwright-Trace.
 Ein früher Aufbaufehler erzeugt zusätzlich `failure.txt`. Beispiel:
 
@@ -84,13 +111,13 @@ Ressourcen entfernen; er ist kein erfolgreicher Browser-Testlauf.
 
 ```text
 npm run bootstrap
-npm run e2e
-npm run e2e
+npm run e2e -- --suite full
+npm run e2e -- --suite full
 ```
 
-Nur `bootstrap` benötigt Live-Metadaten für die Serie und den Bibliotheksfilm.
+Nur `bootstrap` benötigt Live-Metadaten für die Serien und Bibliotheksfilme.
 Er erzeugt leere Konfigurationen, richtet Jellyfin und Seerr über deren APIs
-ein, erzeugt mit FFmpeg zwei kurze blaue Videos und lässt sie durch Arr scannen.
+ein, erzeugt mit FFmpeg drei kurze Farbvideos und lässt sie durch Arr scannen.
 Es wird kein urheberrechtlich geschütztes Videomaterial heruntergeladen.
 Die externe Serien-/Filmidentität steht in `versions.json`; interne IDs werden
 aus den Antworten ermittelt. Ein Special der Serie ist Teil der Baseline.
@@ -102,7 +129,10 @@ dem gemeinsamen Medienvolume gesichert. `seeds/manifest.json` bindet das Archiv
 per SHA-256 an die vollständige Image-/Seed-Versionierung. Beide werden vor
 dem Testaufbau validiert. Das Manifest enthält zusätzlich den Testkonto-Vertrag
 aus `fixtures/accounts.json` sowie SHA-256-Prüfsummen für `baseline.json` und
-`seerr-key.json`. Bootstrap und Browser-Tests lesen dieselben synthetischen
+`seerr-key.json` sowie `expected-library.json`. Das letzte Dokument enthält
+versionierte Sollwerte für Titel, externe IDs, Monitoring, Dateistatus,
+Filtermengen, importierte technische Eigenschaften und Kalendertermine.
+Bootstrap und Browser-Tests lesen dieselben synthetischen
 Zugangsdaten. Abweichende Konten oder veränderte Seed-Begleitdateien lassen den
 Lauf vor dem Start der Dienste scheitern. Das App-Konto wird erst im jeweiligen
 Test angelegt; die Jellyfin-/Seerr-Konten stammen aus der Baseline.
@@ -120,14 +150,20 @@ Referenzen: [Sonarr OpenAPI](https://github.com/Sonarr/Sonarr/blob/develop/src/S
 
 Die aktuelle Baseline wurde mit Sonarr 4.0.20.3014, Radarr 6.4.4.10685,
 Seerr 3.0.1 und Jellyfin 10.11.6 erzeugt. Sie enthält Kabaneri (TVDB 305082,
-Special S00E01), Spirited Away (TMDB 129) und den offenen Inception-Request
-(TMDB 27205). Die beiden Videodateien zeigen zwei Minuten blaues Bild mit
-synthetischer stummer Audiospur. Arr lehnt reine Videos ohne Audiospur ab.
+Special S00E01 in 1080p und reguläre Episode S01E01 in 720p), Death Note
+(TVDB 79481, ohne Dateien), Spirited Away (TMDB 129, 1080p), My Neighbor Totoro
+(TMDB 8392, ohne Datei) und den offenen Inception-Request (TMDB 27205).
+Die drei Videodateien zeigen zwei Minuten blaues beziehungsweise grünes Bild
+mit synthetischer stummer japanischer AAC-Audiospur und x264-Video. Arr lehnt
+reine Videos ohne Audiospur ab. Die fehlende reguläre Episode S01E02 bleibt
+ohne Datei. Der Kalenderfall nutzt den 07.04.2016 um 15:00 UTC.
 
 Eine Speicher-Stichprobe im Browser-/Ausfalltest ergab etwa 1 GiB für die
 laufenden Container zusammen; dies ist kein gemessener Spitzenwert. Für
 Image-Builds zusätzlich Speicher und mehrere GiB Docker-Plattenplatz einplanen.
-`summary.json` protokolliert die Gesamtlaufzeit jedes neuen Laufs.
+`summary.json` protokolliert Suite, ausgewählte und abgeschlossene IDs sowie
+Gesamtlaufzeit und die Dauer erfolgreich abgeschlossener Szenarien inklusive
+Aufbau und Cleanup.
 
 Lokaler Nachweis vom 05.11.2026 (Windows, Docker Desktop mit Linux-Containern):
 zwei frische Bootstrap-Läufe und zwei vollständige Offline-Läufe mit jeweils
@@ -149,15 +185,29 @@ Main oder Release wurde mit diesen PR-Prüfläufen nicht ausgeführt.
 ## CI und Veröffentlichung
 
 `e2e.yml` ist der gemeinsame Prüfpfad für CI und Release. Er baut ein
-Linux-amd64-Prüfimage, führt dieselbe Offline-Suite aus und exportiert erst
+Linux-amd64-Prüfimage, führt die ausgewählte Offline-Suite aus und exportiert erst
 nach Erfolg dieses Image als Artefakt. Die Publikationsjobs laden genau dieses
 Image, taggen und pushen es erst nach erfolgreichen Backend-, Frontend- und
 E2E-Jobs. Es gibt keinen zweiten Build im Publikationsjob. Weitere Architekturen
 werden derzeit nicht veröffentlicht; sie benötigen einen eigenen Prüfpfad.
 Der E2E-Job hat ausschließlich Leserechte und benötigt keine Registry-Secrets.
 Diagnosen bleiben sieben Tage, das Prüfimage einen Tag gespeichert.
-Der E2E-Job ist auf 35 Minuten begrenzt. Seine einzelnen Schritte haben eigene
-Zeitlimits, insbesondere jeweils 15 Minuten für App-Build und Browserlauf.
+PR, Main und Release prüfen immer alle 18 Fälle. `e2e.yml` ist ausschließlich
+ein wiederverwendbarer Job, kein separat startbarer Workflow. Auch ein manuell
+gestarteter `CI`-Lauf führt dieselbe vollständige Pipeline aus. Jeder E2E-Fehler
+lässt damit den normalen PR-Lauf scheitern und verhindert die Publikation.
+Der E2E-Job ist auf 50 Minuten begrenzt: maximal 15 Minuten für den App-Build
+und 30 Minuten für den Browserlauf. Die bisherige 15-Minuten-Grenze des
+Browserlaufs wird für 18 vollständig isolierte Stacks erweitert; sie ist kein
+gemessener Linux-Laufzeitwert. Die tatsächliche Dauer steht im Laufartefakt.
+
+Lokaler Nachweis der fachlichen Erweiterung vom 06.11.2026: zwei vollständige
+Offline-Läufe mit jeweils 18/18 bestandenen Szenarien, 1.445 beziehungsweise
+1.430 Sekunden. Beide liefen parallel unter Windows/Docker Desktop und wurden
+vollständig aufgeräumt. Zusätzlich bestehen 19 Infrastrukturtests sowie drei
+Wiederholungen des nach Linux-Diagnose korrigierten Filterfalls und der
+Statistikfall. Die abschließende Linux-Abnahme erfolgt im normalen CI-Lauf
+mit allen 18 Szenarien.
 
 Den Status `E2E tests` zusätzlich in den GitHub-
 Branch-Regeln als erforderlichen Check hinterlegen. Workflow-Dateien können

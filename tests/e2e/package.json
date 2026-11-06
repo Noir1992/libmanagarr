@@ -23,6 +23,7 @@
     "eslint": "10.14.0",
     "eslint-plugin-playwright": "2.12.2",
     "globals": "17.14.0",
+    "otpauth": "9.6.0",
     "prettier": "3.8.3",
     "typescript": "5.9.3",
     "typescript-eslint": "8.72.1"
