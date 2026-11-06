@@ -25,11 +25,16 @@ test('E10: task editor persists a schedule and a manual disabled task synchroniz
   await expect(dialog.getByLabel('Interval value*', { exact: true })).toHaveValue('24');
   await expect(dialog.getByRole('switch', { name: 'Enabled', exact: true })).toBeChecked();
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(row.getByRole('switch', { name: 'Enabled', exact: true })).toBeChecked();
   const disabled = page.waitForResponse(
     (response) => response.url().endsWith('/api/settings/tasks/arrDataSync') && response.request().method() === 'PUT',
   );
-  await row.getByRole('switch', { name: 'Enabled', exact: true }).uncheck();
-  expect((await disabled).ok()).toBe(true);
+  // This controlled switch settles after the save response, rather than synchronously on click.
+  await row.getByRole('switch', { name: 'Enabled', exact: true }).click();
+  const disabledResponse = await disabled;
+  expect(disabledResponse.ok()).toBe(true);
+  expect(((await disabledResponse.json()) as { enabled: boolean }).enabled).toBe(false);
   await expect(row.getByRole('switch', { name: 'Enabled', exact: true })).not.toBeChecked();
   await expect(row.getByRole('cell').nth(1)).toHaveText('N/A');
   await row.getByRole('button', { name: 'Run now', exact: true }).click();
