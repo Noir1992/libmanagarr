@@ -42,8 +42,6 @@ jobs:
 
   e2e:
     uses: ./.github/workflows/e2e.yml
-    with:
-      suite: full
 
   release-image:
     name: Publish tested release image

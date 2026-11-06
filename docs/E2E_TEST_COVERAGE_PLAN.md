@@ -1,6 +1,6 @@
 # Plan: Fachliche E2E-Abdeckung ausbauen
 
-Stand: 06.11.2026. Status: E01–E14, Szenariokatalog, erweiterte Seeds und CI-Suite-Auswahl implementiert; vollständige Abnahme läuft.
+Stand: 06.11.2026. Status: E01–E14, Szenariokatalog und erweiterte Seeds implementiert. PR, Main und Release prüfen verbindlich alle 18 Fälle in derselben Pipeline; Linux-Abnahme läuft.
 
 ## 1. Ziel und Ausgangslage
 
@@ -56,7 +56,7 @@ Seed-Archiv und Begleitdateien weiterhin per Prüfsumme schützen. Bei Änderung
 
 ## 4. Szenarien und konkrete Abnahme
 
-P0 bildet die verpflichtende Kern-Suite. P1 erweitert sie um weitere wichtige Abläufe. Die vier vorhandenen Szenarien bleiben Teil der Kern-Suite; vorhandene Assertions gezielt verstärken, statt dieselben Wege mehrfach neu zu testen.
+P0 und P1 kennzeichnen die fachliche Priorität. In CI sind sämtliche Szenarien verpflichtend. Die vier vorhandenen Szenarien bleiben erhalten; vorhandene Assertions gezielt verstärken, statt dieselben Wege mehrfach neu zu testen. Die lokale Auswahl `core` enthält P0 und die bestehenden vier Fälle; der Standard `full` enthält alle 18 Fälle.
 
 ### E01 — Falsche Anmeldung und erfolgreiche Wiederholung · P0
 
@@ -232,14 +232,14 @@ Feste Wartezeiten, `force`-Klicks, breite Fehlerunterdrückung, `test.only` und 
 
 ## 6. Suites, CI und Diagnose
 
-- **Kern-Suite:** die vorhandenen vier Szenarien plus E01–E07, E11 und E12. Verpflichtend für PRs und Main.
-- **Vollständige Suite:** Kern-Suite plus E08–E10, E13 und E14. Verpflichtend vor Release-Publikation; zusätzlich manuell ausführbar. Ein nächtlicher Lauf ist eine optionale Betriebsentscheidung.
-- Der wiederverwendbare Workflow erhält eine explizite Suite-Auswahl mit sicherem Standard `core`. Release ruft `full` auf. Beide verwenden denselben Orchestrator, dieselben Seeds und das exakt weitergereichte Prüfimage.
+- **Verbindlicher Standard:** alle vier vorhandenen Szenarien plus E01–E14. PR, Main und Release führen immer `full` mit allen 18 Fällen aus. Jeder Fehler macht den normalen Pipeline-Lauf rot.
+- **Optionale lokale Auswahl:** `--suite core` umfasst die vorhandenen vier Fälle plus E01–E07, E11 und E12. Sie wird in CI nicht angeboten. Ohne ausdrückliche Auswahl laufen lokal ebenfalls alle 18 Fälle.
+- `e2e.yml` ist ausschließlich per `workflow_call` in CI beziehungsweise Release eingebunden. Es gibt keinen separaten manuellen Browser-E2E-Workflow. Der manuell startbare Workflow `CI` führt dieselbe vollständige Pipeline aus. Alle verwenden denselben Orchestrator, dieselben Seeds und das exakt weitergereichte Prüfimage.
 - Ein Lauf dokumentiert gewählte Suite und tatsächlich ausgeführte Szenario-IDs. Der Katalog muss sicherstellen, dass `full` alle Kernfälle enthält. Die vorhandene Publikationssperre bleibt bestehen.
 - Lint, Prettier, Typprüfung und Infrastrukturtests bleiben verpflichtend. Neue Katalog-/Reset-Logik mit gezielten Unit-Tests prüfen; keine zusätzlichen Unit-Tests für reine Dateinamenlisten ohne Verhaltensprüfung.
 - Trace, Screenshot, HTML-/JUnit-Report, Dienstlogs, Seed-Manifest und fachlicher Vorabstatus weiterhin bei Fehlern sichern. IDs zusätzlich im Artefaktpfad verwenden. Mehrere Kontexte und Datei-Downloads sollen im Trace nachvollziehbar bleiben.
 
-Laufzeiten auf einem Linux-GitHub-Runner messen. Ziel für die Kern-Suite: höchstens etwa zehn Minuten bei vorhandenem App-Image und geladenen Dependencies. Das ist ein Ziel, noch kein Messwert. Aktuelle Grenzen von 15 Minuten für den Browser-Schritt und 35 Minuten für den Job anhand der tatsächlichen Messung prüfen. Bei Überschreitung zunächst Aufbau und unabhängige Wiederholungen untersuchen; Pflichtfälle nicht still überspringen oder durch Retries grün machen.
+Laufzeiten auf einem Linux-GitHub-Runner messen. Das frühere Zehn-Minuten-Ziel der optionalen Kern-Suite ist kein Limit für die verbindlichen 18 Fälle. Browser-Schritt und Job erlauben 30 beziehungsweise 50 Minuten, einschließlich frischer Dienststarts pro Fall. Bei Überschreitung zunächst Aufbau und unabhängige Wiederholungen untersuchen; Pflichtfälle nicht still überspringen oder durch Retries grün machen.
 
 Der Check-Name `E2E tests` bleibt verständlich und stabil. Erforderliche Branch-Checks separat passend zur Workflow-Konfiguration hinterlegen. Ein fehlgeschlagener vollständiger Release-Lauf darf kein Image publizieren.
 
@@ -249,7 +249,7 @@ Der Check-Name `E2E tests` bleibt verständlich und stabil. Erforderliche Branch
 2. **Alltagsabläufe:** E01, E02 sowie E05–E07 umsetzen. Nach jedem Paket negative Gegenproben für konkrete Assertions durchführen und zurücknehmen.
 3. **Sicherheits- und Wiederherstellungswege:** E03, E04, E11 und E12 umsetzen. Reale Sitzungswechsel, TOTP-Schritte, Dateiübertragung und Host-Neustart prüfen. Damit ist die neue Kern-Suite vollständig.
 4. **Erweiterte Abläufe:** E08–E10, E13 und E14 mit ihren eigenen Ausgangszuständen ergänzen. Kalenderdatum und Statistik-Sollwerte nachvollziehbar dokumentieren.
-5. **Pipeline und Abnahme:** Suite-Auswahl integrieren, vollständige Suite vor Release verpflichtend machen, Laufzeiten messen, Fehlerdiagnose und Veröffentlichungsblockade prüfen und lokale Bedienung in der E2E-README ergänzen.
+5. **Pipeline und Abnahme:** Vollständige Suite in PR, Main und Release verpflichtend machen, Laufzeiten messen, Fehlerdiagnose und Veröffentlichungsblockade prüfen und lokale Bedienung in der E2E-README ergänzen.
 
 Die TOTP-Bibliothek erst bei Umsetzung auswählen und exakt versionieren. Für den Testhelfer keine eigene Kryptografie entwickeln. Produktänderungen nur bei nachgewiesenen Fehlern oder notwendigen Verbesserungen der Bedienbarkeit vornehmen und getrennt erklären.
 
@@ -260,8 +260,8 @@ Die TOTP-Bibliothek erst bei Umsetzung auswählen und exakt versionieren. Für d
 - [ ] Browseraktionen prüfen sichtbare Ergebnisse; relevante Änderungen sind nach Reload und über gespeicherte Zustände beziehungsweise echte Fremd-APIs bestätigt.
 - [ ] Fehler-, Abbruch- und Wiederholungsfälle verändern keine anderen Testdaten und hinterlassen keine eigenen Docker-Ressourcen.
 - [x] Neue Testdaten sind synthetisch, versioniert, nachvollziehbar erzeugt und ohne Live-Metadatenanbieter nutzbar.
-- [ ] Zwei unabhängige vollständige Offline-Läufe bestehen lokal.
-- [ ] Kern- und vollständige Suite bestehen auf einem Linux-GitHub-Runner.
+- [x] Zwei unabhängige vollständige Offline-Läufe bestehen lokal.
+- [ ] Die vollständige Suite besteht als verpflichtender Teil der normalen Pipeline auf einem Linux-GitHub-Runner.
 - [x] Lint, Formatprüfung, Typprüfung und erforderliche Unit-/Integrationstests bestehen.
 - [ ] Eine kontrollierte falsche Browsererwartung lässt den vorgesehenen Job scheitern, erzeugt brauchbare Artefakte und blockiert die zugehörige Publikation. Der Prüfdefekt ist anschließend entfernt.
 - [ ] Gemessene Laufzeit, Suite-Auswahl, Einzelaufruf und Diagnose sind dokumentiert. Geänderte Schritt-/Job-Zeitlimits sind begründet.
@@ -274,13 +274,17 @@ Symlink-Abläufe bleiben separat geplant. Die hier erweiterte Suite soll dafür 
 
 ## Umsetzungsnachweis
 
-Der Katalog umfasst 13 Kernfälle und insgesamt 18 Fälle; 19 Infrastrukturtests sichern Auswahl, Fehlerweitergabe und Seed-Vertrag ab. Seed-Version 2 wurde zweimal aus frischen echten Diensten erzeugt. Das Erwartungsmanifest enthält zwei Filme, zwei Serien und drei echte FFmpeg-Dateien mit x264/AAC und japanischer Audiospur. Sonarr/Radarr bestätigen die importierten technischen Eigenschaften beim Bootstrap und vor jedem Szenario.
+Der Katalog umfasst 18 verbindliche Fälle; 13 davon lassen sich bei Bedarf lokal als `core` auswählen. 19 Infrastrukturtests sichern Auswahl, vollständigen Standard, Fehlerweitergabe und Seed-Vertrag ab. Seed-Version 2 wurde zweimal aus frischen echten Diensten erzeugt. Das Erwartungsmanifest enthält zwei Filme, zwei Serien und drei echte FFmpeg-Dateien mit x264/AAC und japanischer Audiospur. Sonarr/Radarr bestätigen die importierten technischen Eigenschaften beim Bootstrap und vor jedem Szenario.
 
 Die neuen Abläufe wurden mit realen Browseraktionen geprüft, insbesondere unabhängige Kontositzungen, verbrauchte TOTP-/Recovery-Codes, Download/Upload, echter Host-Neustart und Wiederherstellung zwischenzeitlich entfernter Instanzen/Bibliotheksdaten. Der Aufgabenfall prüft eine vor dem manuellen Start leere Bibliothek und einen noch nicht vorhandenen Laufzeitstempel. Die Kalenderzeit ist ausschließlich im Browser fixiert.
 
 Eine absichtlich falsche Login-Fehlermeldung wurde lokal als Gegenprobe eingesetzt: Exitcode 1, Screenshot, Trace und JUnit wurden erzeugt; Container, Volumes und Netzwerk wurden entfernt. Der Prüfdefekt wurde automatisch zurückgenommen. Dieser lokale Nachweis ersetzt nicht den noch ausstehenden GitHub-Lauf der neuen Suite.
 
-Einzige notwendige Produktänderung: Die beiden Aufgaben-Schalter geben ihre übersetzte zugängliche Beschriftung jetzt an den tatsächlichen Material-Schalter weiter. Die bestehenden sechs Aufgaben-Komponententests, Frontend-Lint und Angular-Build bestehen. `actionlint` prüft alle drei Workflows. Laufzeitmessungen und abschließende Suite-Ergebnisse werden nach der Abnahme ergänzt.
+Einzige notwendige Produktänderung: Die beiden Aufgaben-Schalter geben ihre übersetzte zugängliche Beschriftung jetzt an den tatsächlichen Material-Schalter weiter. Die bestehenden sechs Aufgaben-Komponententests, Frontend-Lint und Angular-Build bestehen. `actionlint` prüft alle drei Workflows.
+
+Zwei vollständige lokale Offline-Läufe mit jeweils 18 bestandenen Fällen dauerten 1.445 und 1.430 Sekunden. Sie liefen parallel unter Windows/Docker Desktop mit eigenständigen Volumes und bereits gebautem App-Image; diese belasteten lokalen Laufzeiten sind keine Linux-CI-Messung. Beide Läufe hinterließen keine Container, Volumes oder Netzwerke. Nach einem auf Linux beobachteten Rennen beim Entfernen von Filterchips wartet der Helfer auf das tatsächliche Verschwinden jedes Chips; drei frische E05-Läufe und ein E14-Lauf mit dieser Korrektur bestehen ebenfalls.
+
+Ein früherer Linux-Kernlauf bestand mit 13/13 Fällen in 672 Sekunden für den Browser-Schritt beziehungsweise 795 Sekunden für den E2E-Job. Das Artefakt weist alle 13 IDs aus; etwa 40 Sekunden entfielen auf den Runner-Aufbau, die übrige Zeit auf 13 unabhängige Dienststarts, Browserabläufe und Cleanup. Die verkürzte CI-Auswahl und der separate manuelle E2E-Start sind inzwischen entfernt. Die verbindliche Abnahme erfolgt mit allen 18 Fällen im normalen PR-Lauf.
 
 ## 10. Geprüfte Referenzen für die Umsetzung
 

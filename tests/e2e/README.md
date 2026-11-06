@@ -46,8 +46,8 @@ ist keine Voraussetzung. Der LibManagarr-Sync-Zeitplan ist standardmäßig
 deaktiviert. Vorbereitung darf die regulären APIs verwenden; der jeweils
 geprüfte Benutzerablauf erfolgt im Browser.
 
-`npm run e2e` führt die Kern-Suite mit 13 Szenarien aus. `--suite full` führt
-alle 18 aus; `--scenario E12` oder `--scenario backup-restore` wählt genau einen
+`npm run e2e` führt standardmäßig alle 18 Szenarien aus, genauso wie die CI.
+`--scenario E12` oder `--scenario backup-restore` wählt lokal genau einen
 Fall mit demselben vollständigen Reset. Unbekannte Optionen, leere Auswahl,
 doppelte Katalogeinträge und fehlende Specs führen zum Fehler vor dem Aufbau.
 Der verbindliche Katalog steht in `scripts/scenarios.mjs`.
@@ -61,14 +61,16 @@ Der verbindliche Katalog steht in `scripts/scenarios.mjs`.
 | E11–E12 | Verschlüsselter Backup-Download/Prüfung/Verwerfen, Restore mit Host-Neustart                              | core  |
 | E13–E14 | Monats-/Agendakalender mit festem Datum, Codec-Anzahlen/Prozente/Filter                                   | full  |
 
-`full` enthält sämtliche `core`-Fälle. Jeder schreibende Fall besitzt eine
+`full` enthält sämtliche `core`-Fälle und ist in PR, Main und Release verbindlich.
+Die 13 Fälle von `--suite core` sind ausschließlich eine optionale lokale Auswahl;
+die CI bietet keine verkürzte Suite an. Jeder schreibende Fall besitzt eine
 eigene Spec und frische Volumes. Zwei Kontositzungen sind unabhängige
 Browserkontexte. TOTP nutzt die exakt gepinnte Bibliothek OTPAuth und echte
 30-Sekunden-Zeitschritte; nur der Kalender fixiert die Browser-Anzeigezeit.
 Arr-Löschen hat im aktuellen Produkt keinen Bestätigungsdialog. Bei Seerr-
 Ladefehlern erfolgt die Wiederholung durch Neuladen der Seite.
 
-Die Kern-Suite verwendet ein internes Docker-Netzwerk ohne externe Route.
+Die gesamte Suite verwendet ein internes Docker-Netzwerk ohne externe Route.
 `bootstrap/verify.mjs` prüft Dienstzustände, Dateizuordnungen, einen offenen
 Request und den fehlgeschlagenen Zugriff auf eine externe IP. Unbekannte
 TMDB-Endpunkte liefern Fehler. Nur die TMDB-Grenze für den bekannten
@@ -190,12 +192,21 @@ E2E-Jobs. Es gibt keinen zweiten Build im Publikationsjob. Weitere Architekturen
 werden derzeit nicht veröffentlicht; sie benötigen einen eigenen Prüfpfad.
 Der E2E-Job hat ausschließlich Leserechte und benötigt keine Registry-Secrets.
 Diagnosen bleiben sieben Tage, das Prüfimage einen Tag gespeichert.
-PR/Main verwenden den Standard `core`, Release verlangt ausdrücklich `full`.
-Der Workflow lässt sich zusätzlich über „Run workflow“ mit Suite-Auswahl starten.
+PR, Main und Release prüfen immer alle 18 Fälle. `e2e.yml` ist ausschließlich
+ein wiederverwendbarer Job, kein separat startbarer Workflow. Auch ein manuell
+gestarteter `CI`-Lauf führt dieselbe vollständige Pipeline aus. Jeder E2E-Fehler
+lässt damit den normalen PR-Lauf scheitern und verhindert die Publikation.
 Der E2E-Job ist auf 50 Minuten begrenzt: maximal 15 Minuten für den App-Build
 und 30 Minuten für den Browserlauf. Die bisherige 15-Minuten-Grenze des
 Browserlaufs wird für 18 vollständig isolierte Stacks erweitert; sie ist kein
 gemessener Linux-Laufzeitwert. Die tatsächliche Dauer steht im Laufartefakt.
+
+Lokaler Nachweis der fachlichen Erweiterung vom 06.11.2026: zwei vollständige
+Offline-Läufe mit jeweils 18/18 bestandenen Szenarien, 1.445 beziehungsweise
+1.430 Sekunden. Beide liefen parallel unter Windows/Docker Desktop und wurden
+vollständig aufgeräumt. Zusätzlich bestehen 19 Infrastrukturtests sowie drei
+Wiederholungen des nach Linux-Diagnose korrigierten Filterfalls und der
+Statistikfall. Der aktuelle Plan dokumentiert die abschließende CI-Abnahme.
 
 Den Status `E2E tests` zusätzlich in den GitHub-
 Branch-Regeln als erforderlichen Check hinterlegen. Workflow-Dateien können

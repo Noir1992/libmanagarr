@@ -1,19 +1,7 @@
-name: Browser E2E
+name: E2E tests
 
 on:
   workflow_call:
-    inputs:
-      suite:
-        description: Browser scenario suite (core or full)
-        type: string
-        default: core
-  workflow_dispatch:
-    inputs:
-      suite:
-        description: Browser scenario suite
-        type: choice
-        options: [core, full]
-        default: full
 
 permissions:
   contents: read
@@ -67,8 +55,7 @@ jobs:
         working-directory: tests/e2e
         env:
           E2E_APP_IMAGE: libmanagarr:e2e
-          E2E_SUITE: ${{ inputs.suite }}
-        run: npm run e2e -- --suite "$E2E_SUITE"
+        run: npm run e2e -- --suite full
       - name: Export tested image
         timeout-minutes: 3
         run: docker save libmanagarr:e2e -o /tmp/tested-image.tar

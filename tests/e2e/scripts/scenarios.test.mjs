@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { scenarios, parseOptions, selectScenarios, verifyScenarioFiles } from './scenarios.mjs';
 
 test('full contains all 18 scenarios and every core scenario', () => {
+  assert.equal(parseOptions([]).suite, 'full');
+  assert.equal(selectScenarios({}).length, 18);
   const core = selectScenarios({ suite: 'core' });
   const full = selectScenarios({ suite: 'full' });
   assert.equal(core.length, 13);
@@ -13,7 +15,7 @@ test('full contains all 18 scenarios and every core scenario', () => {
     ['S01', 'S02', 'S03', 'S04'],
   );
 });
-test('selects a single full-suite case by ID even with the default core suite', () => {
+test('selects exactly one scenario when explicitly requested', () => {
   assert.deepEqual(
     selectScenarios(parseOptions(['--scenario', 'E09'])).map((item) => item.name),
     ['seerr-recovery'],

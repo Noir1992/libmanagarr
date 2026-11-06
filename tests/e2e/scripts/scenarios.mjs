@@ -20,7 +20,7 @@ export const scenarios = [
 ].map((scenario) => Object.freeze({ ...scenario, spec: `specs/${scenario.name}.spec.ts`, initialState: 'fresh-app-and-seed' }));
 
 export function parseOptions(args) {
-  const options = { suite: 'core', scenario: undefined, bootstrap: false, debug: false, failAfterStart: false };
+  const options = { suite: 'full', scenario: undefined, bootstrap: false, debug: false, failAfterStart: false };
   for (let index = 0; index < args.length; index++) {
     const [flag, inline] = args[index].split('=');
     if (['--suite', '--scenario'].includes(flag)) {
@@ -38,7 +38,7 @@ export function parseOptions(args) {
   return options;
 }
 
-export function selectScenarios({ suite = 'core', scenario }, catalog = scenarios) {
+export function selectScenarios({ suite = 'full', scenario }, catalog = scenarios) {
   if (!['core', 'full'].includes(suite)) throw new Error(`Unknown suite: ${suite}`);
   const ids = new Set();
   const specs = new Set();
