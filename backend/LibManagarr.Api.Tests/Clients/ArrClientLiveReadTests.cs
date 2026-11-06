@@ -182,6 +182,30 @@ public sealed class ArrClientLiveReadTests
     }
 
     [Fact]
+    public async Task Movie_ReadsTheZeroOfAFilmWithoutAFileAsNoFileAtAll()
+    {
+        StubArrHandler handler = new(new Dictionary<string, string>
+        {
+            // Measured on Radarr 6.4: the film that owns no file is answered with movieFileId 0 next to a
+            // hasFile that says false, so treating the number as an identifier would claim a file exists.
+            ["GET /api/v3/movie/70"] = """
+                {
+                  "id": 70,
+                  "title": "My Neighbor Totoro",
+                  "movieFileId": 0,
+                  "hasFile": false
+                }
+                """
+        });
+        RadarrClient client = new(new HttpClient(handler));
+
+        RadarrMovieResource? movie = await client.FetchMovieAsync(CreateRadarr(), 70, CancellationToken.None);
+
+        Assert.Null(movie?.MovieFileId);
+        Assert.False(movie?.HasFile);
+    }
+
+    [Fact]
     public async Task MovieFiles_ListOnlyTheFilesOfThatFilm()
     {
         StubArrHandler handler = new(new Dictionary<string, string>

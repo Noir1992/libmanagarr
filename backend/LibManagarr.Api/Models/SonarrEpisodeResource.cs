@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace LibManagarr.Api.Models;
 
 public sealed class SonarrEpisodeResource
@@ -12,6 +14,9 @@ public sealed class SonarrEpisodeResource
 
     public bool? HasFile { get; set; }
 
+    // An episode without a file is answered with 0 rather than with nothing, so the number is read as the
+    // absence it means.
+    [JsonConverter(typeof(ZeroIsMissingInt32Converter))]
     public int? EpisodeFileId { get; set; }
 
     public int? SeriesId { get; set; }

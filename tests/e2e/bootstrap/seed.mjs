@@ -1,9 +1,26 @@
 import { readFile, writeFile, mkdir, chown } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { basename } from 'node:path';
 import assert from 'node:assert/strict';
 import { arr, json, until, credentials, accounts } from './http.mjs';
 
 const versions = JSON.parse(await readFile(new URL('../versions.json', import.meta.url)));
+
+// A film file is named after the folder Radarr created, never after the title the API reports: the folder is
+// already legal on the file system, while a title may carry a separator such as ':' that a path must not hold.
+const filmName = (film) => `${film.path}/${basename(film.path)} - E2E WEBDL-1080p.mkv`;
+
+// A scan is only through when its command says so. The technical properties Arr derives while importing are
+// read right after it, and a file that merely exists yet does not carry them is not an indexed file.
+async function scanAndWait(service, body, description) {
+  const command = await arr(service, '/command', { method: 'POST', body });
+  await until(description, async () => {
+    const state = await arr(service, `/command/${command.id}`);
+    if (state.status === 'failed') throw new Error(JSON.stringify(state));
+    return state.status === 'completed';
+  });
+}
+
 const status = {};
 try {
   for (const service of ['sonarr', 'radarr']) {
@@ -110,7 +127,7 @@ try {
     },
   });
   await mkdir(movie.path, { recursive: true });
-  const moviePath = `${movie.path}/${movie.title} (${movie.year}) - E2E WEBDL-1080p.mkv`;
+  const moviePath = filmName(movie);
   for (const path of [episodePath, moviePath]) {
     execFileSync('ffmpeg', [
       '-hide_banner',
@@ -144,16 +161,17 @@ try {
   for (const [service, body] of [
     ['sonarr', { name: 'RescanSeries', seriesId: series.id }],
     ['radarr', { name: 'RescanMovie', movieId: movie.id }],
-  ]) {
-    const command = await arr(service, '/command', { method: 'POST', body });
-    await until(`${service} media scan`, async () => {
-      const state = await arr(service, `/command/${command.id}`);
-      if (state.status === 'failed') throw new Error(JSON.stringify(state));
-      return state.status === 'completed';
+  ])
+    await scanAndWait(service, body, `${service} media scan`);
+  // Indexed means the file arrived together with what Arr derived from it, which is what every later count
+  // of this baseline is taken from.
+  const indexed = (service, description, path) =>
+    until(description, async () => {
+      const [file] = await arr(service, path);
+      return file?.mediaInfo ? file : undefined;
     });
-  }
-  status.episodeFile = await until('Sonarr episode file', async () => (await arr('sonarr', `/episodefile?seriesId=${series.id}`))[0]);
-  status.movieFile = await until('Radarr movie file', async () => (await arr('radarr', `/moviefile?movieId=${movie.id}`))[0]);
+  status.episodeFile = await indexed('sonarr', 'Sonarr episode file', `/episodefile?seriesId=${series.id}`);
+  status.movieFile = await indexed('radarr', 'Radarr movie file', `/moviefile?movieId=${movie.id}`);
   const secondMovieLookup = await arr('radarr', `/movie/lookup?term=tmdb:${versions.media.secondMovieTmdbId}`);
   const secondMovie = await arr('radarr', '/movie', {
     method: 'POST',
@@ -213,12 +231,99 @@ try {
   await arr('sonarr', '/command', { method: 'POST', body: { name: 'RescanSeries', seriesId: series.id } });
   await until('regular episode imported', async () => (await arr('sonarr', `/episode/${regular.id}`)).hasFile);
   await until('second series metadata', async () => (await arr('sonarr', `/episode?seriesId=${secondSeries.id}`)).length);
+
+  // The feature pairs a Sonarr special with the Radarr movie carrying the same title, so the baseline needs
+  // one such pair. Both sides come from live metadata only: TVDB named the special, Radarr's own lookup is
+  // asked for a film of that exact title, and the pair is kept only when the two titles agree once
+  // normalized. A monitored series comes first so the follow-up really has monitoring to switch off.
+  const normalizeTitle = (value) =>
+    value
+      .normalize('NFD')
+      .toLowerCase()
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const titles = new Map([
+    [series.id, series.title],
+    [secondSeries.id, secondSeries.title],
+  ]);
+  const preference = new Map([
+    [series.id, series.monitored ? 0 : 1],
+    [secondSeries.id, secondSeries.monitored ? 0 : 1],
+  ]);
+  const specialCandidates = [...episodes, ...(await arr('sonarr', `/episode?seriesId=${secondSeries.id}`))]
+    .filter((value) => value.seasonNumber === 0 && !value.hasFile)
+    .sort((a, b) => preference.get(a.seriesId) - preference.get(b.seriesId) || a.seriesId - b.seriesId || a.id - b.id);
+  const lookups = new Map();
+  const lookupByTerm = async (term) => {
+    if (!lookups.has(term)) lookups.set(term, await arr('radarr', `/movie/lookup?term=${encodeURIComponent(term)}`));
+    return lookups.get(term);
+  };
+  let pair = null;
+  for (const candidate of specialCandidates) {
+    const films = [...(await lookupByTerm(candidate.title)), ...(await lookupByTerm(titles.get(candidate.seriesId)))];
+    const film = films.find((value) => normalizeTitle(value.title) === normalizeTitle(candidate.title));
+    if (film) {
+      pair = { episode: candidate, film };
+      break;
+    }
+  }
+  if (!pair) throw new Error('No seeded special shares its title with a film Radarr knows, and the symlink scenarios need that pair.');
+  const pairMovie = await arr('radarr', '/movie', {
+    method: 'POST',
+    body: {
+      ...pair.film,
+      qualityProfileId: movieProfiles[0].id,
+      rootFolderPath: '/media/movies',
+      monitored: false,
+      minimumAvailability: 'released',
+      addOptions: { searchForMovie: false },
+    },
+  });
+  // Adding re-reads the film metadata, so the added title is the one that has to match the special.
+  if (normalizeTitle(pairMovie.title) !== normalizeTitle(pair.episode.title))
+    throw new Error(`Added film "${pairMovie.title}" does not carry the special title "${pair.episode.title}".`);
+  await mkdir(pairMovie.path, { recursive: true });
+  const pairPath = filmName(pairMovie);
+  execFileSync('ffmpeg', [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-f',
+    'lavfi',
+    '-i',
+    'color=c=blue:s=1920x1080:r=24',
+    '-f',
+    'lavfi',
+    '-i',
+    'anullsrc=r=48000:cl=stereo',
+    '-t',
+    '120',
+    '-c:v',
+    'libx264',
+    '-preset',
+    'ultrafast',
+    '-c:a',
+    'aac',
+    '-metadata:s:a:0',
+    'language=jpn',
+    '-pix_fmt',
+    'yuv420p',
+    '-y',
+    pairPath,
+  ]);
+  await chown(pairPath, 1000, 1000);
+  await scanAndWait('radarr', { name: 'RescanMovie', movieId: pairMovie.id }, 'paired film scan');
+  const pairFile = await indexed('radarr', 'paired film indexed', `/moviefile?movieId=${pairMovie.id}`);
+  if ((await arr('sonarr', `/episode/${pair.episode.id}`)).hasFile) throw new Error('The paired special must stay without its own file.');
+  console.log(`Paired special S00E${pair.episode.episodeNumber} with film "${pairMovie.title}" by title`);
   const expected = {
-    titles: [secondSeries.title, series.title, secondMovie.title, movie.title].sort((a, b) => a.localeCompare(b)),
-    presentTitles: [series.title, movie.title].sort((a, b) => a.localeCompare(b)),
+    titles: [secondSeries.title, series.title, secondMovie.title, movie.title, pairMovie.title].sort((a, b) => a.localeCompare(b)),
+    presentTitles: [series.title, movie.title, pairMovie.title].sort((a, b) => a.localeCompare(b)),
     missingTitles: [secondSeries.title, secondMovie.title].sort((a, b) => a.localeCompare(b)),
     resolution720Titles: [series.title],
-    resolution1080Titles: [series.title, movie.title].sort((a, b) => a.localeCompare(b)),
+    resolution1080Titles: [series.title, movie.title, pairMovie.title].sort((a, b) => a.localeCompare(b)),
     movies: [
       { id: movie.id, tmdbId: movie.tmdbId, title: movie.title, genres: movie.genres, hasFile: true, monitored: false },
       {
@@ -229,20 +334,38 @@ try {
         hasFile: false,
         monitored: true,
       },
+      {
+        id: pairMovie.id,
+        tmdbId: pairMovie.tmdbId,
+        title: pairMovie.title,
+        genres: pairMovie.genres,
+        hasFile: true,
+        monitored: false,
+      },
     ],
     series: [
       { id: series.id, tvdbId: series.tvdbId, title: series.title, genres: series.genres, monitored: false },
       { id: secondSeries.id, tvdbId: secondSeries.tvdbId, title: secondSeries.title, genres: secondSeries.genres, monitored: true },
     ],
-    files: { total: 3, sonarr: 2, radarr: 1, videoCodec: 'x264', audioCodec: 'AAC', audioLanguage: 'Japanese' },
+    files: { total: 4, sonarr: 2, radarr: 1, videoCodec: 'x264', audioCodec: 'AAC', audioLanguage: 'Japanese' },
     specialEpisode: { id: special.id, season: 0, number: special.episodeNumber, hasFile: true },
+    symlinkPair: {
+      episodeId: pair.episode.id,
+      seriesId: pair.episode.seriesId,
+      season: 0,
+      number: pair.episode.episodeNumber,
+      movieId: pairMovie.id,
+      tmdbId: pairMovie.tmdbId,
+      title: pairMovie.title,
+    },
     regularEpisode: { id: regular.id, title: regular.title, season: 1, number: 1, airDateUtc: regular.airDateUtc, hasFile: true },
     missingEpisode: { id: missing.id, title: missing.title, season: 1, number: 2, hasFile: false },
   };
-  for (const file of [status.episodeFile, status.movieFile, ...(await arr('sonarr', `/episodefile?seriesId=${series.id}`))]) {
-    assert.equal(file.mediaInfo.videoCodec, expected.files.videoCodec);
-    assert.equal(file.mediaInfo.audioCodec, expected.files.audioCodec);
-    assert.equal(file.mediaInfo.audioLanguages, 'jpn');
+  for (const file of [status.episodeFile, status.movieFile, pairFile, ...(await arr('sonarr', `/episodefile?seriesId=${series.id}`))]) {
+    assert.ok(file?.mediaInfo, `${file?.path ?? 'A file'} was indexed without its technical properties`);
+    assert.equal(file.mediaInfo.videoCodec, expected.files.videoCodec, file.path);
+    assert.equal(file.mediaInfo.audioCodec, expected.files.audioCodec, file.path);
+    assert.equal(file.mediaInfo.audioLanguages, 'jpn', file.path);
   }
   await writeFile('/artifacts/expected-library.json', JSON.stringify(expected, null, 2) + '\n');
   console.log('Real video/audio files indexed in Sonarr and Radarr');

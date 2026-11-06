@@ -604,7 +604,7 @@ export const i18nEn: Record<TranslationKey, string> = {
   'symlinks.links.empty': 'No link created yet.',
   'symlinks.links.followUp.disable': 'Do not follow source upgrades',
   'symlinks.links.followUp.enable': 'Follow source upgrades',
-  'symlinks.links.monitoringDisabled': 'The series is no longer monitored in Sonarr, so the special is not downloaded a second time.',
+  'symlinks.links.monitoringDisabled': 'The linked episode is no longer monitored in Sonarr, so it is not downloaded a second time.',
   'symlinks.links.setupStep': 'Step: {step}',
   'symlinks.links.title': 'Managed links',
   'symlinks.loadError': 'The lists could not be loaded.',

@@ -11,6 +11,8 @@ export interface ExpectedLibrary {
   movies: { id: number; title: string; hasFile: boolean; monitored: boolean }[];
   series: { id: number; title: string; monitored: boolean }[];
   files: { total: number; sonarr: number; radarr: number; videoCodec: string; audioCodec: string };
+  // The special/film pair the baseline ships for the symlink scenarios.
+  symlinkPair: { episodeId: number; seriesId: number; season: number; number: number; movieId: number; tmdbId: number; title: string };
   regularEpisode: { id: number; title: string; season: number; number: number; airDateUtc: string; hasFile: boolean };
   missingEpisode: { id: number; title: string; season: number; number: number; hasFile: boolean };
 }

@@ -17,6 +17,8 @@ export const scenarios = [
   { id: 'E12', name: 'backup-restore', suite: 'core' },
   { id: 'E13', name: 'calendar', suite: 'full' },
   { id: 'E14', name: 'codec-statistics', suite: 'full' },
+  { id: 'E15', name: 'symlink-confirm', suite: 'full' },
+  { id: 'E16', name: 'symlink-decline', suite: 'full' },
 ].map((scenario) => Object.freeze({ ...scenario, spec: `specs/${scenario.name}.spec.ts`, initialState: 'fresh-app-and-seed' }));
 
 export function parseOptions(args) {

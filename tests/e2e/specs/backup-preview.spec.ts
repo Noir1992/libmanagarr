@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { prepareAccount, login } from '../fixtures/app.js';
-import { configureLibrary } from '../fixtures/library.js';
+import { configureLibrary, expected } from '../fixtures/library.js';
 import { exportBackup, selectArchive, validateArchive } from '../fixtures/backup.js';
 
 test('E11: encrypted backup validates the archive password and discard preserves application state', async ({ request, page }) => {
@@ -28,5 +28,6 @@ test('E11: encrypted backup validates the archive password and discard preserves
   await expect(page.getByText('Backup contents', { exact: true })).toBeHidden();
   expect(await (await page.request.get('/api/settings/instances')).json()).toEqual(before);
   await page.goto('/library');
-  await expect(page.getByRole('heading', { name: 'Library (4)', exact: true })).toBeVisible();
+  // The discard must have changed nothing, so the library still holds every title the seed carries.
+  await expect(page.getByRole('heading', { name: `Library (${expected.titles.length})`, exact: true })).toBeVisible();
 });

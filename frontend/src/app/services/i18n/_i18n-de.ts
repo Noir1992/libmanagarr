@@ -607,7 +607,7 @@ export const i18nDe: Record<TranslationKey, string> = {
   'symlinks.links.followUp.disable': 'Aktualisierungen der Quelle nicht folgen',
   'symlinks.links.followUp.enable': 'Aktualisierungen der Quelle folgen',
   'symlinks.links.monitoringDisabled':
-    'Die Serie wird in Sonarr nicht mehr überwacht, damit der Sonderfilm nicht ein zweites Mal geladen wird.',
+    'Die verknüpfte Folge wird in Sonarr nicht mehr überwacht, damit sie nicht ein zweites Mal geladen wird.',
   'symlinks.links.setupStep': 'Schritt: {step}',
   'symlinks.links.title': 'Verwaltete Links',
   'symlinks.loadError': 'Die Listen konnten nicht geladen werden.',

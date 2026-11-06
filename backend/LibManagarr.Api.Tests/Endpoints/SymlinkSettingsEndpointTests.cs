@@ -1,6 +1,8 @@
 using System.Net;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -138,6 +140,46 @@ public sealed class SymlinkSettingsEndpointTests
     }
 
     [Fact]
+    public async Task Save_AcceptsTheEnumNamesTheSettingsPageSends()
+    {
+        StubSettingsService settings = new(new AppSettings { RadarrInstances = [Radarr] });
+        // Assembled as a document, because the roots carry the runtime path separators while the page names
+        // a kind and a verification state in text — the two forms the endpoint has to read together.
+        JsonObject body = new()
+        {
+            ["revision"] = 0,
+            ["storageAreas"] = new JsonArray(new JsonObject
+            {
+                ["name"] = "Main",
+                ["moviesRoot"] = LibManagarr("movies"),
+                ["seriesRoot"] = LibManagarr("series")
+            }),
+            ["pathMappings"] = new JsonArray(new JsonObject
+            {
+                ["instanceId"] = Radarr.Id,
+                ["kind"] = nameof(ArrApplicationKind.Radarr),
+                ["instanceRoot"] = @"\\nas\radarr",
+                ["libManagarrRoot"] = LibManagarr("movies")
+            }),
+            ["readerViews"] = new JsonArray(new JsonObject
+            {
+                ["kind"] = nameof(PathReaderKind.Sonarr),
+                ["root"] = LibManagarr("series"),
+                ["verification"] = nameof(PathReaderVerification.Unverified)
+            })
+        };
+
+        await Save(settings, new InMemorySymlinkStore(), body.ToJsonString());
+
+        // A body whose names were read as numbers would put the mapping on whichever application happens to
+        // carry that number, so the stored kind is the only assertion that says the name arrived.
+        Assert.Equal(ArrApplicationKind.Radarr, settings.Settings.Symlinks.PathMappings[0].Kind);
+        Assert.Equal(PathReaderKind.Sonarr, settings.Settings.Symlinks.ReaderViews[0].Kind);
+        Assert.Equal(PathReaderVerification.Unverified, settings.Settings.Symlinks.ReaderViews[0].Verification);
+        Assert.Equal(1, settings.Saves);
+    }
+
+    [Fact]
     public async Task CapabilityTest_UnknownAreaIsNotFoundAndNothingIsProbed()
     {
         StubSettingsService settings = new(Settings(revision: 1));
@@ -189,8 +231,13 @@ public sealed class SymlinkSettingsEndpointTests
     private static Task<T> Invoke<T>(string method, params object?[] arguments) =>
         (Task<T>)typeof(SymlinkEndpoints).GetMethod(method, BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, arguments)!;
 
+    // Written exactly as the settings page sends it: the kind of a mapping or a reader view leaves the
+    // browser as text, so a body that named them by number would describe a client nobody uses.
     private static string Body(SymlinkSettings settings) =>
-        JsonSerializer.Serialize(settings, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        JsonSerializer.Serialize(settings, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            Converters = { new JsonStringEnumConverter() }
+        });
 
     [Fact]
     public async Task Routes_AreMountedInTheAuthorizedSettingsGroupAndTheirServicesResolve()

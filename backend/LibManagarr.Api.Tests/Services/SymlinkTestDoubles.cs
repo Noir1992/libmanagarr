@@ -220,7 +220,9 @@ internal static class SymlinkFixture
         ],
         ["GET /api/v3/episode/5"] =
         [
-            $$"""{ "id": {{EpisodeId}}, "seriesId": {{SeriesId}}, "seasonNumber": 0, "episodeNumber": 5, "hasFile": false, "monitored": true }"""
+            // Answered exactly as Sonarr does it for a special without a file: the number 0 next to a
+            // hasFile that says false, rather than the field being left out.
+            $$"""{ "id": {{EpisodeId}}, "seriesId": {{SeriesId}}, "seasonNumber": 0, "episodeNumber": 5, "hasFile": false, "episodeFileId": 0, "monitored": true }"""
         ],
         ["GET /api/v3/series/12"] =
         [

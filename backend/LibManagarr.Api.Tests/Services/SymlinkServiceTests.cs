@@ -126,6 +126,25 @@ public sealed class SymlinkServiceTests
     }
 
     [Fact]
+    public async Task ASpecialIsStillOfferedWhenSonarrNamesItsMissingFileAsZero()
+    {
+        Dictionary<string, List<string>> routes = HappyRoutes();
+        routes["GET /api/v3/episode/5"] =
+        [
+            // Measured on Sonarr 4.0: an episode without a file is answered with episodeFileId 0 while
+            // hasFile says false. Reading the 0 as a file would refuse the special forever, because the
+            // file that is supposed to arrive through the link is the very thing that is missing.
+            $$"""{ "id": {{EpisodeId}}, "seriesId": {{SeriesId}}, "seasonNumber": 0, "episodeNumber": 5, "hasFile": false, "episodeFileId": 0, "monitored": true }"""
+        ];
+        SymlinkService service = CreateService(new StubArrHandler(routes), new FakeLinkFileSystem());
+
+        SymlinkLinkPlan plan = await service.PreviewAsync(Pair, RadarrFileId, CancellationToken.None);
+
+        Assert.True(plan.Runnable);
+        Assert.Empty(plan.Blockers);
+    }
+
+    [Fact]
     public async Task AnEpisodeThatMovedToAnotherSeriesIsRefused()
     {
         Dictionary<string, List<string>> routes = HappyRoutes();

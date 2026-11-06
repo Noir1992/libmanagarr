@@ -267,7 +267,10 @@ public static class SymlinkEndpoints
         SymlinkSettings? candidate;
         try
         {
-            candidate = request.Deserialize<SymlinkSettings>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            candidate = request.Deserialize<SymlinkSettings>(new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            });
         }
         catch (JsonException)
         {

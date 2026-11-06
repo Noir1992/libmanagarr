@@ -608,8 +608,7 @@ export const i18nFr: Record<TranslationKey, string> = {
   'symlinks.links.empty': 'Aucun lien créé pour le moment.',
   'symlinks.links.followUp.disable': 'Ne plus suivre les mises à jour de la source',
   'symlinks.links.followUp.enable': 'Suivre les mises à jour de la source',
-  'symlinks.links.monitoringDisabled':
-    "La série n'est plus surveillée dans Sonarr, afin que l'épisode spécial ne soit pas téléchargé deux fois.",
+  'symlinks.links.monitoringDisabled': "L'épisode lié n'est plus surveillé dans Sonarr, afin qu'il ne soit pas téléchargé deux fois.",
   'symlinks.links.setupStep': 'Étape : {step}',
   'symlinks.links.title': 'Liens gérés',
   'symlinks.loadError': "Les listes n'ont pas pu être chargées.",

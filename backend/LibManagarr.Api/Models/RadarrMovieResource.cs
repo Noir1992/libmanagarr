@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace LibManagarr.Api.Models;
 
 public sealed class RadarrMovieResource
@@ -10,6 +12,9 @@ public sealed class RadarrMovieResource
 
     public int? QualityProfileId { get; set; }
 
+    // A movie without a file is answered with 0 rather than with nothing, so the number is read as the
+    // absence it means.
+    [JsonConverter(typeof(ZeroIsMissingInt32Converter))]
     public int? MovieFileId { get; set; }
 
     public bool? HasFile { get; set; }
