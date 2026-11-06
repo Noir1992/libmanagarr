@@ -206,7 +206,8 @@ Offline-Läufe mit jeweils 18/18 bestandenen Szenarien, 1.445 beziehungsweise
 1.430 Sekunden. Beide liefen parallel unter Windows/Docker Desktop und wurden
 vollständig aufgeräumt. Zusätzlich bestehen 19 Infrastrukturtests sowie drei
 Wiederholungen des nach Linux-Diagnose korrigierten Filterfalls und der
-Statistikfall. Der aktuelle Plan dokumentiert die abschließende CI-Abnahme.
+Statistikfall. Die abschließende Linux-Abnahme erfolgt im normalen CI-Lauf
+mit allen 18 Szenarien.
 
 Den Status `E2E tests` zusätzlich in den GitHub-
 Branch-Regeln als erforderlichen Check hinterlegen. Workflow-Dateien können
