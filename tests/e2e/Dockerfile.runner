@@ -1,0 +1,8 @@
+ARG RUNNER_IMAGE
+FROM ${RUNNER_IMAGE}
+WORKDIR /work
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg openssl && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY . ./
+CMD ["npx", "playwright", "test"]

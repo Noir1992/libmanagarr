@@ -51,6 +51,9 @@ Thumbs.db
 
 # Local .NET build and verification output
 /.artifacts/
+/tests/e2e/node_modules/
+/tests/e2e/artifacts/
+/tests/e2e/bootstrap/*-source.tmp
 /.agents/
 /.codex/
 /.qwen/

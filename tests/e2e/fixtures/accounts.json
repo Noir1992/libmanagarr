@@ -1,0 +1,15 @@
+{
+  "administrator": {
+    "username": "e2e-admin",
+    "password": "E2e-test-password-2026!",
+    "email": "admin@example.test",
+    "services": ["libmanagarr", "jellyfin", "seerr"]
+  },
+  "requester": {
+    "username": "e2e-requester",
+    "password": "E2e-test-password-2026!",
+    "email": "requester@example.test",
+    "permissions": 32,
+    "services": ["seerr"]
+  }
+}

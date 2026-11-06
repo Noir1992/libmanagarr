@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "seedVersion": 1,
+  "images": {
+    "sonarr": "lscr.io/linuxserver/sonarr@sha256:386c962ee6e260e3a5656b25df2ed056bcc9b6410e197d075f9547fd14c23bca",
+    "radarr": "lscr.io/linuxserver/radarr@sha256:ade5937813c6ae415b29db729386e53fea3ecf067a019849bafbe2d2a6ec02ba",
+    "seerr": "ghcr.io/seerr-team/seerr:v3.0.1@sha256:1b5fc1ea825631d9d165364472663b817a4c58ef6aa1013f58d82c1570d7c866",
+    "jellyfin": "jellyfin/jellyfin:10.11.6@sha256:333b647716631443a43c7fabac4b0c46b4e2f036bad19547e00958f10f721b85",
+    "runner": "mcr.microsoft.com/playwright:v1.58.2-noble@sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d"
+  },
+  "media": {
+    "seriesTvdbId": 305082,
+    "movieTmdbId": 129,
+    "requestTmdbId": 27205
+  }
+}
