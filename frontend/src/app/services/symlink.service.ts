@@ -96,10 +96,7 @@ export class SymlinkService {
   async testCapability(storageAreaId: string): Promise<SymlinkCapabilityCheck> {
     return this.perform(this.capabilityBusy, storageAreaId, () =>
       firstValueFrom(
-        this.http.post<SymlinkCapabilityCheck>(
-          `${this.url}/storage-areas/${encodeURIComponent(storageAreaId)}/capability-test`,
-          null,
-        ),
+        this.http.post<SymlinkCapabilityCheck>(`${this.url}/storage-areas/${encodeURIComponent(storageAreaId)}/capability-test`, null),
       ).then((check) => {
         this.settingsState.update((settings) =>
           settings === null ? settings : { ...settings, capabilityChecks: this.withCheck(settings.capabilityChecks, check) },

@@ -18,9 +18,7 @@
     @if (needsConfiguration()) {
       <p class="configuration-hint">
         {{ t('symlinks.needsConfiguration') }}
-        <a mat-stroked-button class="secondary-button" routerLink="/settings" [queryParams]="{ tab: 'symlinks' }">{{
-          configureLabel()
-        }}</a>
+        <a mat-stroked-button class="secondary-button" routerLink="/settings" [queryParams]="{ tab: 'symlinks' }">{{ configureLabel() }}</a>
       </p>
     }
 
@@ -33,13 +31,7 @@
           }
         </div>
         <div class="card-header-actions">
-          <button
-            type="button"
-            mat-stroked-button
-            class="secondary-button"
-            [disabled]="refreshing() || loading()"
-            (click)="refreshAsync()"
-          >
+          <button type="button" mat-stroked-button class="secondary-button" [disabled]="refreshing() || loading()" (click)="refreshAsync()">
             {{ refreshing() ? t('common.loading') : refreshLabel() }}
           </button>
         </div>
@@ -177,7 +169,9 @@
                   <p class="item-meta">
                     {{ t('symlinks.links.checkedAt', { date: (link.lastCheckedAt | appDate: 'medium') }) }}
                     @if (link.lastSuccessfulCheckAt && link.lastSuccessfulCheckAt !== link.lastCheckedAt) {
-                      <span class="item-episode">{{ t('symlinks.links.cleanSince', { date: (link.lastSuccessfulCheckAt | appDate: 'medium') }) }}</span>
+                      <span class="item-episode">{{
+                        t('symlinks.links.cleanSince', { date: (link.lastSuccessfulCheckAt | appDate: 'medium') })
+                      }}</span>
                     }
                   </p>
                 }

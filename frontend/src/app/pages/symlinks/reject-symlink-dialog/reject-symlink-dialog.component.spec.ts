@@ -57,7 +57,10 @@ describe('RejectSymlinkDialogComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [RejectSymlinkDialogComponent],
-      providers: [{ provide: MatDialogRef, useValue: dialogRef }, { provide: MAT_DIALOG_DATA, useValue: data }],
+      providers: [
+        { provide: MatDialogRef, useValue: dialogRef },
+        { provide: MAT_DIALOG_DATA, useValue: data },
+      ],
     }).compileComponents();
 
     TestBed.inject(AppI18nService).setLanguage('en');

@@ -477,7 +477,8 @@ export const i18nEn: Record<TranslationKey, string> = {
   'settings.symlinks.capability.Unsupported': 'This storage does not support symlinks',
   'settings.symlinks.capability.checkedAt': 'Checked at',
   'settings.symlinks.capability.empty': 'A test needs a saved storage area first.',
-  'settings.symlinks.capability.info': 'The test writes one short link inside a storage area and reads it back. Whatever is missing is reported here.',
+  'settings.symlinks.capability.info':
+    'The test writes one short link inside a storage area and reads it back. Whatever is missing is reported here.',
   'settings.symlinks.capability.run': 'Test',
   'settings.symlinks.capability.stale': 'Result is outdated',
   'settings.symlinks.capability.title': 'Symlink test',
@@ -485,7 +486,8 @@ export const i18nEn: Record<TranslationKey, string> = {
   'settings.symlinks.loadError': 'The path configuration could not be loaded.',
   'settings.symlinks.mappings.add': 'Add path mapping',
   'settings.symlinks.mappings.empty': 'No path mapping configured yet.',
-  'settings.symlinks.mappings.info': 'A mapping says which path an instance reports and where the same file sits on this machine. Nothing is written without one.',
+  'settings.symlinks.mappings.info':
+    'A mapping says which path an instance reports and where the same file sits on this machine. Nothing is written without one.',
   'settings.symlinks.mappings.instance': 'Instance',
   'settings.symlinks.mappings.instanceRoot': 'Instance root',
   'settings.symlinks.mappings.instanceRoot.info': 'The path the instance reports for this storage area.',
@@ -510,7 +512,8 @@ export const i18nEn: Record<TranslationKey, string> = {
   'settings.symlinks.verification.Unverified': 'Not verified',
   'settings.symlinks.verification.Verified': 'Verified',
   'settings.symlinksTab': 'Symlinks',
-  'settings.symlinksTab.description': 'Which folder on this machine belongs to which path the Arr instances report, and whether symlinks may be written here.',
+  'settings.symlinksTab.description':
+    'Which folder on this machine belongs to which path the Arr instances report, and whether symlinks may be written here.',
   'settings.sync': 'Synchronize data',
   'settings.sync.error': 'Synchronization could not be completed.',
   'settings.syncError': 'Synchronization could not be completed.',

@@ -10,7 +10,13 @@ import { PathReaderKind } from '../../../enums/path-reader-kind';
 import { PathReaderVerification } from '../../../enums/path-reader-verification';
 import { FeedbackState } from '../../../interfaces/general/feedback-state';
 import { ArrInstanceSettings } from '../../../interfaces/settings/arr-instance-settings';
-import { ArrPathMapping, MediaStorageArea, PathReaderView, SymlinkCapabilityCheck, SymlinkSettings } from '../../../interfaces/symlinks/symlink-settings';
+import {
+  ArrPathMapping,
+  MediaStorageArea,
+  PathReaderView,
+  SymlinkCapabilityCheck,
+  SymlinkSettings,
+} from '../../../interfaces/symlinks/symlink-settings';
 import { AppDatePipe } from '../../../pipes/app-date.pipe';
 import { AppSettingsService } from '../../../services/app-settings.service';
 import { SymlinkService } from '../../../services/symlink.service';

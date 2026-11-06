@@ -46,7 +46,10 @@ export class ConfirmSymlinkDialogComponent {
   }
 
   protected episodeLabel(): string {
-    return this.t('symlinks.episodeNumber', { season: String(this.data.suggestion.seasonNumber), episode: String(this.data.suggestion.episodeNumber) });
+    return this.t('symlinks.episodeNumber', {
+      season: String(this.data.suggestion.seasonNumber),
+      episode: String(this.data.suggestion.episodeNumber),
+    });
   }
 
   protected findings(plan: SymlinkLinkPlan): SymlinkFinding[] {
@@ -73,7 +76,16 @@ export class ConfirmSymlinkDialogComponent {
   private async loadPreview(): Promise<void> {
     const { radarrInstanceId, radarrMovieId, sonarrInstanceId, sonarrSeriesId, sonarrEpisodeId, radarrFileId } = this.data.suggestion;
     try {
-      this.plan.set(await this.symlinks.previewLink({ radarrInstanceId, radarrMovieId, sonarrInstanceId, sonarrSeriesId, sonarrEpisodeId, radarrFileId }));
+      this.plan.set(
+        await this.symlinks.previewLink({
+          radarrInstanceId,
+          radarrMovieId,
+          sonarrInstanceId,
+          sonarrSeriesId,
+          sonarrEpisodeId,
+          radarrFileId,
+        }),
+      );
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : this.t('symlinks.preview.error'));
     } finally {

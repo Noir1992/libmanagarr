@@ -464,7 +464,8 @@ export const i18nDe: Record<TranslationKey, string> = {
   'settings.sonarr': 'Sonarr-Instanzen',
   'settings.symlinks.areas.add': 'Speicherbereich hinzufügen',
   'settings.symlinks.areas.empty': 'Noch kein Speicherbereich gepflegt.',
-  'settings.symlinks.areas.info': 'Ein Speicherbereich ist eine Ablage auf diesem Rechner. Jeder geschriebene Link bleibt innerhalb dieser Wurzeln.',
+  'settings.symlinks.areas.info':
+    'Ein Speicherbereich ist eine Ablage auf diesem Rechner. Jeder geschriebene Link bleibt innerhalb dieser Wurzeln.',
   'settings.symlinks.areas.moviesRoot': 'Wurzel Filme',
   'settings.symlinks.areas.name': 'Name',
   'settings.symlinks.areas.seriesRoot': 'Wurzel Serien',
@@ -477,7 +478,8 @@ export const i18nDe: Record<TranslationKey, string> = {
   'settings.symlinks.capability.Unsupported': 'Ablage unterstützt keine Symlinks',
   'settings.symlinks.capability.checkedAt': 'Geprüft am',
   'settings.symlinks.capability.empty': 'Ein Test ist erst möglich, sobald ein Speicherbereich gespeichert ist.',
-  'settings.symlinks.capability.info': 'Der Test legt in einer Ablage eine kurze Verknüpfung an und liest sie zurück. Was dabei fehlt, steht hier.',
+  'settings.symlinks.capability.info':
+    'Der Test legt in einer Ablage eine kurze Verknüpfung an und liest sie zurück. Was dabei fehlt, steht hier.',
   'settings.symlinks.capability.run': 'Testen',
   'settings.symlinks.capability.stale': 'Ergebnis veraltet',
   'settings.symlinks.capability.title': 'Symlink-Test',
@@ -485,7 +487,8 @@ export const i18nDe: Record<TranslationKey, string> = {
   'settings.symlinks.loadError': 'Die Pfadkonfiguration konnte nicht geladen werden.',
   'settings.symlinks.mappings.add': 'Zuordnung hinzufügen',
   'settings.symlinks.mappings.empty': 'Noch keine Pfadzuordnung gepflegt.',
-  'settings.symlinks.mappings.info': 'Eine Zuordnung sagt, welchen Pfad eine Instanz meldet und wo dieselbe Datei auf diesem Rechner liegt. Ohne Zuordnung wird nichts geschrieben.',
+  'settings.symlinks.mappings.info':
+    'Eine Zuordnung sagt, welchen Pfad eine Instanz meldet und wo dieselbe Datei auf diesem Rechner liegt. Ohne Zuordnung wird nichts geschrieben.',
   'settings.symlinks.mappings.instance': 'Instanz',
   'settings.symlinks.mappings.instanceRoot': 'Wurzel der Instanz',
   'settings.symlinks.mappings.instanceRoot.info': 'Der Pfad, den die Instanz für diese Ablage meldet.',
@@ -496,7 +499,8 @@ export const i18nDe: Record<TranslationKey, string> = {
   'settings.symlinks.reader.kind.MediaPlayer': 'Medienspieler',
   'settings.symlinks.readers.add': 'Lesende Anwendung hinzufügen',
   'settings.symlinks.readers.empty': 'Noch keine lesende Anwendung gepflegt.',
-  'settings.symlinks.readers.info': 'Wie eine Anwendung den Pfad danach sieht, der dem Link folgt. Bestätigt wird das nur durch einen echten Test.',
+  'settings.symlinks.readers.info':
+    'Wie eine Anwendung den Pfad danach sieht, der dem Link folgt. Bestätigt wird das nur durch einen echten Test.',
   'settings.symlinks.readers.kind': 'Art',
   'settings.symlinks.readers.root': 'Erwartete Wurzel',
   'settings.symlinks.readers.root.info': 'Der Pfad, unter dem diese Anwendung die Datei erreichen soll.',
@@ -510,7 +514,8 @@ export const i18nDe: Record<TranslationKey, string> = {
   'settings.symlinks.verification.Unverified': 'Nicht bestätigt',
   'settings.symlinks.verification.Verified': 'Bestätigt',
   'settings.symlinksTab': 'Symlinks',
-  'settings.symlinksTab.description': 'Welche Ablage auf diesem Rechner zu welchem Pfad der Arr-Instanzen gehört, und ob hier Symlinks geschrieben werden dürfen.',
+  'settings.symlinksTab.description':
+    'Welche Ablage auf diesem Rechner zu welchem Pfad der Arr-Instanzen gehört, und ob hier Symlinks geschrieben werden dürfen.',
   'settings.sync': 'Daten synchronisieren',
   'settings.sync.error': 'Synchronisierung konnte nicht abgeschlossen werden.',
   'settings.syncError': 'Die Synchronisierung konnte nicht abgeschlossen werden.',

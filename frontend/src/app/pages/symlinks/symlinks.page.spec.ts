@@ -255,7 +255,10 @@ describe('SymlinksPage', () => {
 
     actionButtons(0)[0].click();
 
-    expect(dialog.open).toHaveBeenCalledWith(ConfirmSymlinkDialogComponent, jasmine.objectContaining({ data: { suggestion: stub.suggestions()[0], configRevision: 7 } }));
+    expect(dialog.open).toHaveBeenCalledWith(
+      ConfirmSymlinkDialogComponent,
+      jasmine.objectContaining({ data: { suggestion: stub.suggestions()[0], configRevision: 7 } }),
+    );
   });
 
   it('refuses to promise a link while the configuration is still unknown', () => {
@@ -269,14 +272,19 @@ describe('SymlinksPage', () => {
   });
 
   it('declines with the sentence the author typed', async () => {
-    dialog.open.and.returnValue({ afterClosed: () => of('The film is a different cut.') } as unknown as MatDialogRef<RejectSymlinkDialogComponent>);
+    dialog.open.and.returnValue({
+      afterClosed: () => of('The film is a different cut.'),
+    } as unknown as MatDialogRef<RejectSymlinkDialogComponent>);
     stub.suggestions.set([createSuggestion()]);
     fixture.detectChanges();
 
     actionButtons(0)[1].click();
     await settle();
 
-    expect(dialog.open).toHaveBeenCalledWith(RejectSymlinkDialogComponent, jasmine.objectContaining({ data: { suggestion: stub.suggestions()[0] } }));
+    expect(dialog.open).toHaveBeenCalledWith(
+      RejectSymlinkDialogComponent,
+      jasmine.objectContaining({ data: { suggestion: stub.suggestions()[0] } }),
+    );
     expect(stub.rejectSuggestion).toHaveBeenCalledWith('suggestion-1', 'The film is a different cut.');
   });
 

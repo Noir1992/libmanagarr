@@ -95,9 +95,7 @@ describe('SettingsSymlinksTabWidget', () => {
           stale: false,
         };
         // The service replaces the stored answer of that area, which is what the row then reads.
-        symlinkStub.settings.update((settings) =>
-          settings === null ? settings : { ...settings, capabilityChecks: [answer] },
-        );
+        symlinkStub.settings.update((settings) => (settings === null ? settings : { ...settings, capabilityChecks: [answer] }));
         return answer;
       }),
     };

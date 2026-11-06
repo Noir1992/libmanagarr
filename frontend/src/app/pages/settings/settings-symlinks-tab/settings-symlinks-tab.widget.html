@@ -108,7 +108,9 @@
             <div class="symlink-row" [formGroup]="mapping">
               <div class="field">
                 <div class="field-label-row">
-                  <label [id]="'mapping-kind-label-' + $index" [for]="'mapping-kind-' + $index">{{ t('settings.symlinks.mappings.kind') }}</label>
+                  <label [id]="'mapping-kind-label-' + $index" [for]="'mapping-kind-' + $index">{{
+                    t('settings.symlinks.mappings.kind')
+                  }}</label>
                 </div>
                 <mat-select
                   [id]="'mapping-kind-' + $index"
@@ -216,7 +218,9 @@
             <div class="symlink-row" [formGroup]="view">
               <div class="field">
                 <div class="field-label-row">
-                  <label [id]="'reader-kind-label-' + $index" [for]="'reader-kind-' + $index">{{ t('settings.symlinks.readers.kind') }}</label>
+                  <label [id]="'reader-kind-label-' + $index" [for]="'reader-kind-' + $index">{{
+                    t('settings.symlinks.readers.kind')
+                  }}</label>
                 </div>
                 <mat-select
                   [id]="'reader-kind-' + $index"
@@ -302,7 +306,9 @@
               </div>
               <p class="capability-detail">{{ capabilityMessage(check) }}</p>
               <div class="capability-actions">
-                <span class="capability-checked">{{ t('settings.symlinks.capability.checkedAt') }} {{ check.checkedAt | appDate: 'medium' }}</span>
+                <span class="capability-checked"
+                  >{{ t('settings.symlinks.capability.checkedAt') }} {{ check.checkedAt | appDate: 'medium' }}</span
+                >
                 <app-feedback-icon [state]="capabilityFeedback(check)" variant="inline" [tooltipText]="capabilityMessage(check)" />
                 <button
                   type="button"

@@ -145,7 +145,10 @@ describe('SymlinkService', () => {
   it('keeps the refused field of a validation answer where the form can show it', async () => {
     const pending: Promise<string | null> = service
       .saveSettings({ storageAreas: [], pathMappings: [], readerViews: [], revision: 0, capabilityChecks: [] })
-      .then(() => null, (error: unknown) => (error as Error).message);
+      .then(
+        () => null,
+        (error: unknown) => (error as Error).message,
+      );
     http
       .expectOne(base)
       .flush(
@@ -165,7 +168,14 @@ describe('SymlinkService', () => {
     const pending = service.testCapability(areaId);
     const request = http.expectOne(`${base}/storage-areas/${areaId}/capability-test`);
     expect(request.request.method).toBe('POST');
-    request.flush({ storageAreaId: areaId, status: 'Available', detail: 'Symlink created and read back.', checkedAt: '2026-11-05T09:00:00Z', configRevision: 0, stale: false });
+    request.flush({
+      storageAreaId: areaId,
+      status: 'Available',
+      detail: 'Symlink created and read back.',
+      checkedAt: '2026-11-05T09:00:00Z',
+      configRevision: 0,
+      stale: false,
+    });
     const check = await pending;
     expect(check.status).toBe('Available');
     expect(service.settings()?.capabilityChecks).toEqual([check]);
@@ -223,7 +233,12 @@ describe('SymlinkService', () => {
       sonarrEpisodeId: 900,
       radarrFileId: null,
     });
-    request.flush({ runnable: false, draft: link('draft'), blockers: [{ code: 'no-file', detail: 'No file.', detectedAt: '2026-11-05T09:00:00Z' }], warnings: [] });
+    request.flush({
+      runnable: false,
+      draft: link('draft'),
+      blockers: [{ code: 'no-file', detail: 'No file.', detectedAt: '2026-11-05T09:00:00Z' }],
+      warnings: [],
+    });
     const plan = await pending;
     expect(plan.runnable).toBeFalse();
     expect(plan.blockers[0].code).toBe('no-file');
@@ -253,10 +268,13 @@ describe('SymlinkService', () => {
     http.expectOne(`${base}/rejections`).flush([]);
     await load;
 
-    const pending: Promise<string | null> = service
-      .confirmSuggestion('sug-1', 0)
-      .then(() => null, (error: unknown) => (error as Error).message);
-    http.expectOne(`${base}/suggestions/sug-1/confirm`).flush({ title: 'The path configuration changed.' }, { status: 409, statusText: 'Conflict' });
+    const pending: Promise<string | null> = service.confirmSuggestion('sug-1', 0).then(
+      () => null,
+      (error: unknown) => (error as Error).message,
+    );
+    http
+      .expectOne(`${base}/suggestions/sug-1/confirm`)
+      .flush({ title: 'The path configuration changed.' }, { status: 409, statusText: 'Conflict' });
     await settle();
     http.expectOne(base).flush(settings(2));
     await settle();
@@ -274,7 +292,9 @@ describe('SymlinkService', () => {
     await load;
 
     const pending = service.rejectSuggestion('sug-1', 'Documentary, not the same film.');
-    http.expectOne(`${base}/suggestions/sug-1/reject`).flush({ ...suggestion(), status: 'Rejected', detail: 'Documentary, not the same film.' });
+    http
+      .expectOne(`${base}/suggestions/sug-1/reject`)
+      .flush({ ...suggestion(), status: 'Rejected', detail: 'Documentary, not the same film.' });
     await settle();
     http.expectOne(`${base}/rejections`).flush([
       {
@@ -350,9 +370,10 @@ describe('SymlinkService', () => {
   });
 
   it('reads the register again when another writer was faster', async () => {
-    const pending: Promise<string | null> = service
-      .setFollowUp('link-1', false, 2)
-      .then(() => null, (error: unknown) => (error as Error).message);
+    const pending: Promise<string | null> = service.setFollowUp('link-1', false, 2).then(
+      () => null,
+      (error: unknown) => (error as Error).message,
+    );
     http.expectOne(`${base}/links/link-1/follow-up`).flush({ title: 'The entry changed.' }, { status: 409, statusText: 'Conflict' });
     await settle();
     http.expectOne(`${base}/links`).flush([link('link-1', 9)]);
