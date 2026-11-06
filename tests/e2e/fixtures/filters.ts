@@ -18,5 +18,12 @@ export async function selectFilter(page: Page, label: string, value: string, exc
 }
 export async function clearFilters(page: Page) {
   const buttons = page.getByRole('button', { name: /^Remove filter / });
-  while (await buttons.count()) await buttons.first().click();
+  while (await buttons.count()) {
+    const label = await buttons.first().getAttribute('aria-label');
+    expect(label).toBeTruthy();
+    const remove = page.getByRole('button', { name: label!, exact: true });
+    await remove.click();
+    // Wait for Angular's removal before deciding whether another chip remains.
+    await expect(remove).toHaveCount(0);
+  }
 }
