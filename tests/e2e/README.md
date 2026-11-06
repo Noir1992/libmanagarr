@@ -152,6 +152,6 @@ Diagnosen bleiben sieben Tage, das Prüfimage einen Tag gespeichert.
 Der E2E-Job ist auf 35 Minuten begrenzt. Seine einzelnen Schritte haben eigene
 Zeitlimits, insbesondere jeweils 15 Minuten für App-Build und Browserlauf.
 
-Den Status `Real services / Chromium / offline` zusätzlich in den GitHub-
+Den Status `E2E tests` zusätzlich in den GitHub-
 Branch-Regeln als erforderlichen Check hinterlegen. Workflow-Dateien können
 diesen Repository-Mergeschutz nicht selbst aktivieren.

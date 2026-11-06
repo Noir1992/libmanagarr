@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   e2e:
-    name: Real services / Chromium / offline
+    name: E2E tests
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
