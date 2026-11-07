@@ -36,19 +36,20 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT migration_id FROM schema_migrations ORDER BY migration_id";
         Assert.Equal(
-            ["symlinks-v1", "symlinks-v2", "symlinks-v3"],
+            ["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4"],
             await ReadAllAsync(command));
     }
 
     [Fact]
     public async Task Migration_ASecondInstallationAlreadyOnV1AddsOnlyTheMissingStep()
     {
-        await ExecuteSqlAsync(
-            "CREATE TABLE schema_migrations (migration_id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);" +
-            "INSERT INTO schema_migrations VALUES ('symlinks-v1','2026-11-05T09:00:00.000+00:00');" +
-            // The marked step is skipped, so the table it created has to be here for the step that
-            // widens it — a marked step whose table was never made is not a state an upgrade meets.
-            "CREATE TABLE symlink_links (id TEXT PRIMARY KEY);");
+        await CreateStore().InitializeAsync(CancellationToken.None);
+        await ExecuteSqlAsync("""
+            DELETE FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3','symlinks-v4');
+            DROP TABLE symlink_matching_state;
+            ALTER TABLE symlink_links DROP COLUMN pending_update;
+            ALTER TABLE symlink_links DROP COLUMN sonarr_rename_command_id;
+            """);
 
         SqliteSymlinkStore store = CreateStore();
         await store.SaveMatchingStateAsync(NewMatchingState("sonarr-1"), CancellationToken.None);
@@ -57,14 +58,52 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         await connection.OpenAsync();
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT migration_id FROM schema_migrations ORDER BY migration_id";
-        Assert.Equal(["symlinks-v1", "symlinks-v2", "symlinks-v3"], await ReadAllAsync(command));
+        Assert.Equal(["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4"], await ReadAllAsync(command));
         // A step is marked once, so reopening an installed database does not replay it — which for the
         // widening step matters more than for a create, because the second ALTER would fail outright.
         await CreateStore().InitializeAsync(CancellationToken.None);
         using SqliteCommand counted = connection.CreateCommand();
-        counted.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3')";
-        Assert.Equal(2L, await counted.ExecuteScalarAsync());
+        counted.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3','symlinks-v4')";
+        Assert.Equal(3L, await counted.ExecuteScalarAsync());
         Assert.NotNull(await store.GetMatchingStateAsync("sonarr-1", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Migration_FromV3PreservesExistingLinksAndAllowsFollowingAnUpgrade()
+    {
+        SqliteSymlinkStore store = CreateStore();
+        SymlinkLink link = NewLink("existing-link");
+        await store.InsertLinkAsync(link, CancellationToken.None);
+        await using (SqliteConnection connection = new($"Data Source={Paths.DatabasePath}"))
+        {
+            await connection.OpenAsync();
+            using SqliteCommand schema = connection.CreateCommand();
+            // Remove the new column before copying, so SELECT * has the exact legacy column order.
+            await ExecuteSqlAsync("ALTER TABLE symlink_links DROP COLUMN pending_update;");
+            schema.CommandText = "SELECT sql FROM sqlite_master WHERE name='symlink_links'";
+            string legacySchema = ((string)(await schema.ExecuteScalarAsync())!)
+                .Replace("CREATE TABLE \"symlink_links\"", "CREATE TABLE symlink_links_v3")
+                .Replace("CHECK(operation_status BETWEEN 0 AND 4)", "CHECK(operation_status BETWEEN 0 AND 3)");
+            await ExecuteSqlAsync(legacySchema + ";" + """
+                INSERT INTO symlink_links_v3 SELECT * FROM symlink_links;
+                DROP TABLE symlink_links;
+                ALTER TABLE symlink_links_v3 RENAME TO symlink_links;
+                DELETE FROM schema_migrations WHERE migration_id='symlinks-v4';
+                """);
+        }
+
+        SqliteSymlinkStore migrated = CreateStore();
+        SymlinkLink restored = (await migrated.GetLinkAsync(link.Id, CancellationToken.None))!;
+        Assert.Equal(link.LinkPath, restored.LinkPath);
+        Assert.Equal(link.SourcePath, restored.SourcePath);
+        Assert.Null(restored.PendingUpdate);
+        restored.OperationStatus = SymlinkOperationStatus.Updating;
+        Assert.True(await migrated.UpdateLinkAsync(restored, restored.Revision, CancellationToken.None));
+        Assert.Equal(SymlinkOperationStatus.Updating,
+            (await CreateStore().GetLinkAsync(link.Id, CancellationToken.None))!.OperationStatus);
+        // The episode uniqueness index must survive the table rebuild.
+        SymlinkLink duplicate = NewLink("duplicate");
+        await Assert.ThrowsAsync<SqliteException>(() => migrated.InsertLinkAsync(duplicate, CancellationToken.None));
     }
 
     [Fact]
@@ -108,6 +147,33 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         Assert.True(area1.IsCurrent(4));
         Assert.False(area1.IsCurrent(5));
         Assert.Null(await store.GetCapabilityCheckAsync("area-3", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AReservedSourceSwapSurvivesReopeningAndCanBeCleared()
+    {
+        SqliteSymlinkStore store = CreateStore();
+        SymlinkLink link = NewLink("link-1");
+        await store.InsertLinkAsync(link, CancellationToken.None);
+        SymlinkSourceUpdate pending = new(92, "area-2", "/movies/new.mp4", "/series/new.mp4",
+            "../movies/new.mp4", 0, 2,
+            new SymlinkFileMetadata { Origin = "radarr", Size = 1234, Languages = ["German"] }, "radarr:92:1234");
+        link.PendingUpdate = pending;
+        link.OperationStatus = SymlinkOperationStatus.Updating;
+        Assert.True(await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None));
+
+        SqliteSymlinkStore reopened = CreateStore();
+        SymlinkLink stored = (await reopened.GetLinkAsync(link.Id, CancellationToken.None))!;
+        Assert.NotNull(stored.PendingUpdate);
+        Assert.Equal(SymlinkOperationStatus.Updating, stored.OperationStatus);
+        Assert.Equal(pending with { ExpectedMetadata = null }, stored.PendingUpdate with { ExpectedMetadata = null });
+        Assert.Equal(1234L, stored.PendingUpdate.ExpectedMetadata!.Size);
+        Assert.Equal(["German"], stored.PendingUpdate.ExpectedMetadata.Languages);
+        Assert.Equal("radarr", stored.PendingUpdate.ExpectedMetadata.Origin);
+        Assert.Equal(link.SourcePath, stored.SourcePath);
+        stored.PendingUpdate = null;
+        Assert.True(await reopened.UpdateLinkAsync(stored, stored.Revision, CancellationToken.None));
+        Assert.Null((await CreateStore().GetLinkAsync(link.Id, CancellationToken.None))!.PendingUpdate);
     }
 
     [Fact]

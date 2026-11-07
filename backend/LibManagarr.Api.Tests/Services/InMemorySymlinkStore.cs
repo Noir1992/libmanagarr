@@ -184,6 +184,7 @@ internal sealed class InMemorySymlinkStore : ISymlinkStore
         AppliedFilename = source.AppliedFilename,
         NamingRevision = source.NamingRevision,
         SourceVersion = source.SourceVersion,
+        PendingUpdate = source.PendingUpdate,
         UpdateRevision = source.UpdateRevision,
         ExpectedMetadata = source.ExpectedMetadata,
         ConfirmedMetadata = source.ConfirmedMetadata,

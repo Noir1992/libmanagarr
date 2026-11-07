@@ -283,13 +283,115 @@ public sealed class SymlinkFollowUpTests
         Assert.Equal(SymlinkSetupOutcome.Waiting, outcome);
         SymlinkLink stored = await StoredAsync("link-1");
         Assert.Equal(SymlinkOperationStatus.Updating, stored.OperationStatus);
-        Assert.Equal(SymlinkSetupStep.LinkCreated, stored.SetupStep);
+        Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
         // What the link provably points at is written down even though the answer ran out from under it —
         // the register never keeps claiming the file this run let go of. The mark stays with it, which is
         // what makes the next pass read the instance again instead of settling.
         Assert.Equal(UpgradedVersion, stored.SourceVersion);
         Assert.Equal(["source-replaced"], stored.Findings.Select(finding => finding.Code));
         Assert.Equal([entry.LinkPath], files.CreatedLinks);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task AnInterruptedSwapResumesFromItsReservedSource(bool differentExtension, bool interruptAfterCreation)
+    {
+        SymlinkLink entry = await SeedMarkedEntryAsync("link-1");
+        FakeLinkFileSystem files = ShelfWithOwnLink(entry);
+        string previousPath = entry.LinkPath;
+        string previousSource = entry.SourcePath;
+        Dictionary<string, List<string>> routes = SymlinkFixture.UpgradeRoutes();
+        if (differentExtension)
+        {
+            routes["GET /api/v3/moviefile"] =
+                [$"[{MovieFileObject(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize, ".mp4")}]"];
+        }
+
+        Action<string> interrupt = _ => throw new InvalidOperationException("Simulated process interruption");
+        if (interruptAfterCreation) files.AfterLinkCreated = interrupt;
+        else files.AfterEntryDeleted = interrupt;
+        SymlinkService service = CreateService(new StubArrHandler(routes), files);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FinishUpdateAsync(entry, CancellationToken.None));
+        SymlinkLink interrupted = await StoredAsync(entry.Id);
+        Assert.Equal(previousPath, interrupted.LinkPath);
+        Assert.Equal(previousSource, interrupted.SourcePath);
+        Assert.Equal(CurrentVersion, interrupted.SourceVersion);
+        Assert.NotNull(interrupted.PendingUpdate);
+        Assert.Equal(UpgradedVersion, interrupted.PendingUpdate.SourceVersion);
+
+        files.AfterLinkCreated = null;
+        files.AfterEntryDeleted = null;
+        SymlinkService restarted = CreateService(new StubArrHandler(routes), files);
+        Assert.Equal(SymlinkSetupOutcome.Completed, await restarted.FinishUpdateAsync(interrupted, CancellationToken.None));
+
+        SymlinkLink stored = await StoredAsync(entry.Id);
+        Assert.Null(stored.PendingUpdate);
+        Assert.Equal(UpgradedVersion, stored.SourceVersion);
+        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
+        Assert.True(restarted.ResolvesToSource(stored));
+        Assert.Null(stored.ConfirmedMetadata);
+        Assert.Null(stored.AppliedFilename);
+        if (differentExtension) Assert.False(files.EntryExists(previousPath));
+        Assert.True(files.EntryExists(previousSource));
+        // Resuming after creation adopts the replacement without deleting and recreating it.
+        Assert.Single(files.CreatedLinks);
+    }
+
+    [Fact]
+    public async Task RecoveryKeepsAForeignEntryAtTheReservedDestination()
+    {
+        SymlinkLink entry = await SeedMarkedEntryAsync("link-1");
+        FakeLinkFileSystem files = ShelfWithOwnLink(entry);
+        files.AfterLinkCreated = _ => throw new InvalidOperationException("Simulated process interruption");
+        SymlinkService service = CreateService(new StubArrHandler(SymlinkFixture.UpgradeRoutes()), files);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FinishUpdateAsync(entry, CancellationToken.None));
+        files.AfterLinkCreated = null;
+        files.Entries[entry.LinkPath] = "somebody-else.mkv";
+        files.Removed.Clear();
+
+        Assert.Equal(SymlinkSetupOutcome.Blocked,
+            await service.FinishUpdateAsync(await StoredAsync(entry.Id), CancellationToken.None));
+        Assert.Empty(files.Removed);
+        Assert.Equal("somebody-else.mkv", files.Entries[entry.LinkPath]);
+        Assert.NotNull((await StoredAsync(entry.Id)).PendingUpdate);
+    }
+
+    [Fact]
+    public async Task ARecordedSwapStillRunsTheSonarrStepsWhenRadarrConfirmsItLater()
+    {
+        SymlinkLink entry = await SeedMarkedEntryAsync("link-1");
+        FakeLinkFileSystem files = ShelfWithOwnLink(entry);
+        Dictionary<string, List<string>> routes = SymlinkFixture.UpgradeRoutes();
+        routes["GET /api/v3/moviefile"] =
+        [
+            $"[{MovieFileObject(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize)}]",
+            "[]",
+            $"[{MovieFileObject(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize)}]"
+        ];
+        SymlinkService service = CreateService(new StubArrHandler(routes), files);
+        Assert.Equal(SymlinkSetupOutcome.Waiting, await service.FinishUpdateAsync(entry, CancellationToken.None));
+        SymlinkLink swapped = await StoredAsync(entry.Id);
+        Assert.Equal(SymlinkOperationStatus.Updating, swapped.OperationStatus);
+        Assert.Equal(SymlinkSetupStep.MonitoringDisabled, swapped.SetupStep);
+        Assert.Null(swapped.PendingUpdate);
+
+        Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishUpdateAsync(swapped, CancellationToken.None));
+        SymlinkLink stored = await StoredAsync(entry.Id);
+        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
+        Assert.Null(stored.ConfirmedMetadata);
+        Assert.Null(stored.AppliedFilename);
+        Assert.Null(stored.DesiredFilename);
+        Assert.Null(stored.SonarrScanCommandId);
+        Assert.Null(stored.SonarrRenameCommandId);
+        Assert.Empty(stored.Findings);
+        Assert.Single(files.CreatedLinks);
+        Assert.True(await IsPassRequestedAsync());
     }
 
     [Fact]

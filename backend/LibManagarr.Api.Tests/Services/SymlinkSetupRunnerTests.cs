@@ -193,6 +193,37 @@ public sealed class SymlinkSetupRunnerTests
         Assert.True(files.Entries.ContainsKey(marked.SourcePath));
     }
 
+    [Fact]
+    public async Task TheSweepResumesASwapWhoseSonarrHalfIsStillOwed()
+    {
+        InMemorySymlinkStore store = new();
+        await store.SaveCapabilityCheckAsync(new SymlinkCapabilityCheck
+        {
+            StorageAreaId = "main",
+            Status = SymlinkCapabilityStatus.Available,
+            ConfigRevision = SymlinkFixture.ConfigRevision,
+            CheckedAt = Start
+        }, CancellationToken.None);
+        SymlinkLink swapped = await SeedAsync(store,
+            operation: SymlinkOperationStatus.Updating,
+            setupStep: SymlinkSetupStep.MonitoringDisabled,
+            sonarrFileId: SymlinkFixture.SonarrEpisodeFileId,
+            sourceVersion: SymlinkFixture.SourceVersion(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize));
+        swapped.RadarrFileId = SymlinkFixture.UpgradedRadarrFileId;
+        swapped.SourcePath = SymlinkTestPaths.LibManagarr($"movies/{SymlinkFixture.MovieFolder}/{SymlinkFixture.UpgradedFileName}");
+        swapped.LinkText = Path.GetRelativePath(Path.GetDirectoryName(swapped.LinkPath)!, swapped.SourcePath);
+        Assert.True(await store.UpdateLinkAsync(swapped, swapped.Revision, CancellationToken.None));
+        FakeLinkFileSystem files = new();
+        files.Entries[swapped.LinkPath] = swapped.LinkText;
+
+        Assert.Equal(0, await RunAsync(store, files, SymlinkFixture.Settings(), new StubArrHandler(SymlinkFixture.UpgradeRoutes())));
+        SymlinkLink stored = await StoredAsync(store, swapped.Id);
+        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
+        Assert.Empty(files.CreatedLinks);
+        Assert.Empty(files.Removed);
+    }
+
     /// <summary>
     /// Sonarr is only ever answered by the handler it is given, and by default that handler refuses to
     /// answer: a pass that would speak to an instance for these rows is a pass that decided something it

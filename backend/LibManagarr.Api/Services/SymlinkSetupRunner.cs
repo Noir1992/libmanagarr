@@ -86,7 +86,8 @@ public sealed class SymlinkSetupRunner(
     private static bool HasOwedWork(SymlinkLink link) =>
         SymlinkService.WaitsForRestoreCheck(link)
         || link.OperationStatus == SymlinkOperationStatus.DeletePending
-        || link.SetupStep is null or SymlinkSetupStep.LinkCreated
+        || link.OperationStatus == SymlinkOperationStatus.Updating
+        || (link.PendingUpdate is null && (link.SetupStep is null or SymlinkSetupStep.LinkCreated))
         || (link.OperationStatus == SymlinkOperationStatus.Active && link.SetupStep != SymlinkSetupStep.Completed);
 
     private async Task<SymlinkSetupOutcome> CarryForwardAsync(SymlinkLink link, CancellationToken cancellationToken) =>

@@ -20,7 +20,7 @@ public sealed class SqliteSymlinkStore(
         operation_status,setup_step,suggestion_id,sonarr_file_id,sonarr_scan_command_id,monitoring_original,
         monitoring_disabled,auto_follow_up,desired_filename,applied_filename,naming_revision,source_version,
         update_revision,expected_metadata,confirmed_metadata,created_at,updated_at,last_checked_at,
-        last_successful_check_at,findings,sonarr_rename_command_id
+        last_successful_check_at,findings,sonarr_rename_command_id,pending_update
         """;
 
     /// <summary>
@@ -172,7 +172,7 @@ public sealed class SqliteSymlinkStore(
                     update_revision=$update_revision,expected_metadata=$expected_metadata,confirmed_metadata=$confirmed_metadata,
                     created_at=$created_at,updated_at=$updated_at,last_checked_at=$last_checked_at,
                     last_successful_check_at=$last_successful_check_at,findings=$findings,
-                    sonarr_rename_command_id=$sonarr_rename_command_id,revision=revision+1
+                    sonarr_rename_command_id=$sonarr_rename_command_id,pending_update=$pending_update,revision=revision+1
                 WHERE id=$id AND revision=$expected
                 """;
             AddLinkParameters(command, link);
@@ -514,6 +514,8 @@ public sealed class SqliteSymlinkStore(
         command.Parameters.AddWithValue("$last_successful_check_at", SqliteScheduledTaskStore.Timestamp(link.LastSuccessfulCheckAt));
         command.Parameters.AddWithValue("$findings", link.Findings.Count == 0 ? DBNull.Value : JsonSerializer.Serialize(link.Findings, Json));
         command.Parameters.AddWithValue("$sonarr_rename_command_id", (object?)link.SonarrRenameCommandId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$pending_update", link.PendingUpdate is null
+            ? DBNull.Value : JsonSerializer.Serialize(link.PendingUpdate, Json));
     }
 
     private static void AddSuggestionParameters(SqliteCommand command, SymlinkSuggestion suggestion)
@@ -591,7 +593,8 @@ public sealed class SqliteSymlinkStore(
             LastCheckedAt = ReadNullableDate(reader, ref at),
             LastSuccessfulCheckAt = ReadNullableDate(reader, ref at),
             Findings = ReadJson<List<SymlinkFinding>>(reader, ref at) ?? [],
-            SonarrRenameCommandId = ReadNullableString(reader, ref at)
+            SonarrRenameCommandId = ReadNullableString(reader, ref at),
+            PendingUpdate = ReadJson<SymlinkSourceUpdate>(reader, ref at)
         };
     }
 

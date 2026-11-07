@@ -79,6 +79,10 @@ internal sealed class FakeLinkFileSystem : ISymlinkFileSystem
 
     public List<string> CreatedLinks { get; } = [];
 
+    public Action<string>? AfterLinkCreated { get; set; }
+
+    public Action<string>? AfterEntryDeleted { get; set; }
+
     public List<string> CreatedFolders { get; } = [];
 
     public List<string> Removed { get; } = [];
@@ -118,6 +122,7 @@ internal sealed class FakeLinkFileSystem : ISymlinkFileSystem
 
         CreatedLinks.Add(linkPath);
         Entries[linkPath] = targetPath;
+        AfterLinkCreated?.Invoke(linkPath);
     }
 
     public void CreateDirectory(string path) => CreatedFolders.Add(path);
@@ -126,6 +131,7 @@ internal sealed class FakeLinkFileSystem : ISymlinkFileSystem
     {
         Removed.Add(path);
         Entries.Remove(path);
+        AfterEntryDeleted?.Invoke(path);
     }
 
     public byte[] ReadAllBytes(string path) => throw new NotSupportedException("This service never reads file content.");

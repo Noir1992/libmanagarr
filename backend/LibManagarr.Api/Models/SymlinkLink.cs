@@ -136,6 +136,9 @@ public sealed class SymlinkLink
     /// <summary>Version of the Radarr file the entry currently reflects, so an older run cannot win.</summary>
     public string? SourceVersion { get; set; }
 
+    /// <summary>The source swap reserved before touching disk; kept until its result is recorded.</summary>
+    public SymlinkSourceUpdate? PendingUpdate { get; set; }
+
     public long UpdateRevision { get; set; }
 
     public SymlinkFileMetadata? ExpectedMetadata { get; set; }
@@ -152,3 +155,18 @@ public sealed class SymlinkLink
 
     public List<SymlinkFinding> Findings { get; set; } = [];
 }
+
+/// <summary>
+/// Durable destination of a source swap. The link row still describes the previous source until the
+/// swap succeeds, so recovery can recognise both the previous link and the intended replacement.
+/// </summary>
+public sealed record SymlinkSourceUpdate(
+    int RadarrFileId,
+    string StorageAreaId,
+    string SourcePath,
+    string LinkPath,
+    string LinkText,
+    int SeasonNumber,
+    int EpisodeNumber,
+    SymlinkFileMetadata? ExpectedMetadata,
+    string? SourceVersion);

@@ -537,52 +537,72 @@ public sealed class SymlinkService(
     /// </summary>
     public async Task<SymlinkSetupOutcome> FinishUpdateAsync(SymlinkLink link, CancellationToken cancellationToken)
     {
-        (SymlinkLink draft, List<Obstacle> blockers, _) =
-            await PlannedAsync(link.Pair, radarrFileId: null, replaces: link, cancellationToken);
-        if (blockers.Count > 0)
+        SymlinkLink draft;
+        if (link.PendingUpdate is SymlinkSourceUpdate pending)
         {
-            Obstacle blocker = blockers[0];
-            if (blocker.StatusCode == StatusCodes.Status503ServiceUnavailable)
+            // Finish the reserved swap first, even if Radarr moved again in the meantime. The old row
+            // and this destination are the two sources recovery can safely recognise on disk.
+            draft = NewDraft(link.Pair);
+            ApplySource(pending, draft);
+        }
+        else
+        {
+            List<Obstacle> blockers;
+            (draft, blockers, _) = await PlannedAsync(link.Pair, radarrFileId: null, replaces: link, cancellationToken);
+            if (blockers.Count > 0)
             {
-                // "Not ready yet" and "wrong pair" are different answers: one is worth another pass, the
-                // other one waits for a person. The row stays marked, so a restart does not lose it.
-                logger.LogInformation(
-                    "The managed link {LinkId} waits for its new source: {Detail}", link.Id, blocker.Finding.Detail);
-                return SymlinkSetupOutcome.Waiting;
+                Obstacle blocker = blockers[0];
+                if (blocker.StatusCode == StatusCodes.Status503ServiceUnavailable)
+                {
+                    logger.LogInformation(
+                        "The managed link {LinkId} waits for its new source: {Detail}", link.Id, blocker.Finding.Detail);
+                    return SymlinkSetupOutcome.Waiting;
+                }
+
+                await MarkConflictAsync(link, blocker.Finding.Code, blocker.Finding.Detail, cancellationToken);
+                return SymlinkSetupOutcome.Blocked;
             }
 
-            await MarkConflictAsync(link, blocker.Finding.Code, blocker.Finding.Detail, cancellationToken);
-            return SymlinkSetupOutcome.Blocked;
+            if (draft.SourceVersion == link.SourceVersion)
+            {
+                // Once a swap was recorded, equality confirms the new source, but Sonarr still owes
+                // its scan and metadata work. Only an untouched source can settle immediately.
+                return link.SetupStep == SymlinkSetupStep.MonitoringDisabled
+                    ? await CompleteUpdateAsync(link, cancellationToken)
+                    : await SettleUnchangedAsync(link, cancellationToken);
+            }
+
+            link.PendingUpdate = SourceUpdateOf(draft);
+            link.UpdatedAt = clock.GetUtcNow();
+            if (!await store.UpdateLinkAsync(link, link.Revision, cancellationToken))
+            {
+                return SymlinkSetupOutcome.Blocked;
+            }
+
+            link.Revision += 1;
         }
 
-        if (draft.SourceVersion == link.SourceVersion)
-        {
-            // The live answer disagrees with the snapshot that marked this row — an upgrade that was
-            // undone, or a snapshot taken while Radarr was mid-import. The entry keeps its finished state
-            // instead of being rebuilt for a file that is not there.
-            return await SettleUnchangedAsync(link, cancellationToken);
-        }
-
-        string previousPath = link.LinkPath;
-        string previousSource = link.SourcePath;
-        ApplySource(draft, link);
         try
         {
-            if (IsSameLocalPath(previousPath, link.LinkPath))
+            if (!IsOwnLinkAt(draft, draft.LinkPath))
             {
-                // The new file has the same shape, so the same entry is re-pointed. A file system that
-                // swaps a link in one step has not been proven here, so this is the honest two-step
-                // version: the own entry is let go of and written again against the new source, and a run
-                // that dies in between leaves the row marked and owed, which the next pass finishes.
-                if (files.EntryExists(previousPath)) files.DeleteEntry(previousPath);
-                PlaceLink(link);
+                if (files.EntryExists(draft.LinkPath))
+                {
+                    if (!IsSameLocalPath(link.LinkPath, draft.LinkPath) || !IsOwnLinkAt(link, draft.LinkPath))
+                    {
+                        throw Conflict($"'{draft.LinkPath}' is not the old link or its reserved replacement.",
+                            "The entry was left where it is; check the path before resuming the update.");
+                    }
+
+                    files.DeleteEntry(draft.LinkPath);
+                }
+
+                PlaceLink(draft);
             }
-            else
+
+            if (!IsSameLocalPath(link.LinkPath, draft.LinkPath))
             {
-                // A different extension is a different file name, so the replacement is written first and
-                // the old entry is only let go of once the new one is proven to point at the new source.
-                PlaceLink(link);
-                RemoveReplacedLink(previousPath, previousSource, link);
+                RemoveReplacedLink(link.LinkPath, link.SourcePath, link);
             }
         }
         catch (ApiProblemException exception)
@@ -590,6 +610,12 @@ public sealed class SymlinkService(
             await MarkConflictAsync(link, UpdateNotAppliedCode, exception.Detail, cancellationToken);
             return SymlinkSetupOutcome.Blocked;
         }
+
+        ApplySource(link.PendingUpdate!, link);
+        link.PendingUpdate = null;
+        // This checkpoint survives a delayed Radarr read-back: the link changed, so Sonarr must still
+        // process it even when the next live plan reports exactly the version now stored on the row.
+        link.SetupStep = SymlinkSetupStep.MonitoringDisabled;
 
         string? stillThere = await LiveSourceVersionAsync(link, cancellationToken);
         if (stillThere is null)
@@ -609,6 +635,11 @@ public sealed class SymlinkService(
             return await RecordSwapAsync(link, cancellationToken);
         }
 
+        return await CompleteUpdateAsync(link, cancellationToken);
+    }
+
+    private async Task<SymlinkSetupOutcome> CompleteUpdateAsync(SymlinkLink link, CancellationToken cancellationToken)
+    {
         link.OperationStatus = SymlinkOperationStatus.Active;
         // The Sonarr half runs again from the scan on: the new file has to be seen, attributed, read and
         // named. Monitoring stays as it is — it was already turned off for this episode, and the entry
@@ -636,8 +667,12 @@ public sealed class SymlinkService(
         return SymlinkSetupOutcome.Completed;
     }
 
+    private static SymlinkSourceUpdate SourceUpdateOf(SymlinkLink draft) => new(
+        draft.RadarrFileId, draft.StorageAreaId, draft.SourcePath, draft.LinkPath, draft.LinkText,
+        draft.SeasonNumber, draft.EpisodeNumber, draft.ExpectedMetadata, draft.SourceVersion);
+
     /// <summary>The file facts of the source a followed entry now reflects.</summary>
-    private static void ApplySource(SymlinkLink draft, SymlinkLink link)
+    private static void ApplySource(SymlinkSourceUpdate draft, SymlinkLink link)
     {
         link.RadarrFileId = draft.RadarrFileId;
         link.StorageAreaId = draft.StorageAreaId;
@@ -694,7 +729,7 @@ public sealed class SymlinkService(
             .FirstOrDefault(candidate => string.Equals(candidate.Id, link.RadarrInstanceId, StringComparison.OrdinalIgnoreCase));
         if (instance is null) return null;
 
-        RadarrMovieFileResource? file = await ChooseSourceAsync(instance, link.Pair, link.RadarrFileId, cancellationToken);
+        RadarrMovieFileResource? file = await ChooseSourceAsync(instance, link.Pair, radarrFileId: null, cancellationToken);
         return file is null ? null : SourceVersionOf(file.Id, file.Size);
     }
 
