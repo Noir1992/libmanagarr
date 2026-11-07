@@ -40,3 +40,9 @@ test('rejects duplicate cases and missing specs before any stack starts', async 
     verifyScenarioFiles(selectScenarios({ scenario: 'E01' }), async (path) => path === 'specs/auth-invalid-login.spec.ts'),
   );
 });
+
+test('rejects missing service contracts and undeclared upstream dependencies', () => {
+  assert.throws(() => selectScenarios({}, [{ ...scenarios[0], services: undefined }]), /Missing state contract/);
+  assert.throws(() => selectScenarios({}, [{ ...scenarios[0], services: ['unknown'] }]), /Unknown service/);
+  assert.throws(() => selectScenarios({}, [{ ...scenarios[0], mutates: ['radarr'] }]), /Invalid mutation/);
+});

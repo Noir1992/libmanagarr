@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir, chown } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
+const artifactPath = (name) => join(process.env.E2E_ARTIFACT_DIR ?? '/artifacts', name);
 import assert from 'node:assert/strict';
 import { arr, json, until, credentials, accounts } from './http.mjs';
 
@@ -62,7 +63,7 @@ try {
   if (!login.ok) throw new Error(`Seerr onboarding: ${login.status} ${await login.text()}`);
   // Read the generated test key after normal onboarding, as a human would from settings.
   const { main } = JSON.parse(await readFile('/state/seerr/settings.json', 'utf8'));
-  await writeFile('/artifacts/seerr-key.json', JSON.stringify({ apiKey: main.apiKey }));
+  await writeFile(artifactPath('seerr-key.json'), JSON.stringify({ apiKey: main.apiKey }));
   const headers = { 'X-Api-Key': main.apiKey };
   await json('http://seerr:5055', '/api/v1/settings/main', {
     method: 'POST',
@@ -367,7 +368,7 @@ try {
     assert.equal(file.mediaInfo.audioCodec, expected.files.audioCodec, file.path);
     assert.equal(file.mediaInfo.audioLanguages, 'jpn', file.path);
   }
-  await writeFile('/artifacts/expected-library.json', JSON.stringify(expected, null, 2) + '\n');
+  await writeFile(artifactPath('expected-library.json'), JSON.stringify(expected, null, 2) + '\n');
   console.log('Real video/audio files indexed in Sonarr and Radarr');
   status.media = {
     seriesTitle: series.title,
@@ -378,7 +379,7 @@ try {
     secondMovieId: secondMovie.id,
     secondSeriesId: secondSeries.id,
   };
-  await writeFile('/artifacts/baseline.json', JSON.stringify(status.media, null, 2));
+  await writeFile(artifactPath('baseline.json'), JSON.stringify(status.media, null, 2));
 } finally {
-  await writeFile('/artifacts/bootstrap-status.json', JSON.stringify(status, null, 2));
+  await writeFile(artifactPath('bootstrap-status.json'), JSON.stringify(status, null, 2));
 }

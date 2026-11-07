@@ -11,7 +11,6 @@ for (const [key, value] of Object.entries(invocation.env)) {
   if (!key.startsWith('E2E_') || typeof value !== 'string') throw new Error('Invalid invocation environment');
   env[key] = value;
 }
-if (env.E2E_RUNNER_IMAGE !== `${invocation.project}-runner`) throw new Error('Runner image does not belong to this E2E project');
 await execute(
   'docker',
   [
@@ -28,6 +27,7 @@ await execute(
   ],
   { env },
 );
-const images = [env.E2E_RUNNER_IMAGE];
+const images = [];
+if (env.E2E_RUNNER_IMAGE === `${invocation.project}-runner`) images.push(env.E2E_RUNNER_IMAGE);
 if (env.E2E_APP_IMAGE === `${invocation.project}-app`) images.push(env.E2E_APP_IMAGE);
-await execute('docker', ['image', 'rm', ...images], { env, capture: true }).catch(() => {});
+if (images.length) await execute('docker', ['image', 'rm', ...images], { env, capture: true }).catch(() => {});

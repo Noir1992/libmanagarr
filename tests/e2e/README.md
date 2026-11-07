@@ -21,12 +21,13 @@ npm run e2e -- --suite full
 npm run e2e -- --scenario E12
 ```
 
-The last command builds the current app image and the runner. The browser and the
+The E2E commands build the current app image and the runner. The browser and the
 system libraries are part of the runner; a local browser installation is not
 required. `E2E_APP_IMAGE` passes an already built local verification image
 (PowerShell: `$env:E2E_APP_IMAGE='libmanagarr:e2e'`, Linux:
 `E2E_APP_IMAGE=libmanagarr:e2e npm run e2e`). That image is neither rebuilt nor
-deleted during cleanup.
+deleted during cleanup. `E2E_RUNNER_IMAGE` similarly reuses an explicitly supplied
+runner image; the caller is responsible for building it from the current test sources.
 
 ESLint checks the TypeScript specs and fixtures as well as the JavaScript helpers
 and configurations. The specs additionally use the recommended Playwright rules;
@@ -39,17 +40,39 @@ stored without line-ending conversion so their checksums stay valid after a
 Windows checkout. The `minimatch` override keeps the transitive Glob dependency of
 the lint tooling on a patched version.
 
-Every spec gets a completely fresh stack with its own app configuration and the
-restored service baseline. One worker and one new browser context per test prevent
-competing write access. The order of the specs is not a prerequisite. The
-LibManagarr sync schedule is disabled by default. Preparation may use the regular
+Each invocation starts one isolated Docker project and restores its service baseline
+once. The runner, network and volumes stay alive until the invocation finishes.
+External services start lazily: authentication cases need only LibManagarr; Arr
+library cases need Sonarr/Radarr; request cases need Seerr and its dependencies.
+Read-only cases reuse those external processes.
+
+Before every spec, LibManagarr is stopped, its configuration, database, identity
+and caches are cleared, and it is started again. This preserves a fresh account,
+fresh settings, session isolation and clean rate limits without restarting the
+external infrastructure. There is one browser worker and a new context per test.
+The service baseline is verified through real APIs before every applicable case.
+Only the first case checks external-network isolation, since the network itself
+is reused throughout the invocation.
+
+The catalog explicitly declares `services` and `mutates`. After a writing case,
+only the changed external state is restored: Sonarr after deleting its series,
+Seerr after changing requests, and Sonarr plus media after confirming a symlink.
+The owning process is stopped before restoring SQLite and its WAL sidecars.
+Both Arr services stop before restoring the shared media tree. Other services
+keep running. The next test does not depend on the previous one's changes or on
+the catalog order. Adding a writing case requires declaring its mutated resources.
+The LibManagarr sync schedule is disabled by default. Preparation may use regular
 APIs; the user flow under test always happens in the browser.
 
 `npm run e2e` runs all 20 scenarios by default, exactly like the CI.
 `--scenario E12` or `--scenario backup-restore` selects exactly one case locally,
-with the same full reset. Unknown options, an empty selection, duplicate catalog
+with the same fresh application state and verified service baseline. Unknown options, an empty selection, duplicate catalog
 entries and missing specs fail before anything is built. The binding catalog lives
 in `scripts/scenarios.mjs`.
+
+CI runs the complete catalog in one job, using a separately cached browser-runner
+image. The tested candidate image is exported only after every scenario succeeds.
+Publishing on CI or release remains dependent on the entire E2E job succeeding.
 
 | IDs     | Coverage                                                                                          | Suite |
 | ------- | ------------------------------------------------------------------------------------------------- | ----- |
@@ -63,7 +86,7 @@ in `scripts/scenarios.mjs`.
 
 `full` contains every `core` case and is binding on PR, main and release. The 13
 cases of `--suite core` are purely an optional local selection; the CI offers no
-shortened suite. Every writing case has its own spec and fresh volumes. Two
+shortened suite. Every writing case has its own spec and declares the upstream state it modifies. Two
 account sessions are independent browser contexts. TOTP uses the exactly pinned
 OTPAuth library and real 30-second time steps; only the calendar fixes the
 browser's display time. Deleting an Arr instance has no confirmation dialog in the
@@ -88,7 +111,14 @@ never find an offer.
 
 `artifacts/lme2e-…/<ID>-<scenario>/` holds the container logs, the bootstrap
 status, the HTML and JUnit report and, on browser errors, the screenshot and the
-Playwright trace. An early build error additionally writes `failure.txt`. Example:
+Playwright trace. An early build error additionally writes `failure.txt`.
+The run-level `summary.json` includes `phases` for baseline restore, stack startup,
+baseline verification, application/service stops, state reset, browser execution
+and final teardown, including failed phases.
+Each phase prints its start and duration to the console. CI also shows phase totals
+in the job summary; these separate environment overhead from the actual
+test time. Image build times are shown by the corresponding CI build steps.
+Use `node scripts/report-timings.mjs` to print saved phase totals locally. Example:
 
 ```text
 npx playwright show-report artifacts/<run>/<scenario>/report
@@ -104,7 +134,7 @@ variables from `invocation.json` in the artifact directory. Retaining the stack 
 forbidden in CI. Every normal run removes its own containers, volumes and networks
 even after failures. Never use global prune commands.
 
-A new run is a full reset at the same time. `seeds/` contains only synthetic test
+A new invocation still gets a completely isolated project with fresh volumes. `seeds/` contains only synthetic test
 accounts and their public test passwords; they must never be used as productive
 credentials.
 

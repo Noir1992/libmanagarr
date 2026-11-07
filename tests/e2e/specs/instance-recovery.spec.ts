@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import { prepareAccount, login, instanceSettings, instanceSection, mutation, apiKey } from '../fixtures/app.js';
+import { artifactPath, prepareAccount, login, instanceSettings, instanceSection, mutation, apiKey } from '../fixtures/app.js';
 
 test('connection failure is visible and succeeds after service restart', async ({ request, page }) => {
   await prepareAccount(request);
@@ -10,7 +10,7 @@ test('connection failure is visible and succeeds after service restart', async (
   const section = instanceSection(page, 'Sonarr');
   await section.getByRole('button', { name: 'Test connection', exact: true }).click();
   await expect(section.getByText(/Connection could not be established/)).toBeVisible({ timeout: 60_000 });
-  await writeFile('/artifacts/restart-sonarr', 'ready');
+  await writeFile(artifactPath('restart-sonarr'), 'ready');
   await expect
     .poll(
       async () => {

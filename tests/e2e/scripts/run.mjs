@@ -3,6 +3,8 @@ import { resolve, join } from 'node:path';
 import { mkdir, readFile, writeFile, copyFile, access } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { execute } from './process.mjs';
+import { measurePhase } from './timing.mjs';
+import { StackSession } from './stack.mjs';
 import { validateBaseline, createBaselineManifest, seedFileNames } from './baseline.mjs';
 import { parseOptions, selectScenarios, verifyScenarioFiles } from './scenarios.mjs';
 
@@ -24,13 +26,15 @@ await verifyScenarioFiles(selected, async (spec) =>
 if (debug && process.env.CI) throw new Error('Debug retention is disabled in CI.');
 const run = `lme2e-${randomUUID().slice(0, 12)}`;
 const startedAt = Date.now();
+const phases = [];
+const phase = (name, action, scenarioId) => measurePhase(phases, name, action, scenarioId);
 const artifacts = join(root, 'artifacts', run);
 await mkdir(artifacts, { recursive: true });
 await copyFile(join(root, 'versions.json'), join(artifacts, 'versions.json'));
 const env = {
   ...process.env,
   E2E_APP_IMAGE: process.env.E2E_APP_IMAGE || `${run}-app`,
-  E2E_RUNNER_IMAGE: `${run}-runner`,
+  E2E_RUNNER_IMAGE: process.env.E2E_RUNNER_IMAGE || `${run}-runner`,
   E2E_OFFLINE: String(!bootstrap),
   E2E_ARTIFACTS: artifacts,
 };
@@ -57,23 +61,31 @@ await writeFile(
     2,
   ),
 );
+let currentArtifacts = artifacts;
+let containerArtifacts = '/artifacts';
 const composeArgs = ['compose', '-f', join(root, 'compose.yaml'), '-p', run];
 const abort = new AbortController();
 const compose = (...args) =>
   execute('docker', [...composeArgs, ...args], {
     cwd: repo,
     env,
-    logFile: join(env.E2E_ARTIFACTS, 'orchestrator.log'),
+    logFile: join(currentArtifacts, 'orchestrator.log'),
     signal: args[0] === 'down' ? undefined : abort.signal,
   });
-const helper = (...args) => compose('run', '--rm', '--no-deps', 'runner', ...args);
+const helper = (...args) =>
+  bootstrap
+    ? compose('run', '--rm', '--no-deps', '-e', `E2E_ARTIFACT_DIR=${containerArtifacts}`, 'runner', ...args)
+    : compose('exec', '-T', '-e', `E2E_ARTIFACT_DIR=${containerArtifacts}`, 'runner', ...args);
+const session = new StackSession({ compose, helper, phase });
+let offlineChecked = false;
 let failed = false;
 const completed = [];
 const timings = [];
 let active = false;
+let currentScenarioId;
 const cleanup = async () => {
   if (active) {
-    await compose('down', '--volumes', '--remove-orphans', '--timeout', '10');
+    await phase('teardown', () => compose('down', '--volumes', '--remove-orphans', '--timeout', '10'), currentScenarioId);
     active = false;
   }
 };
@@ -94,28 +106,36 @@ try {
     validateBaseline(manifest, archive, versions, { accounts, files: await readSeedFiles() });
     await copyFile(join(root, 'seeds/manifest.json'), join(artifacts, 'seed-manifest.json'));
   }
-  await execute(
-    'docker',
-    [
-      'build',
-      '-f',
-      join(root, 'Dockerfile.runner'),
-      '--build-arg',
-      `RUNNER_IMAGE=${versions.images.runner}`,
-      '-t',
-      env.E2E_RUNNER_IMAGE,
-      root,
-    ],
-    { env },
-  );
-  if (!process.env.E2E_APP_IMAGE && !bootstrap) await execute('docker', ['build', '-t', env.E2E_APP_IMAGE, repo], { env });
+  if (!process.env.E2E_RUNNER_IMAGE) {
+    await phase('runner-image-build', () =>
+      execute(
+        'docker',
+        [
+          'build',
+          '-f',
+          join(root, 'Dockerfile.runner'),
+          '--build-arg',
+          `RUNNER_IMAGE=${versions.images.runner}`,
+          '-t',
+          env.E2E_RUNNER_IMAGE,
+          root,
+        ],
+        { env },
+      ),
+    );
+  }
+  if (!process.env.E2E_APP_IMAGE && !bootstrap) {
+    await phase('app-image-build', () => execute('docker', ['build', '-t', env.E2E_APP_IMAGE, repo], { env }));
+  }
   const cases = bootstrap ? [{ id: 'bootstrap', name: 'bootstrap' }] : selected;
   for (const scenario of cases) {
     if (interrupted) throw new Error('Interrupted');
     const scenarioStartedAt = Date.now();
+    currentScenarioId = scenario.id;
     console.log(`Starting ${scenario.id}: ${scenario.name}`);
-    env.E2E_ARTIFACTS = join(artifacts, `${scenario.id}-${scenario.name}`);
-    await mkdir(env.E2E_ARTIFACTS, { recursive: true });
+    currentArtifacts = join(artifacts, `${scenario.id}-${scenario.name}`);
+    containerArtifacts = `/artifacts/${scenario.id}-${scenario.name}`;
+    await mkdir(currentArtifacts, { recursive: true });
     active = true; // Also clean up partially started stacks.
     try {
       if (bootstrap) {
@@ -123,69 +143,92 @@ try {
         await compose('up', '-d', 'sonarr', 'radarr', 'jellyfin', 'metadata', 'seerr');
         await helper('node', 'bootstrap/seed.mjs');
         await compose('stop', 'sonarr', 'radarr', 'seerr', 'jellyfin');
-        await helper('tar', '-czf', '/artifacts/baseline.tar.gz', '-C', '/', 'state', 'media', 'certs');
-        await copyFile(join(env.E2E_ARTIFACTS, 'baseline.tar.gz'), join(root, 'seeds/baseline.tar.gz'));
-        await copyFile(join(env.E2E_ARTIFACTS, 'baseline.json'), join(root, 'seeds/baseline.json'));
-        await copyFile(join(env.E2E_ARTIFACTS, 'seerr-key.json'), join(root, 'seeds/seerr-key.json'));
-        await copyFile(join(env.E2E_ARTIFACTS, 'expected-library.json'), join(root, 'seeds/expected-library.json'));
+        await helper('tar', '-czf', `${containerArtifacts}/baseline.tar.gz`, '-C', '/', 'state', 'media', 'certs');
+        await copyFile(join(currentArtifacts, 'baseline.tar.gz'), join(root, 'seeds/baseline.tar.gz'));
+        await copyFile(join(currentArtifacts, 'baseline.json'), join(root, 'seeds/baseline.json'));
+        await copyFile(join(currentArtifacts, 'seerr-key.json'), join(root, 'seeds/seerr-key.json'));
+        await copyFile(join(currentArtifacts, 'expected-library.json'), join(root, 'seeds/expected-library.json'));
         const archive = await readFile(join(root, 'seeds/baseline.tar.gz'));
         await writeFile(
           join(root, 'seeds/manifest.json'),
           JSON.stringify(createBaselineManifest(archive, versions, accounts, await readSeedFiles()), null, 2) + '\n',
         );
       } else {
-        await helper('tar', '-xzf', 'seeds/baseline.tar.gz', '-C', '/');
-        await compose('up', '-d', 'sonarr', 'radarr', 'seerr', 'jellyfin', 'metadata', 'app');
+        await session.prepare(scenario);
         if (options.failAfterStart) throw new Error('Intentional E2E lifecycle failure after stack startup');
-        await helper('node', 'bootstrap/verify.mjs');
-        if (scenario.recovery) {
-          const { service, stopBeforeTest } = scenario.recovery;
-          if (stopBeforeTest) await compose('stop', service);
-          // The browser test writes a marker after displaying the failure. Only the host controls Docker.
-          const test = helper('npx', 'playwright', 'test', scenario.spec);
-          let settled = false;
-          const result = test
-            .finally(() => {
-              settled = true;
-            })
-            .then(
-              () => null,
-              (error) => error,
-            );
-          const checkpoint = async (name) => {
-            const deadline = Date.now() + 120_000;
-            while (true) {
-              if (
-                await access(join(env.E2E_ARTIFACTS, name)).then(
-                  () => true,
-                  () => false,
-                )
-              )
-                return;
-              if (settled) throw (await result) ?? new Error(`Test exited before ${name}`);
-              if (Date.now() > deadline || interrupted) throw new Error(`Browser did not reach ${name}`);
-              await new Promise((resolve) => setTimeout(resolve, 500));
-            }
-          };
-          if (!stopBeforeTest) {
-            await checkpoint(`stop-${service}`);
-            await compose('stop', service);
-            await writeFile(join(env.E2E_ARTIFACTS, `${service}-stopped`), 'ready');
-          }
-          await checkpoint(`restart-${service}`);
-          await compose('start', service);
-          const error = await result;
-          if (error) throw error;
-        } else await helper('npx', 'playwright', 'test', scenario.spec);
+        await phase(
+          'baseline-verification',
+          () =>
+            helper(
+              'node',
+              'bootstrap/verify.mjs',
+              `--services=${scenario.services.join(',')}`,
+              ...(!offlineChecked ? ['--check-offline'] : []),
+            ),
+          scenario.id,
+        );
+        offlineChecked = true;
+        session.markMutations(scenario);
+        await phase(
+          'browser-test',
+          async () => {
+            if (scenario.recovery) {
+              const { service, stopBeforeTest } = scenario.recovery;
+              if (stopBeforeTest) await compose('stop', service);
+              // The browser test writes a marker after displaying the failure. Only the host controls Docker.
+              const test = helper('npx', 'playwright', 'test', scenario.spec);
+              let settled = false;
+              const result = test
+                .finally(() => {
+                  settled = true;
+                })
+                .then(
+                  () => null,
+                  (error) => error,
+                );
+              const checkpoint = async (name) => {
+                const deadline = Date.now() + 120_000;
+                while (true) {
+                  if (
+                    await access(join(currentArtifacts, name)).then(
+                      () => true,
+                      () => false,
+                    )
+                  )
+                    return;
+                  if (settled) throw (await result) ?? new Error(`Test exited before ${name}`);
+                  if (Date.now() > deadline || interrupted) throw new Error(`Browser did not reach ${name}`);
+                  await new Promise((resolve) => setTimeout(resolve, 500));
+                }
+              };
+              if (!stopBeforeTest) {
+                await checkpoint(`stop-${service}`);
+                await compose('stop', service);
+                await writeFile(join(currentArtifacts, `${service}-stopped`), 'ready');
+              }
+              await checkpoint(`restart-${service}`);
+              await compose('start', service);
+              const error = await result;
+              if (error) throw error;
+            } else await helper('npx', 'playwright', 'test', scenario.spec);
+          },
+          scenario.id,
+        );
       }
       completed.push(scenario.id);
     } finally {
-      const logs = await execute('docker', [...composeArgs, 'logs', '--no-color'], { cwd: repo, env, capture: true }).catch(
-        (error) => error.output ?? String(error),
+      const logs = await phase(
+        'diagnostics',
+        () =>
+          execute('docker', [...composeArgs, 'logs', '--no-color', '--since', new Date(scenarioStartedAt).toISOString()], {
+            cwd: repo,
+            env,
+            capture: true,
+          }).catch((error) => error.output ?? String(error)),
+        scenario.id,
       );
-      await writeFile(join(env.E2E_ARTIFACTS, 'containers.log'), logs);
+      await writeFile(join(currentArtifacts, 'containers.log'), logs);
     }
-    await cleanup();
     timings.push({ id: scenario.id, durationSeconds: Math.round((Date.now() - scenarioStartedAt) / 1000) });
   }
 } catch (error) {
@@ -201,8 +244,11 @@ try {
       process.exitCode ||= 1;
     });
   // Remove only images created for this invocation. Never remove an explicitly supplied app image.
-  const images = [env.E2E_RUNNER_IMAGE, ...(!process.env.E2E_APP_IMAGE && !bootstrap ? [env.E2E_APP_IMAGE] : [])];
-  if (!(debug && failed)) await execute('docker', ['image', 'rm', ...images], { env, capture: true }).catch(() => {});
+  const images = [
+    ...(!process.env.E2E_RUNNER_IMAGE ? [env.E2E_RUNNER_IMAGE] : []),
+    ...(!process.env.E2E_APP_IMAGE && !bootstrap ? [env.E2E_APP_IMAGE] : []),
+  ];
+  if (images.length && !(debug && failed)) await execute('docker', ['image', 'rm', ...images], { env, capture: true }).catch(() => {});
   await writeFile(
     join(artifacts, 'summary.json'),
     JSON.stringify(
@@ -213,6 +259,7 @@ try {
         selected: selected.map((item) => item.id),
         completed,
         timings,
+        phases,
         failed,
         exitCode: process.exitCode ?? 0,
         durationSeconds: Math.round((Date.now() - startedAt) / 1000),

@@ -32,6 +32,7 @@ services:
   runner:
     image: ${E2E_RUNNER_IMAGE:?Built runner required}
     init: true
+    command: ['sleep', 'infinity']
     working_dir: /work
     environment:
       E2E_BASE_URL: http://app:8080
@@ -40,6 +41,8 @@ services:
       [
         '${E2E_ARTIFACTS:?Artifact path required}:/artifacts',
         'media:/media',
+        'app-config:/app-state/config',
+        'app-data:/app-state/data',
         'sonarr-config:/state/sonarr',
         'radarr-config:/state/radarr',
         'seerr-config:/state/seerr',

@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { stat } from 'node:fs/promises';
-import { credentials } from './app.js';
+import { artifactPath, credentials } from './app.js';
 
 export const backupPassword = 'Archive-E2E-password-2026!';
 export async function backupTab(page: Page) {
@@ -16,7 +16,7 @@ export async function exportBackup(page: Page) {
   await page.getByRole('button', { name: 'Download backup', exact: true }).click();
   const download = await downloaded;
   expect(await download.failure()).toBeNull();
-  const path = '/artifacts/roundtrip.lmbak';
+  const path = artifactPath('roundtrip.lmbak');
   await download.saveAs(path);
   expect((await stat(path)).size).toBeGreaterThan(0);
   return path;
