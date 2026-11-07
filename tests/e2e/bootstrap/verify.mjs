@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
-import { arr, json, until } from './http.mjs';
+import { arr, json, until, accounts } from './http.mjs';
 
 const baseline = JSON.parse(await readFile('seeds/baseline.json'));
 const expected = JSON.parse(await readFile('seeds/expected-library.json'));
@@ -90,6 +90,18 @@ async function verifySeerr() {
   status.seerr = await until('Seerr authenticated readiness', () =>
     json('http://seerr:5055', '/api/v1/auth/me', { headers: { 'X-Api-Key': apiKey } }),
   );
+  assert.equal(status.seerr.userType, 2, 'Seerr must use a local test owner');
+  const publicSettings = await json('http://seerr:5055', '/api/v1/settings/public');
+  assert.equal(publicSettings.initialized, true, 'The seeded Seerr instance must have completed setup');
+  const main = await json('http://seerr:5055', '/api/v1/settings/main', { headers: { 'X-Api-Key': apiKey } });
+  assert.equal(main.mediaServerType, 4, 'No media server may be configured');
+  assert.equal(main.mediaServerLogin, false);
+  assert.equal(main.localLogin, true);
+  const login = await json('http://seerr:5055', '/api/v1/auth/local', {
+    method: 'POST',
+    body: { email: accounts.administrator.email, password: accounts.administrator.password },
+  });
+  assert.equal(login.id, status.seerr.id, 'Local password login must authenticate the test owner');
   const requests = await json('http://seerr:5055', '/api/v1/request?take=10', { headers: { 'X-Api-Key': apiKey } });
   assert.equal(requests.results.length, 1);
   assert.equal(requests.results[0].status, 1);

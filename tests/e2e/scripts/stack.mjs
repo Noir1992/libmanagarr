@@ -1,7 +1,6 @@
 export function requiredServices(scenario) {
   const services = new Set(scenario.services);
   if (services.has('seerr')) {
-    services.add('jellyfin');
     services.add('metadata');
   }
   return [...services];

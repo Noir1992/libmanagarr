@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { createBaselineManifest, validateBaseline } from './baseline.mjs';
 
 function fixture() {
@@ -63,4 +64,17 @@ test('accepts equivalent version metadata with a different key order', () => {
   const { manifest, archive, versions, contract } = fixture();
   const reordered = { images: versions.images, seedVersion: versions.seedVersion };
   assert.doesNotThrow(() => validateBaseline(manifest, archive, reordered, contract));
+});
+
+test('committed baseline matches the service images and local test-account contract', async () => {
+  const read = (name) => readFile(new URL(`../${name}`, import.meta.url));
+  const versions = JSON.parse(await read('versions.json'));
+  const accounts = JSON.parse(await read('fixtures/accounts.json'));
+  assert.deepEqual(Object.keys(versions.images).sort(), ['radarr', 'runner', 'seerr', 'sonarr']);
+  assert.deepEqual(accounts.administrator.services, ['libmanagarr', 'seerr']);
+  const names = ['baseline.json', 'seerr-key.json', 'expected-library.json'];
+  const files = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await read(`seeds/${name}`)])));
+  const manifest = JSON.parse(await read('seeds/manifest.json'));
+  const archive = await read('seeds/baseline.tar.gz');
+  assert.doesNotThrow(() => validateBaseline(manifest, archive, versions, { accounts, files }));
 });

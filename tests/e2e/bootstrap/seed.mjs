@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { basename, join } from 'node:path';
 const artifactPath = (name) => join(process.env.E2E_ARTIFACT_DIR ?? '/artifacts', name);
 import assert from 'node:assert/strict';
-import { arr, json, until, credentials, accounts } from './http.mjs';
+import { arr, json, until, accounts } from './http.mjs';
 
 const versions = JSON.parse(await readFile(new URL('../versions.json', import.meta.url)));
 
@@ -30,37 +30,7 @@ try {
     const root = service === 'sonarr' ? '/media/serien' : '/media/movies';
     await arr(service, '/rootfolder', { method: 'POST', body: { path: root } });
   }
-  await until('Jellyfin readiness', () => json('http://jellyfin:8096', '/Startup/Configuration'));
-  await json('http://jellyfin:8096', '/Startup/Configuration', {
-    method: 'POST',
-    body: { UICulture: 'en-US', MetadataCountryCode: 'US', PreferredMetadataLanguage: 'en' },
-  });
-  await json('http://jellyfin:8096', '/Startup/User');
-  await json('http://jellyfin:8096', '/Startup/User', {
-    method: 'POST',
-    body: { Name: credentials.username, Password: credentials.password },
-  });
-  await json('http://jellyfin:8096', '/Startup/RemoteAccess', {
-    method: 'POST',
-    body: { EnableRemoteAccess: true, EnableAutomaticPortMapping: false },
-  });
-  await json('http://jellyfin:8096', '/Startup/Complete', { method: 'POST' });
   await until('Seerr readiness', () => json('http://seerr:5055', '/api/v1/settings/public'));
-  const login = await fetch('http://seerr:5055/api/v1/auth/jellyfin', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ...credentials,
-      hostname: 'jellyfin',
-      port: 8096,
-      useSsl: false,
-      urlBase: '',
-      serverType: 2,
-      email: accounts.administrator.email,
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!login.ok) throw new Error(`Seerr onboarding: ${login.status} ${await login.text()}`);
   // Read the generated test key after normal onboarding, as a human would from settings.
   const { main } = JSON.parse(await readFile('/state/seerr/settings.json', 'utf8'));
   await writeFile(artifactPath('seerr-key.json'), JSON.stringify({ apiKey: main.apiKey }));
@@ -68,10 +38,23 @@ try {
   await json('http://seerr:5055', '/api/v1/settings/main', {
     method: 'POST',
     headers,
-    body: { initialized: true, defaultPermissions: accounts.requester.permissions },
+    body: {
+      defaultPermissions: accounts.requester.permissions,
+      localLogin: true,
+      mediaServerLogin: false,
+      newPlexLogin: false,
+      mediaServerType: 4,
+    },
   });
+  await json('http://seerr:5055', '/api/v1/settings/initialize', { method: 'POST', headers, body: {} });
   status.seerrUser = await json('http://seerr:5055', '/api/v1/auth/me', { headers });
-  console.log('Jellyfin and Seerr onboarded using synthetic accounts');
+  assert.equal(status.seerrUser.userType, 2, 'The Seerr owner must be a local user');
+  const login = await json('http://seerr:5055', '/api/v1/auth/local', {
+    method: 'POST',
+    body: { email: accounts.administrator.email, password: accounts.administrator.password },
+  });
+  assert.equal(login.id, status.seerrUser.id);
+  console.log('Seerr initialized with a local test owner and API key');
   // A separate non-admin requester keeps the request pending and never dispatches a download.
   const user = await json('http://seerr:5055', '/api/v1/user', {
     method: 'POST',

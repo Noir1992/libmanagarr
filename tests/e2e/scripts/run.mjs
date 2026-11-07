@@ -38,7 +38,7 @@ const env = {
   E2E_OFFLINE: String(!bootstrap),
   E2E_ARTIFACTS: artifacts,
 };
-for (const service of ['sonarr', 'radarr', 'seerr', 'jellyfin']) env[`E2E_${service.toUpperCase()}_IMAGE`] = versions.images[service];
+for (const service of ['sonarr', 'radarr', 'seerr']) env[`E2E_${service.toUpperCase()}_IMAGE`] = versions.images[service];
 await writeFile(
   join(artifacts, 'invocation.json'),
   JSON.stringify(
@@ -53,7 +53,6 @@ await writeFile(
           'E2E_SONARR_IMAGE',
           'E2E_RADARR_IMAGE',
           'E2E_SEERR_IMAGE',
-          'E2E_JELLYFIN_IMAGE',
         ].map((key) => [key, env[key]]),
       ),
     },
@@ -140,9 +139,21 @@ try {
     try {
       if (bootstrap) {
         await helper('node', 'bootstrap/init.mjs');
-        await compose('up', '-d', 'sonarr', 'radarr', 'jellyfin', 'metadata', 'seerr');
+        await compose('up', '-d', 'sonarr', 'radarr', 'metadata', 'seerr');
+        await compose(
+          'exec',
+          '-T',
+          '-w',
+          '/app',
+          'seerr',
+          'node',
+          '--input-type=module',
+          '--eval',
+          await readFile(join(root, 'bootstrap/seerr-local-admin.mjs'), 'utf8'),
+          JSON.stringify(accounts.administrator),
+        );
         await helper('node', 'bootstrap/seed.mjs');
-        await compose('stop', 'sonarr', 'radarr', 'seerr', 'jellyfin');
+        await compose('stop', 'sonarr', 'radarr', 'seerr');
         await helper('tar', '-czf', `${containerArtifacts}/baseline.tar.gz`, '-C', '/', 'state', 'media', 'certs');
         await copyFile(join(currentArtifacts, 'baseline.tar.gz'), join(root, 'seeds/baseline.tar.gz'));
         await copyFile(join(currentArtifacts, 'baseline.json'), join(root, 'seeds/baseline.json'));

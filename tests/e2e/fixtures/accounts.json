@@ -3,7 +3,7 @@
     "username": "e2e-admin",
     "password": "E2e-test-password-2026!",
     "email": "admin@example.test",
-    "services": ["libmanagarr", "jellyfin", "seerr"]
+    "services": ["libmanagarr", "seerr"]
   },
   "requester": {
     "username": "e2e-requester",

@@ -1,7 +1,7 @@
 # Browser E2E
 
 The suite tests the combined LibManagarr image with Chromium against real Sonarr,
-Radarr, Seerr and Jellyfin containers. Productive configurations, host media
+Radarr and Seerr containers. Productive configurations, host media
 directories, indexers and downloaders are never used.
 
 ## Running locally (Windows and Linux)
@@ -152,7 +152,8 @@ npm run e2e -- --suite full
 ```
 
 Only `bootstrap` needs live metadata for the series and the library films. It
-creates empty configurations, sets up Jellyfin and Seerr through their APIs,
+creates empty configurations, seeds a local Seerr owner with the pinned image's
+user model, and configures Seerr through its API. It then
 creates four short colour videos with FFmpeg and lets Arr scan them. No
 copyrighted video material is downloaded. The external series and film identity
 lives in `versions.json`; internal ids are derived from the responses. One special
@@ -172,7 +173,7 @@ expectations for titles, external ids, monitoring, file status, filter counts,
 imported technical properties and calendar dates. Bootstrap and the browser tests
 read the same synthetic credentials. Different accounts or changed seed companion
 files fail the run before the services start. The app account is created only in
-the respective test; the Jellyfin and Seerr accounts come from the baseline. Never
+the respective test; the local Seerr accounts come from the baseline. Never
 copy a running database or use productive backups as a seed. Image changes require
 a new baseline and two independent offline verification runs. Version the archive,
 the manifest, the media description and the test key together. If the archives keep
@@ -185,7 +186,7 @@ References: [Sonarr OpenAPI](https://github.com/Sonarr/Sonarr/blob/develop/src/S
 [Playwright Docker](https://playwright.dev/docs/docker).
 
 The current baseline was created with Sonarr 4.0.20.3014, Radarr 6.4.4.10685,
-Seerr 3.0.1 and Jellyfin 10.11.6. It contains Kabaneri (TVDB 305082, special
+Seerr 3.0.1 without an external media server. It contains Kabaneri (TVDB 305082, special
 S00E01 in 1080p and regular episode S01E01 in 720p), Death Note (TVDB 79481,
 without files), Spirited Away (TMDB 129, 1080p), My Neighbor Totoro (TMDB 8392,
 without a file), Death Note Relight 1: Visions of a God (TMDB 51482, 1080p) and
@@ -264,3 +265,11 @@ count from the seed instead.
 
 Also add the `E2E tests` status as a required check in the GitHub branch rules.
 Workflow files cannot enable this repository merge protection themselves.
+
+The version 3 baseline keeps the existing Arr identities and synthetic media while
+using only local Seerr users. No media server is configured, external media-server
+login is disabled, and the archived owner has a real local password. Readiness
+checks verify both API-key access and local email/password login. Fresh bootstrap
+creates this owner with Seerr's own user model after its migrations finish; the
+normal local-login endpoint authenticates an existing owner but does not create
+the first user.

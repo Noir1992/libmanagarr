@@ -1,4 +1,4 @@
-// The only simulated boundary is TMDB. Arr, Seerr, Jellyfin and LibManagarr remain real.
+// The only simulated boundary is TMDB. Arr, Seerr and LibManagarr remain real.
 // Unknown endpoints fail closed so additions cannot silently receive invented metadata.
 import https from 'node:https';
 import { readFileSync } from 'node:fs';

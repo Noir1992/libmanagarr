@@ -10,7 +10,7 @@ function fixture() {
   const starts = new Map();
   const compose = async (...args) => {
     calls.push(['compose', ...args]);
-    const services = args.filter((arg) => ['app', 'runner', 'sonarr', 'radarr', 'seerr', 'metadata', 'jellyfin'].includes(arg));
+    const services = args.filter((arg) => ['app', 'runner', 'sonarr', 'radarr', 'seerr', 'metadata'].includes(arg));
     for (const service of services) {
       if (args[0] === 'stop') running.delete(service);
       if (args[0] === 'up') {
@@ -73,14 +73,13 @@ test('deleting the upstream library restores only Sonarr before later library te
   );
 });
 
-test('request mutations restore Seerr without restarting Jellyfin or metadata', async () => {
+test('request mutations restore Seerr without restarting metadata', async () => {
   const { session, calls, starts } = fixture();
   await session.prepare(scenario('S03'));
   session.markMutations(scenario('S03'));
   await session.prepare(scenario('E08'));
   assert.ok(calls.some((call) => call.includes('bootstrap/reset.mjs') && call.includes('seerr')));
   assert.equal(starts.get('seerr'), 2);
-  assert.equal(starts.get('jellyfin'), 1);
   assert.equal(starts.get('metadata'), 1);
   assert.equal(starts.has('sonarr'), false);
   assert.equal(starts.has('radarr'), false);
@@ -110,7 +109,6 @@ test('the complete catalog restores the full baseline once and keeps external st
   assert.equal(starts.get('sonarr'), 3);
   assert.equal(starts.get('radarr'), 2);
   assert.equal(starts.get('seerr'), 3);
-  assert.equal(starts.get('jellyfin'), 1);
   assert.equal(starts.get('metadata'), 1);
 });
 
@@ -120,4 +118,10 @@ test('all single cases start independently', async () => {
     await session.prepare(item);
     for (const service of requiredServices(item)) assert.equal(running.has(service), true);
   }
+});
+
+test('Seerr scenarios need only Seerr and its metadata boundary', () => {
+  assert.deepEqual(requiredServices(scenario('S03')).sort(), ['metadata', 'seerr']);
+  assert.deepEqual(requiredServices(scenario('E08')).sort(), ['metadata', 'seerr']);
+  assert.deepEqual(requiredServices(scenario('E09')).sort(), ['metadata', 'seerr']);
 });

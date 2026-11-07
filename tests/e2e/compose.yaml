@@ -25,10 +25,6 @@ services:
       NODE_EXTRA_CA_CERTS: /certs/metadata.crt
     volumes: ['seerr-config:/app/config', 'certs:/certs:ro']
     networks: [test]
-  jellyfin:
-    image: ${E2E_JELLYFIN_IMAGE:?Pinned image required}
-    volumes: ['jellyfin-config:/config', 'jellyfin-cache:/cache']
-    networks: [test]
   runner:
     image: ${E2E_RUNNER_IMAGE:?Built runner required}
     init: true
@@ -46,7 +42,6 @@ services:
         'sonarr-config:/state/sonarr',
         'radarr-config:/state/radarr',
         'seerr-config:/state/seerr',
-        'jellyfin-config:/state/jellyfin',
         'certs:/certs',
       ]
     networks: [test]
@@ -64,8 +59,6 @@ volumes:
   sonarr-config:
   radarr-config:
   seerr-config:
-  jellyfin-config:
-  jellyfin-cache:
   certs:
   media:
 networks:
