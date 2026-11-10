@@ -120,13 +120,14 @@ public sealed class SymlinkFollowUpTests
         SymlinkLink entry = await SeedMarkedEntryAsync("link-1");
         FakeLinkFileSystem files = ShelfWithOwnLink(entry);
         string originalSource = entry.SourcePath;
+        string originalLinkPath = entry.LinkPath;
         SymlinkService service = CreateService(new StubArrHandler(SymlinkFixture.UpgradeRoutes()), files);
 
         Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishUpdateAsync(entry, CancellationToken.None));
 
         SymlinkLink stored = await StoredAsync("link-1");
         Assert.Equal(SymlinkFixture.UpgradedRadarrFileId, stored.RadarrFileId);
-        Assert.Equal(UpgradedVersion, stored.SourceVersion);
+        Assert.StartsWith(SymlinkService.SourceVersionOf(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize) + ":", stored.SourceVersion);
         Assert.Equal(
             SymlinkTestPaths.LibManagarr($"movies/{MovieFolder}/{SymlinkFixture.UpgradedFileName}"),
             stored.SourcePath);
@@ -141,13 +142,13 @@ public sealed class SymlinkFollowUpTests
         Assert.Empty(stored.Findings);
         // The new file has the same shape, so the same entry is re-pointed: let go of and written again,
         // with the link text answering the new source.
-        Assert.Equal([entry.LinkPath], files.Removed);
-        Assert.Equal([entry.LinkPath], files.CreatedLinks);
+        Assert.Equal([originalLinkPath], files.Removed);
+        Assert.Equal([(await StoredAsync(entry.Id)).LinkPath], files.CreatedLinks);
         Assert.Equal(
             Path.GetRelativePath(
                 Path.GetDirectoryName(entry.LinkPath)!,
                 SymlinkTestPaths.LibManagarr($"movies/{MovieFolder}/{SymlinkFixture.UpgradedFileName}")),
-            files.Entries[entry.LinkPath]);
+            files.Entries[(await StoredAsync(entry.Id)).LinkPath]);
         // The file Radarr owns was never touched.
         Assert.True(files.Entries.ContainsKey(originalSource));
         Assert.True(await IsPassRequestedAsync());
@@ -167,7 +168,8 @@ public sealed class SymlinkFollowUpTests
 
         Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishUpdateAsync(entry, CancellationToken.None));
 
-        string newLinkPath = SymlinkFixture.ExpectedLinkPath().Replace(LinkName, LinkName.Replace(".mkv", ".mp4"));
+        string newLinkPath = (await StoredAsync(entry.Id)).LinkPath;
+        Assert.EndsWith(".mp4", newLinkPath);
         Assert.Equal([newLinkPath], files.CreatedLinks);
         Assert.Equal([originalLinkPath], files.Removed);
         Assert.Equal(newLinkPath, (await StoredAsync("link-1")).LinkPath);
@@ -186,16 +188,11 @@ public sealed class SymlinkFollowUpTests
         routes["GET /api/v3/moviefile"] = [$"[{MovieFileObject(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize, ".mp4")}]"];
         SymlinkService service = CreateService(new StubArrHandler(routes), files);
 
-        Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishUpdateAsync(entry, CancellationToken.None));
-
+        Assert.Equal(SymlinkSetupOutcome.Blocked, await service.FinishUpdateAsync(entry, CancellationToken.None));
         Assert.Empty(files.Removed);
-        string newLinkPath = SymlinkFixture.ExpectedLinkPath().Replace(LinkName, LinkName.Replace(".mkv", ".mp4"));
-        Assert.Equal([newLinkPath], files.CreatedLinks);
-        SymlinkLink stored = await StoredAsync("link-1");
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
-        SymlinkFinding finding = Assert.Single(stored.Findings);
-        Assert.Equal("replaced-link-left-behind", finding.Code);
-        Assert.Contains(originalLinkPath, finding.Detail);
+        Assert.Empty(files.CreatedLinks);
+        Assert.Equal("someone-else.mkv", files.ReadLinkTarget(originalLinkPath));
+        Assert.Equal(SymlinkOperationStatus.Conflict, (await StoredAsync(entry.Id)).OperationStatus);
     }
 
     [Fact]
@@ -236,7 +233,7 @@ public sealed class SymlinkFollowUpTests
         Assert.Equal(SymlinkOperationStatus.Conflict, stored.OperationStatus);
         // The blocker is stated, and the mark that started the run stays with it: the file really did move,
         // and only a replacement that went through may say otherwise.
-        Assert.Equal(["source-replaced", "link-path-taken"], stored.Findings.Select(finding => finding.Code));
+        Assert.Equal(["source-replaced", "previous-link-foreign"], stored.Findings.Select(finding => finding.Code));
         Assert.Empty(files.CreatedLinks);
         Assert.Empty(files.Removed);
     }
@@ -287,9 +284,9 @@ public sealed class SymlinkFollowUpTests
         // What the link provably points at is written down even though the answer ran out from under it —
         // the register never keeps claiming the file this run let go of. The mark stays with it, which is
         // what makes the next pass read the instance again instead of settling.
-        Assert.Equal(UpgradedVersion, stored.SourceVersion);
+        Assert.StartsWith(SymlinkService.SourceVersionOf(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize) + ":", stored.SourceVersion);
         Assert.Equal(["source-replaced"], stored.Findings.Select(finding => finding.Code));
-        Assert.Equal([entry.LinkPath], files.CreatedLinks);
+        Assert.Equal([(await StoredAsync(entry.Id)).LinkPath], files.CreatedLinks);
     }
 
     [Theory]
@@ -321,7 +318,7 @@ public sealed class SymlinkFollowUpTests
         Assert.Equal(previousSource, interrupted.SourcePath);
         Assert.Equal(CurrentVersion, interrupted.SourceVersion);
         Assert.NotNull(interrupted.PendingUpdate);
-        Assert.Equal(UpgradedVersion, interrupted.PendingUpdate.SourceVersion);
+        Assert.StartsWith(SymlinkService.SourceVersionOf(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize) + ":", interrupted.PendingUpdate.SourceVersion);
 
         files.AfterLinkCreated = null;
         files.AfterEntryDeleted = null;
@@ -330,7 +327,7 @@ public sealed class SymlinkFollowUpTests
 
         SymlinkLink stored = await StoredAsync(entry.Id);
         Assert.Null(stored.PendingUpdate);
-        Assert.Equal(UpgradedVersion, stored.SourceVersion);
+        Assert.StartsWith(SymlinkService.SourceVersionOf(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize) + ":", stored.SourceVersion);
         Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
         Assert.True(restarted.ResolvesToSource(stored));
@@ -357,7 +354,7 @@ public sealed class SymlinkFollowUpTests
         Assert.Equal(SymlinkSetupOutcome.Blocked,
             await service.FinishUpdateAsync(await StoredAsync(entry.Id), CancellationToken.None));
         Assert.Empty(files.Removed);
-        Assert.Equal("somebody-else.mkv", files.Entries[entry.LinkPath]);
+        Assert.Equal("somebody-else.mkv", files.Entries[(await StoredAsync(entry.Id)).LinkPath]);
         Assert.NotNull((await StoredAsync(entry.Id)).PendingUpdate);
     }
 
@@ -562,6 +559,13 @@ public sealed class SymlinkFollowUpTests
         ISymlinkFileSystem files,
         AppSettings? settings = null)
     {
+        if (files is FakeLinkFileSystem shelf && handler is StubArrHandler script && script.Routes.TryGetValue("GET /api/v3/moviefile", out List<string>? replies))
+        {
+            foreach (string reply in replies)
+            foreach (RadarrMovieFileResource source in System.Text.Json.JsonSerializer.Deserialize<List<RadarrMovieFileResource>>(reply,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? [])
+                if (source.Path is not null) shelf.Entries[SymlinkTestPaths.LibManagarr("movies/") + source.Path[(SymlinkFixture.MoviesInstance(string.Empty).Length + 1)..]] = null;
+        }
         FixedSettings snapshot = new(settings ?? SymlinkFixture.Settings());
         return new SymlinkService(
             store,

@@ -20,7 +20,7 @@ public sealed class SqliteSymlinkStore(
         operation_status,setup_step,suggestion_id,sonarr_file_id,sonarr_scan_command_id,monitoring_original,
         monitoring_disabled,auto_follow_up,desired_filename,applied_filename,naming_revision,source_version,
         update_revision,expected_metadata,confirmed_metadata,created_at,updated_at,last_checked_at,
-        last_successful_check_at,findings,sonarr_rename_command_id,pending_update
+        last_successful_check_at,findings,sonarr_rename_command_id,pending_update,naming_move
         """;
 
     /// <summary>
@@ -61,7 +61,7 @@ public sealed class SqliteSymlinkStore(
         await InitializeAsync(cancellationToken);
         await using SqliteConnection connection = await OpenAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT storage_area_id,status,detail,checked_at,config_revision FROM symlink_capability_checks WHERE storage_area_id=$id";
+        command.CommandText = "SELECT storage_area_id,status,detail,checked_at,config_revision,process_id FROM symlink_capability_checks WHERE storage_area_id=$id";
         command.Parameters.AddWithValue("$id", storageAreaId);
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadCapability(reader) : null;
@@ -72,7 +72,7 @@ public sealed class SqliteSymlinkStore(
         await InitializeAsync(cancellationToken);
         await using SqliteConnection connection = await OpenAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT storage_area_id,status,detail,checked_at,config_revision FROM symlink_capability_checks ORDER BY storage_area_id";
+        command.CommandText = "SELECT storage_area_id,status,detail,checked_at,config_revision,process_id FROM symlink_capability_checks ORDER BY storage_area_id";
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
         List<SymlinkCapabilityCheck> result = [];
         while (await reader.ReadAsync(cancellationToken)) result.Add(ReadCapability(reader));
@@ -89,9 +89,9 @@ public sealed class SqliteSymlinkStore(
             await using SqliteConnection connection = await OpenAsync(cancellationToken);
             using SqliteCommand command = connection.CreateCommand();
             command.CommandText = """
-                INSERT INTO symlink_capability_checks (storage_area_id,status,detail,checked_at,config_revision)
-                VALUES ($id,$status,$detail,$at,$revision)
-                ON CONFLICT(storage_area_id) DO UPDATE SET status=$status,detail=$detail,checked_at=$at,config_revision=$revision
+                INSERT INTO symlink_capability_checks (storage_area_id,status,detail,checked_at,config_revision,process_id)
+                VALUES ($id,$status,$detail,$at,$revision,$process)
+                ON CONFLICT(storage_area_id) DO UPDATE SET status=$status,detail=$detail,checked_at=$at,config_revision=$revision,process_id=$process
                 """;
             command.Parameters.AddWithValue("$id", check.StorageAreaId);
             command.Parameters.AddWithValue("$status", (int)check.Status);
@@ -100,6 +100,7 @@ public sealed class SqliteSymlinkStore(
             // unknown result look as recent as a fresh one.
             command.Parameters.AddWithValue("$at", SqliteScheduledTaskStore.Timestamp(check.CheckedAt ?? clock.GetUtcNow()));
             command.Parameters.AddWithValue("$revision", check.ConfigRevision);
+            command.Parameters.AddWithValue("$process", (object?)check.ProcessId ?? DBNull.Value);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
         finally
@@ -172,7 +173,7 @@ public sealed class SqliteSymlinkStore(
                     update_revision=$update_revision,expected_metadata=$expected_metadata,confirmed_metadata=$confirmed_metadata,
                     created_at=$created_at,updated_at=$updated_at,last_checked_at=$last_checked_at,
                     last_successful_check_at=$last_successful_check_at,findings=$findings,
-                    sonarr_rename_command_id=$sonarr_rename_command_id,pending_update=$pending_update,revision=revision+1
+                    sonarr_rename_command_id=$sonarr_rename_command_id,pending_update=$pending_update,naming_move=$naming_move,revision=revision+1
                 WHERE id=$id AND revision=$expected
                 """;
             AddLinkParameters(command, link);
@@ -516,6 +517,7 @@ public sealed class SqliteSymlinkStore(
         command.Parameters.AddWithValue("$sonarr_rename_command_id", (object?)link.SonarrRenameCommandId ?? DBNull.Value);
         command.Parameters.AddWithValue("$pending_update", link.PendingUpdate is null
             ? DBNull.Value : JsonSerializer.Serialize(link.PendingUpdate, Json));
+        command.Parameters.AddWithValue("$naming_move", WriteJson(link.NamingMove));
     }
 
     private static void AddSuggestionParameters(SqliteCommand command, SymlinkSuggestion suggestion)
@@ -546,7 +548,8 @@ public sealed class SqliteSymlinkStore(
         Status = (SymlinkCapabilityStatus)reader.GetInt32(1),
         Detail = reader.IsDBNull(2) ? null : reader.GetString(2),
         CheckedAt = SqliteScheduledTaskStore.ReadTimestamp(reader, 3),
-        ConfigRevision = reader.GetInt32(4)
+        ConfigRevision = reader.GetInt32(4),
+        ProcessId = reader.IsDBNull(5) ? null : reader.GetString(5)
     };
 
     /// <summary>
@@ -594,7 +597,8 @@ public sealed class SqliteSymlinkStore(
             LastSuccessfulCheckAt = ReadNullableDate(reader, ref at),
             Findings = ReadJson<List<SymlinkFinding>>(reader, ref at) ?? [],
             SonarrRenameCommandId = ReadNullableString(reader, ref at),
-            PendingUpdate = ReadJson<SymlinkSourceUpdate>(reader, ref at)
+            PendingUpdate = ReadJson<SymlinkSourceUpdate>(reader, ref at),
+            NamingMove = ReadJson<SymlinkNameMove>(reader, ref at)
         };
     }
 

@@ -16,6 +16,9 @@ public interface ISymlinkFileSystem
     /// </summary>
     void CreateFileSymlink(string linkPath, string targetPath);
 
+    void ReplaceFileSymlink(string linkPath, string expectedLinkText, string newLinkText) =>
+        throw new NotSupportedException("This file system has no verified link replacement implementation.");
+
     /// <summary>True for any directory entry, including a link whose target is gone and an empty name.</summary>
     bool EntryExists(string path);
 

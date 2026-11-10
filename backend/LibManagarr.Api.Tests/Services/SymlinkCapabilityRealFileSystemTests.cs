@@ -74,7 +74,7 @@ public sealed class SymlinkCapabilityRealFileSystemTests : IDisposable
             $"Unexpected probe outcome: {check.Status}");
     }
 
-    [Fact]
+    [RealSymlinkFact]
     public void RealSymlinkFileSystem_KeepsTheSourceAliveWhenItsLinkIsRemoved()
     {
         RealSymlinkFileSystem files = new();
@@ -97,7 +97,7 @@ public sealed class SymlinkCapabilityRealFileSystemTests : IDisposable
         Assert.True(File.Exists(source));
     }
 
-    [Fact]
+    [RealSymlinkFact]
     public void RealSymlinkFileSystem_SeesABrokenLinkAsAnEntryAndRefusesToReadThroughIt()
     {
         RealSymlinkFileSystem files = new();
@@ -119,7 +119,7 @@ public sealed class SymlinkCapabilityRealFileSystemTests : IDisposable
         Assert.Empty(Directory.GetFileSystemEntries(SeriesRoot));
     }
 
-    [Fact]
+    [RealSymlinkFact]
     public void RealSymlinkFileSystem_RefusesToOverwriteAnExistingEntryWithALink()
     {
         RealSymlinkFileSystem files = new();
@@ -157,6 +157,7 @@ public sealed class SymlinkCapabilityRealFileSystemTests : IDisposable
         }
         catch (Exception exception) when (exception is UnauthorizedAccessException or PlatformNotSupportedException or IOException)
         {
+            if (!OperatingSystem.IsWindows()) throw;
             output.WriteLine(
                 $"This machine refuses symlink creation ({exception.GetType().Name}: {exception.Message}). " +
                 "The link semantics this test would have proven were NOT executed.");

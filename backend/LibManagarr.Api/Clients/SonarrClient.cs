@@ -9,6 +9,11 @@ namespace LibManagarr.Api.Clients;
 
 public sealed class SonarrClient(HttpClient httpClient)
 {
+    public async Task<IReadOnlyList<ArrRootFolderResource>> FetchRootFoldersAsync(
+        ArrInstanceSettings instance, CancellationToken cancellationToken) =>
+        await GetAsync<List<ArrRootFolderResource>>(instance, "/api/v3/rootfolder", cancellationToken)
+        ?? throw new HttpRequestException("Sonarr returned no root-folder response.");
+
     public async Task TestConnectionAsync(
         ArrInstanceSettings instance,
         CancellationToken cancellationToken)
@@ -47,18 +52,37 @@ public sealed class SonarrClient(HttpClient httpClient)
                ?? [];
     }
 
-    public async Task<SonarrInstanceSnapshot> FetchSnapshotAsync(
-        ArrInstanceSettings instance,
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SonarrHistoryResource>> FetchSeriesHistoryAsync(
+        ArrInstanceSettings instance, int seriesId, CancellationToken cancellationToken) =>
+        await GetAsync<List<SonarrHistoryResource>>(instance,
+            $"/api/v3/history/series?seriesId={seriesId}&includeSeries=true&includeEpisode=true", cancellationToken)
+        ?? throw new HttpRequestException("Sonarr returned no series history response.");
+
+    public Task<SonarrInstanceSnapshot> FetchSnapshotAsync(ArrInstanceSettings instance, CancellationToken cancellationToken) =>
+        FetchSnapshotCoreAsync(instance, null, cancellationToken);
+
+    public async Task<SonarrSeriesSnapshot> FetchSeriesSnapshotAsync(
+        ArrInstanceSettings instance, int seriesId, CancellationToken cancellationToken) =>
+        (await FetchSnapshotCoreAsync(instance, seriesId, cancellationToken)).Series.Single();
+
+    private async Task<SonarrInstanceSnapshot> FetchSnapshotCoreAsync(
+        ArrInstanceSettings instance, int? seriesId, CancellationToken cancellationToken)
     {
         IReadOnlyList<SonarrQualityProfileResource> profiles = await GetAsync<List<SonarrQualityProfileResource>>(
             instance,
             "/api/v3/qualityprofile",
             cancellationToken) ?? [];
-        IReadOnlyList<SonarrSeriesResource> series = await GetAsync<List<SonarrSeriesResource>>(
-            instance,
-            "/api/v3/series",
-            cancellationToken) ?? [];
+        IReadOnlyList<SonarrSeriesResource> series;
+        if (seriesId.HasValue)
+        {
+            SonarrSeriesResource? selected = await FetchSeriesAsync(instance, seriesId.Value, cancellationToken);
+            if (selected?.Id != seriesId.Value) throw new HttpRequestException("Sonarr returned no matching series.");
+            series = [selected];
+        }
+        else
+        {
+            series = await GetAsync<List<SonarrSeriesResource>>(instance, "/api/v3/series", cancellationToken) ?? [];
+        }
 
         Dictionary<int, SonarrProfileSummary> profileMap = profiles
             .Where(profile => profile.Id.HasValue)
@@ -89,11 +113,11 @@ public sealed class SonarrClient(HttpClient httpClient)
             List<SonarrEpisodeResource> episodes = await GetAsync<List<SonarrEpisodeResource>>(
                 instance,
                 $"/api/v3/episode?seriesId={seriesResource.Id}",
-                cancellationToken) ?? [];
+                cancellationToken) ?? (seriesId.HasValue ? throw new HttpRequestException("Sonarr returned no episodes response.") : []);
             List<SonarrEpisodeFileResource> episodeFiles = await GetAsync<List<SonarrEpisodeFileResource>>(
                 instance,
                 $"/api/v3/episodefile?seriesId={seriesResource.Id}",
-                cancellationToken) ?? [];
+                cancellationToken) ?? (seriesId.HasValue ? throw new HttpRequestException("Sonarr returned no episode-files response.") : []);
             Dictionary<int, SonarrEpisodeFileResource> episodeFileMap = episodeFiles
                 .Where(episodeFile => episodeFile.Id.HasValue)
                 .ToDictionary(episodeFile => episodeFile.Id!.Value);
@@ -123,6 +147,7 @@ public sealed class SonarrClient(HttpClient httpClient)
                     SeriesId = seriesResource.Id,
                     Title = seriesResource.Title,
                     TitleSlug = seriesResource.TitleSlug,
+                    Path = seriesResource.Path,
                     PosterRemoteUrl = seriesResource.GetPosterRemoteUrl(),
                     AddedAt = seriesResource.Added,
                     Status = seriesResource.Status ?? "Unknown",
@@ -191,6 +216,16 @@ public sealed class SonarrClient(HttpClient httpClient)
         CancellationToken cancellationToken) =>
         await GetAsync<SonarrEpisodeFileResource>(instance, $"/api/v3/episodefile/{episodeFileId}", cancellationToken);
 
+    /// <summary>Removes one episode-file record. The caller must already have removed and verified its owned link.</summary>
+    public async Task DeleteEpisodeFileAsync(ArrInstanceSettings instance, int episodeFileId, CancellationToken cancellationToken)
+    {
+        using HttpRequestMessage request = new(HttpMethod.Delete,
+            $"{NormalizeBaseUrl(instance.BaseUrl)}/api/v3/episodefile/{episodeFileId}");
+        request.Headers.Add("X-Api-Key", instance.ApiKey);
+        using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
+        if (response.StatusCode != System.Net.HttpStatusCode.NotFound) response.EnsureSuccessStatusCode();
+    }
+
     public async Task<IReadOnlyList<SonarrEpisodeFileResource>> FetchEpisodeFilesAsync(
         ArrInstanceSettings instance,
         int seriesId,
@@ -201,6 +236,51 @@ public sealed class SonarrClient(HttpClient httpClient)
         ArrInstanceSettings instance,
         CancellationToken cancellationToken) =>
         await GetAsync<SonarrNamingConfigResource>(instance, "/api/v3/config/naming", cancellationToken);
+
+    public async Task SetMappedEpisodeFileMetadataAsync(
+        ArrInstanceSettings instance, int fileId, SymlinkFileMetadata expected, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(expected.ReleaseGroup) && string.IsNullOrWhiteSpace(expected.Quality) && expected.Languages.Count == 0) return;
+        JsonNode document = await GetNodeAsync(instance, $"/api/v3/episodefile/{fileId}", cancellationToken)
+            ?? throw new InvalidOperationException("Sonarr returned no episode file.");
+        // Resolve identities in the destination instance; Radarr IDs have no meaning here.
+        if (!string.IsNullOrWhiteSpace(expected.Quality)
+            && !string.Equals(document["quality"]?["quality"]?["name"]?.GetValue<string>(), expected.Quality, StringComparison.OrdinalIgnoreCase))
+        {
+            JsonArray definitions = await GetNodeAsync(instance, "/api/v3/qualitydefinition", cancellationToken) as JsonArray
+                ?? throw new InvalidOperationException("Sonarr returned no quality definitions.");
+            JsonNode? quality = definitions.Select(value => value?["quality"]).SingleOrDefault(value =>
+                string.Equals(value?["name"]?.GetValue<string>(), expected.Quality, StringComparison.OrdinalIgnoreCase));
+            if (quality is null) throw new InvalidOperationException($"Sonarr has no unambiguous quality named '{expected.Quality}'.");
+            document["quality"] ??= new JsonObject();
+            document["quality"]!["quality"] = quality.DeepClone();
+        }
+        string[] currentLanguages = (document["languages"] as JsonArray ?? []).Select(value => value?["name"]?.GetValue<string>() ?? "").ToArray();
+        if (expected.QualityRevision is not null)
+        {
+            document["quality"] ??= new JsonObject();
+            document["quality"]!["revision"] = JsonSerializer.SerializeToNode(expected.QualityRevision, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        if (expected.Languages.Count > 0 && !new HashSet<string>(expected.Languages, StringComparer.OrdinalIgnoreCase).SetEquals(currentLanguages))
+        {
+            JsonArray available = await GetNodeAsync(instance, "/api/v3/language", cancellationToken) as JsonArray
+                ?? throw new InvalidOperationException("Sonarr returned no languages.");
+            JsonArray mapped = [];
+            foreach (string name in expected.Languages)
+            {
+                JsonNode? language = available.SingleOrDefault(value =>
+                    string.Equals(value?["name"]?.GetValue<string>(), name, StringComparison.OrdinalIgnoreCase));
+                if (language is null || language["id"]?.GetValue<int>() is not > 0
+                    || string.Equals(name, "Original", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Sonarr has no writable language named '{name}'.");
+                mapped.Add(language.DeepClone());
+            }
+            document["languages"] = mapped;
+        }
+        if (!string.IsNullOrWhiteSpace(expected.ReleaseGroup)) document["releaseGroup"] = expected.ReleaseGroup;
+        // The bulk endpoint supports languages as well as quality and release group.
+        await PutNodeAsync<JsonNode>(instance, "/api/v3/episodefile/bulk", new JsonArray(document), cancellationToken);
+    }
 
     /// <summary>The names Sonarr's own rules would give the files of a series, per existing episode file.</summary>
     public async Task<IReadOnlyList<SonarrRenameResource>> FetchRenameProposalsAsync(
@@ -353,6 +433,7 @@ public sealed class SonarrClient(HttpClient httpClient)
         public int? SeriesId { get; init; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        [JsonPropertyName("files")]
         public IReadOnlyList<int>? FileIds { get; init; }
     }
 
@@ -423,7 +504,9 @@ public sealed class SonarrClient(HttpClient httpClient)
             CreatedAt = episodeFile?.DateAdded,
             RelativePath = episodeFile?.RelativePath ?? episodeFile?.Path,
             Id = episodeFile?.Id,
-            Path = episodeFile?.Path
+            Path = episodeFile?.Path,
+            Quality = episodeFile?.Quality?.Quality?.Name,
+            QualityRevision = episodeFile?.Quality?.Revision
         };
     }
 

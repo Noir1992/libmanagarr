@@ -35,4 +35,8 @@ public sealed class MediaFileSnapshot
 
     /// <summary>Absolute path in the reporting instance's own view, which is what a path mapping is applied to.</summary>
     public string? Path { get; set; }
+
+    public string? SourceVersion { get; set; }
+    public string? Quality { get; set; }
+    public QualityRevisionResource? QualityRevision { get; set; }
 }

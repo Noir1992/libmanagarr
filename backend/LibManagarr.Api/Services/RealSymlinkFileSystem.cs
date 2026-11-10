@@ -12,6 +12,24 @@ public sealed class RealSymlinkFileSystem : ISymlinkFileSystem
 
     public void CreateFileSymlink(string linkPath, string targetPath) => File.CreateSymbolicLink(linkPath, targetPath);
 
+    public void ReplaceFileSymlink(string linkPath, string expectedLinkText, string newLinkText)
+    {
+        SymlinkPathGuard.CheckParents(this, linkPath);
+        string temporary = linkPath + ".libmanagarr-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            File.CreateSymbolicLink(temporary, newLinkText);
+            OpenForRead(temporary);
+            if (ReadLinkTarget(linkPath) != expectedLinkText)
+                throw new IOException("The previous link changed before replacement. Nothing was overwritten.");
+            File.Move(temporary, linkPath, overwrite: true);
+        }
+        finally
+        {
+            if (ReadLinkTarget(temporary) == newLinkText) File.Delete(temporary);
+        }
+    }
+
     public bool EntryExists(string path)
     {
         try
@@ -31,7 +49,8 @@ public sealed class RealSymlinkFileSystem : ISymlinkFileSystem
         }
     }
 
-    public bool IsSymlink(string path) => ReadLinkTarget(path) is not null;
+    public bool IsSymlink(string path) => ReadLinkTarget(path) is not null
+        || (EntryExists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0);
 
     public string? ReadLinkTarget(string path)
     {

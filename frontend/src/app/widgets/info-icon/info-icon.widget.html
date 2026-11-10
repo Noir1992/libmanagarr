@@ -1,6 +1,7 @@
 <button
   type="button"
   mat-icon-button
+  [disabled]="disabled()"
   class="material-symbols-outlined {{ size() }}"
   cdkOverlayOrigin
   #origin="cdkOverlayOrigin"
@@ -10,8 +11,12 @@
   info
 </button>
 
-<div class="info-popover-ghost" #measurePanel>
-  <p>{{ messageText() }}</p>
+<div class="info-popover-ghost" [class.info-popover--wide]="wide()" #measurePanel aria-hidden="true">
+  @if (contentTemplate(); as content) {
+    <ng-container [ngTemplateOutlet]="content" />
+  } @else {
+    <p>{{ messageText() }}</p>
+  }
 </div>
 
 <ng-template
@@ -28,12 +33,17 @@
   <div
     class="info-popover"
     role="tooltip"
+    [class.info-popover--wide]="wide()"
     [class.info-popover--right]="placement() === 'right'"
     [class.info-popover--left]="placement() === 'left'"
     [class.info-popover--below]="placement() === 'below'"
     [class.info-popover--above]="placement() === 'above'"
   >
     <span class="info-popover-arrow" aria-hidden="true" [style.top.px]="arrowTop()" [style.left.px]="arrowLeft()"></span>
-    <p>{{ messageText() }}</p>
+    @if (contentTemplate(); as content) {
+      <ng-container [ngTemplateOutlet]="content" />
+    } @else {
+      <p>{{ messageText() }}</p>
+    }
   </div>
 </ng-template>

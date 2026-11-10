@@ -13,7 +13,7 @@ test('E16: a declined pair stays declined through another sync and changes nothi
   await login(page);
   await page.goto('/symlinks');
   await page.getByRole('button', { name: 'Match again', exact: true }).click();
-  const offer = rowsOf(page, 'Offers').filter({ hasText: pair.film.title });
+  const offer = rowsOf(page, 'Suggestions').filter({ hasText: pair.film.title });
   await expect(offer).toHaveCount(1);
   await offer.getByRole('button', { name: 'Decline', exact: true }).click();
 
@@ -23,7 +23,7 @@ test('E16: a declined pair stays declined through another sync and changes nothi
   await dialog.getByRole('button', { name: 'Decline', exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  await expect(rowsOf(page, 'Offers')).toHaveCount(0);
+  await expect(rowsOf(page, 'Suggestions')).toHaveCount(0);
   const rejection = rowsOf(page, 'Rejections').filter({ hasText: pair.film.title });
   await expect(rejection).toHaveCount(1);
   await expect(rejection.getByText('Belongs to the series, not to this shelf', { exact: true })).toBeVisible();
@@ -31,7 +31,7 @@ test('E16: a declined pair stays declined through another sync and changes nothi
   // Another synchronization and another matching pass must not bring the decision back as an offer.
   await configureLibrary(request);
   await page.getByRole('button', { name: 'Match again', exact: true }).click();
-  await expect(rowsOf(page, 'Offers')).toHaveCount(0);
+  await expect(rowsOf(page, 'Suggestions')).toHaveCount(0);
   await expect(rejection).toHaveCount(1);
 
   expect(await managedLinks(request)).toHaveLength(0);

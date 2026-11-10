@@ -21,7 +21,10 @@ public sealed class SonarrSpecialIntegrationService(
     MediaPathMappingService paths,
     ISymlinkFileSystem files,
     TimeProvider clock,
-    ILogger<SonarrSpecialIntegrationService> logger)
+    ILogger<SonarrSpecialIntegrationService> logger,
+    SymlinkCapabilityService? capability = null,
+    RadarrClient? radarr = null,
+    ISnapshotSyncService? snapshotSync = null)
 {
     /// <summary>
     /// How long one queued command may hold a link before the pass says so out loud instead of waiting
@@ -37,6 +40,7 @@ public sealed class SonarrSpecialIntegrationService(
     public async Task<SymlinkSetupOutcome> RunSetupAsync(SymlinkLink link, CancellationToken cancellationToken)
     {
         AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
+        if (!snapshot.Symlinks.Enabled) return SymlinkSetupOutcome.Waiting;
         ArrInstanceSettings? instance = snapshot.SonarrInstances
             .FirstOrDefault(candidate => string.Equals(candidate.Id, link.SonarrInstanceId, StringComparison.OrdinalIgnoreCase));
         if (instance is null)
@@ -48,6 +52,16 @@ public sealed class SonarrSpecialIntegrationService(
         }
 
         SymlinkSetupStep open = link.SetupStep ?? SymlinkSetupStep.LinkCreated;
+        if (open == SymlinkSetupStep.Renamed && capability is not null)
+        {
+            SymlinkCapabilityCheck check = await capability.GetStatusAsync(link.StorageAreaId, cancellationToken);
+            if (!check.IsCurrent(snapshot.Symlinks.Revision) || check.Status != SymlinkCapabilityStatus.Available)
+            {
+                Pause(link, "capability-untested", "Run the capability test in this process before naming the link.");
+                await PersistAsync(link, cancellationToken);
+                return SymlinkSetupOutcome.Waiting;
+            }
+        }
         while (open != SymlinkSetupStep.Completed)
         {
             SymlinkSetupOutcome outcome;
@@ -199,18 +213,17 @@ public sealed class SonarrSpecialIntegrationService(
                 "This step needs the episode file the previous step found, and there is none.");
         }
 
-        // The release group is the file field this client writes: quality, languages and MediaInfo are
-        // Sonarr's own reading of the same file, and an empty Radarr value never overwrites what the
-        // instance already knows.
-        Dictionary<string, object?> fields = [];
-        if (!string.IsNullOrWhiteSpace(link.ExpectedMetadata?.ReleaseGroup))
+        if (link.ExpectedMetadata is null) return Pause(link, "metadata-unknown", "No source metadata was recorded.");
+        link.Findings.RemoveAll(value => value.Code.StartsWith("metadata-", StringComparison.Ordinal));
+        if (!await OwnsEpisodeFileAsync(link, instance, cancellationToken))
+            return Conflict(link, "sonarr-file-not-the-link", "The episode no longer owns the registered file. Nothing was written.");
+        try
         {
-            fields["releaseGroup"] = link.ExpectedMetadata!.ReleaseGroup;
+            await sonarr.SetMappedEpisodeFileMetadataAsync(instance, sonarrFileId, link.ExpectedMetadata, cancellationToken);
         }
-
-        if (fields.Count > 0)
+        catch (InvalidOperationException exception)
         {
-            await sonarr.SetEpisodeFileFieldsAsync(instance, sonarrFileId, fields, cancellationToken);
+            return Pause(link, "metadata-mapping-unavailable", exception.Message);
         }
 
         SonarrEpisodeFileResource? readBack = await sonarr.FetchEpisodeFileAsync(instance, sonarrFileId, cancellationToken);
@@ -227,29 +240,41 @@ public sealed class SonarrSpecialIntegrationService(
                 $"{instance.Name} reports release group '{readBack.ReleaseGroup ?? "nothing"}' instead of the chosen Radarr value '{link.ExpectedMetadata?.ReleaseGroup}'. That version might not allow writing the field.");
         }
 
-        link.ConfirmedMetadata = new SymlinkFileMetadata
-        {
-            Origin = "sonarr",
-            ReleaseGroup = readBack.ReleaseGroup,
-            Languages = [.. readBack.Languages?
-                .Select(language => language.Name)
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Select(name => name!) ?? []],
-            Quality = readBack.Quality?.Quality?.Name,
-            Size = readBack.Size
-        };
+        link.ConfirmedMetadata = MetadataFrom(readBack);
         // What Sonarr derived for itself and did not confirm stays visible as a finding instead of
         // silently counting as done; the health check compares the same two sides later on.
         ReportDeviations(link);
+        if (string.IsNullOrWhiteSpace(readBack.MediaInfo?.VideoCodec))
+            return Pause(link, "metadata-media-info-unknown", "Sonarr has not confirmed video MediaInfo for this file. Check that media analysis is enabled.");
+        if (link.Findings.Any(value => value.Code.StartsWith("metadata-", StringComparison.Ordinal)))
+            return Pause(link, "metadata-not-confirmed", "The file information is incomplete or differs from the selected source.");
         link.SetupStep = SymlinkSetupStep.Renamed;
         return SymlinkSetupOutcome.Completed;
     }
+
+    public static SymlinkFileMetadata MetadataFrom(SonarrEpisodeFileResource readBack) => new()
+    {
+        Origin = "sonarr",
+        ReleaseGroup = readBack.ReleaseGroup,
+        Languages = [.. readBack.Languages?
+            .Select(language => language.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!) ?? []],
+        Quality = readBack.Quality?.Quality?.Name,
+        QualityRevision = readBack.Quality?.Revision,
+        Size = readBack.Size,
+        VideoCodec = readBack.MediaInfo?.VideoCodec,
+        AudioCodec = readBack.MediaInfo?.AudioCodec,
+        Resolution = readBack.MediaInfo?.Resolution
+    };
+
 
     private async Task<SymlinkSetupOutcome> ApplySonarrNameAsync(
         SymlinkLink link,
         ArrInstanceSettings instance,
         CancellationToken cancellationToken)
     {
+        if (link.NamingMove is not null) return await FinishNameMoveAsync(link, instance, cancellationToken);
         if (link.SonarrFileId is not int sonarrFileId)
         {
             return Pause(link, "sonarr-file-missing",
@@ -260,7 +285,27 @@ public sealed class SonarrSpecialIntegrationService(
         {
             SonarrNamingConfigResource? naming = await sonarr.FetchNamingConfigAsync(instance, cancellationToken);
             SonarrRenameResource? proposal = (await sonarr.FetchRenameProposalsAsync(instance, link.SonarrSeriesId, cancellationToken))
-                .FirstOrDefault(candidate => candidate.Id == sonarrFileId);
+                .FirstOrDefault(candidate => (candidate.EpisodeFileId ?? candidate.Id) == sonarrFileId);
+
+            if (proposal?.NewPath is not null)
+            {
+                SonarrSeriesResource? series = await sonarr.FetchSeriesAsync(instance, link.SonarrSeriesId, cancellationToken);
+                if (series?.Path is null) return Pause(link, "series-path-unknown", "Sonarr returned no series path for the naming preview.");
+                char separator = ArrPathRules.Detect(series.Path) == ArrPathSyntax.Windows ? '\\' : '/';
+                string proposedPath = series.Path.TrimEnd('/', '\\') + separator + proposal.NewPath.Replace('\\', separator).Replace('/', separator);
+                PathMappingResult translated = await paths.TranslateToLibManagarrPathAsync(instance.Id, ArrApplicationKind.Sonarr, proposedPath, cancellationToken);
+                if (!translated.Success) return Conflict(link, "rename-path-invalid", translated.Failure!);
+                PathMappingResult seriesPath = await paths.TranslateToLibManagarrPathAsync(instance.Id, ArrApplicationKind.Sonarr, series.Path, cancellationToken);
+                if (!seriesPath.Success || !ArrPathRules.IsWithinRoot(seriesPath.Path!, translated.Path!))
+                    return Conflict(link, "rename-outside-series", "The rename preview leaves the selected series directory.");
+                link.DesiredFilename = FileNameOf(translated.Path!);
+                link.NamingRevision = NamingRevisionOf(naming);
+                if (!IsSamePath(link.LinkPath, translated.Path!) && files.EntryExists(translated.Path!))
+                    return Conflict(link, "rename-destination-taken", "The proposed path already contains an unregistered entry.");
+                link.NamingMove = new(link.LinkPath, translated.Path!, Path.GetRelativePath(Path.GetDirectoryName(translated.Path!)!, link.SourcePath));
+                if (!await PersistAsync(link, cancellationToken)) return SymlinkSetupOutcome.Blocked;
+                return await FinishNameMoveAsync(link, instance, cancellationToken);
+            }
 
             if (proposal?.NewFilename is null)
             {
@@ -273,33 +318,39 @@ public sealed class SonarrSpecialIntegrationService(
                     link.NamingRevision = NamingRevisionOf(naming);
                     Note(link, "renaming-disabled",
                         $"{instance.Name} has episode renaming switched off, so the link keeps the name it has. Its settings were not changed for this.");
-                    return Finished(link);
+                    return await FinishVerifiedAsync(link, cancellationToken);
                 }
 
-                return Pause(link, "rename-proposal-missing",
-                    $"{instance.Name} proposed no name for episode file {sonarrFileId} although renaming is on.");
+                if (naming?.RenameEpisodes != true || !await OwnsEpisodeFileAsync(link, instance, cancellationToken))
+                    return Pause(link, "rename-proposal-missing", "No naming evidence or matching episode file was returned.");
+                link.AppliedFilename = FileNameOf(link.LinkPath);
+                link.DesiredFilename = link.AppliedFilename;
+                link.NamingRevision = NamingRevisionOf(naming);
+                return await FinishVerifiedAsync(link, cancellationToken);
             }
 
-            if (string.Equals(proposal.Filename, proposal.NewFilename, StringComparison.Ordinal))
+            if (proposal.NewFilename.IndexOfAny(['/', '\\']) >= 0)
+                return Conflict(link, "rename-preview-unsupported", "The legacy filename preview must contain a filename only.");
+            if (string.Equals(FileNameOf(link.LinkPath), proposal.NewFilename, StringComparison.Ordinal))
             {
+                if (!await OwnsEpisodeFileAsync(link, instance, cancellationToken))
+                    return Conflict(link, "sonarr-file-not-the-link", "The episode file changed before its name could be verified.");
                 link.DesiredFilename = proposal.NewFilename;
-                return Finished(link);
+                link.AppliedFilename = FileNameOf(link.LinkPath);
+                link.NamingRevision = NamingRevisionOf(naming);
+                return await FinishVerifiedAsync(link, cancellationToken);
             }
 
-            SonarrCommandResource? queued =
-                await sonarr.StartRenameFilesAsync(instance, link.SonarrSeriesId, [sonarrFileId], cancellationToken);
-            if (queued?.Id is null)
-            {
-                return Pause(link, "rename-not-queued",
-                    $"{instance.Name} answered the rename request without a command, so nothing was renamed.");
-            }
-
-            // Asked for exactly one file, never the series: a series-wide rename would touch episodes
-            // this feature has no claim on.
+            if (!await OwnsEpisodeFileAsync(link, instance, cancellationToken))
+                return Conflict(link, "sonarr-file-not-the-link", "The episode file changed before renaming.");
             link.DesiredFilename = proposal.NewFilename;
             link.NamingRevision = NamingRevisionOf(naming);
-            link.SonarrRenameCommandId = queued.Id.Value.ToString(CultureInfo.InvariantCulture);
-            return SymlinkSetupOutcome.Waiting;
+            string destination = Path.Combine(Path.GetDirectoryName(link.LinkPath)!, proposal.NewFilename);
+            if (files.EntryExists(destination))
+                return Conflict(link, "rename-destination-taken", "The proposed path already contains an unregistered entry.");
+            link.NamingMove = new(link.LinkPath, destination, Path.GetRelativePath(Path.GetDirectoryName(destination)!, link.SourcePath));
+            if (!await PersistAsync(link, cancellationToken)) return SymlinkSetupOutcome.Blocked;
+            return await FinishNameMoveAsync(link, instance, cancellationToken);
         }
 
         SonarrCommandResource? status =
@@ -329,7 +380,7 @@ public sealed class SonarrSpecialIntegrationService(
 
         link.AppliedFilename = FileNameOf(file.Path);
         link.SonarrRenameCommandId = null;
-        return Finished(link);
+        return await FinishVerifiedAsync(link, cancellationToken);
     }
 
     /// <summary>
@@ -366,6 +417,7 @@ public sealed class SonarrSpecialIntegrationService(
         }
 
         link.LinkPath = newPath;
+        link.LinkText = linkText;
         return null;
     }
 
@@ -413,14 +465,25 @@ public sealed class SonarrSpecialIntegrationService(
                 $"{confirmed.Origin} measured {confirmed.Size} bytes while the chosen Radarr file has {expected.Size}.");
         }
 
+        foreach ((string field, string? wanted, string? actual) in new[]
+        {
+            ("video-codec", expected.VideoCodec, confirmed.VideoCodec),
+            ("audio-codec", expected.AudioCodec, confirmed.AudioCodec),
+            ("resolution", expected.Resolution, confirmed.Resolution)
+        })
+            if (!string.IsNullOrWhiteSpace(wanted) && !string.Equals(wanted, actual, StringComparison.OrdinalIgnoreCase))
+                Note(link, "metadata-" + field + "-deviation", $"Sonarr reports '{actual ?? "unknown"}' for {field}, expected '{wanted}'.");
+
         if (expected.Quality is not null && !string.Equals(expected.Quality, confirmed.Quality, StringComparison.OrdinalIgnoreCase))
         {
             Note(link, "metadata-quality-deviation",
                 $"{confirmed.Origin} reads the quality as '{confirmed.Quality ?? "nothing"}'; the Radarr file was labelled '{expected.Quality}'.");
         }
+        if (expected.QualityRevision is not null && expected.QualityRevision != confirmed.QualityRevision)
+            Note(link, "metadata-quality-revision-deviation", "Sonarr has not confirmed the source quality revision/repack information.");
 
         if (expected.Languages.Count > 0
-            && !confirmed.Languages.Any(language => expected.Languages.Contains(language, StringComparer.OrdinalIgnoreCase)))
+            && !expected.Languages.All(language => confirmed.Languages.Contains(language, StringComparer.OrdinalIgnoreCase)))
         {
             Note(link, "metadata-languages-deviation",
                 $"{confirmed.Origin} found no audio language of the chosen Radarr file ({string.Join(", ", expected.Languages)}).");
@@ -479,6 +542,36 @@ public sealed class SonarrSpecialIntegrationService(
         return SymlinkSetupOutcome.Completed;
     }
 
+    private async Task<SymlinkSetupOutcome> FinishVerifiedAsync(SymlinkLink link, CancellationToken token)
+    {
+        if (radarr is not null && link.AutoFollowUp)
+        {
+            ArrInstanceSettings? instance = (await settings.GetSnapshotAsync(token)).RadarrInstances.FirstOrDefault(value => value.Id == link.RadarrInstanceId);
+            if (instance is null) return Conflict(link, "radarr-instance-missing", "The selected Radarr instance is no longer configured.");
+            IReadOnlyList<RadarrMovieFileResource> current = await radarr.FetchMovieFilesAsync(instance, link.RadarrMovieId, token);
+            if (current.Count != 1 || SymlinkService.SourceVersionOf(current[0]) != link.SourceVersion)
+            {
+                Pause(link, "source-moved-during-setup", "The Radarr source changed during setup. The next pass follows its current version.");
+                return SymlinkSetupOutcome.Waiting;
+            }
+        }
+        link.Findings.RemoveAll(value => value.Code == "source-moved-during-setup");
+        if (snapshotSync is not null)
+        {
+            try
+            {
+                await snapshotSync.SyncSonarrSeriesAsync(link.SonarrInstanceId, link.SonarrSeriesId, token);
+            }
+            catch (HttpRequestException)
+            {
+                Note(link, "library-sync-pending", "The special is ready in Sonarr, but updating the LibManagarr library is still pending. It will be retried automatically.");
+                return SymlinkSetupOutcome.Waiting;
+            }
+            link.Findings.RemoveAll(value => value.Code == "library-sync-pending");
+        }
+        return Finished(link);
+    }
+
     /// <summary>
     /// The newest finding for a code wins: a step that reports the same problem on every pass must not
     /// bury the register in copies of it.
@@ -512,16 +605,67 @@ public sealed class SonarrSpecialIntegrationService(
         return cut < 0 ? path : path[(cut + 1)..];
     }
 
-    private static string NamingRevisionOf(SonarrNamingConfigResource? naming)
+    public static string NamingRevisionOf(SonarrNamingConfigResource? naming)
     {
         // Names the rule set the desired name came from, so a later change of Sonarr's own patterns
         // shows up as a different revision instead of an unexplained filename.
-        string rules = string.Join('|',
-            naming?.RenameEpisodes?.ToString() ?? "unknown",
-            naming?.SpecialEpisodeFormat,
-            naming?.EpisodeFormat,
-            naming?.AnimeEpisodeFormat,
-            naming?.DailyEpisodeFormat);
+        string rules = System.Text.Json.JsonSerializer.Serialize(naming);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rules)))[..12];
     }
+
+    private async Task<bool> OwnsEpisodeFileAsync(SymlinkLink link, ArrInstanceSettings instance, CancellationToken cancellationToken)
+    {
+        SonarrEpisodeResource? episode = await sonarr.FetchEpisodeAsync(instance, link.SonarrEpisodeId, cancellationToken);
+        if (episode?.EpisodeFileId != link.SonarrFileId) return false;
+        SonarrEpisodeFileResource? file = await sonarr.FetchEpisodeFileAsync(instance, link.SonarrFileId!.Value, cancellationToken);
+        if (file?.Path is null) return false;
+        PathMappingResult translated = await paths.TranslateToLibManagarrPathAsync(instance.Id, ArrApplicationKind.Sonarr, file.Path, cancellationToken);
+        return translated.Success && IsSamePath(translated.Path!, link.LinkPath)
+            && files.ReadLinkTarget(link.LinkPath) == link.LinkText && OwnLink(link.LinkPath, link.SourcePath);
+    }
+
+    private async Task<SymlinkSetupOutcome> FinishNameMoveAsync(SymlinkLink link, ArrInstanceSettings instance, CancellationToken token)
+    {
+        SymlinkNameMove move = link.NamingMove!;
+        SymlinkPathGuard.CheckParents(files, move.PreviousPath);
+        SymlinkPathGuard.CheckParents(files, move.NewPath);
+        if (move.ScanCommandId is null)
+        {
+            if (files.EntryExists(move.PreviousPath) && !OwnLink(move.PreviousPath, link.SourcePath))
+                return Conflict(link, "rename-entry-foreign", "The old link was changed externally; nothing was removed.");
+            if (files.EntryExists(move.NewPath) && !OwnLink(move.NewPath, link.SourcePath))
+                return Conflict(link, "rename-destination-taken", "Another entry occupies Sonarr's proposed path.");
+            if (!files.EntryExists(move.NewPath))
+            {
+                files.OpenForRead(link.SourcePath);
+                files.CreateDirectory(Path.GetDirectoryName(move.NewPath)!);
+                files.CreateFileSymlink(move.NewPath, move.LinkText);
+            }
+            if (!OwnLink(move.NewPath, link.SourcePath)) return Conflict(link, "rename-link-invalid", "The new entry is not the expected link.");
+            files.OpenForRead(move.NewPath);
+            if (!IsSamePath(move.PreviousPath, move.NewPath) && files.EntryExists(move.PreviousPath)) files.DeleteEntry(move.PreviousPath);
+            SonarrCommandResource? queued = await sonarr.StartRescanSeriesAsync(instance, link.SonarrSeriesId, token);
+            if (queued?.Id is null) return Pause(link, "rename-scan-not-queued", "Sonarr returned no rescan command for the renamed link.");
+            link.NamingMove = move with { ScanCommandId = queued.Id.Value.ToString(CultureInfo.InvariantCulture) };
+            return SymlinkSetupOutcome.Waiting;
+        }
+        SonarrCommandResource? command = await sonarr.FetchCommandAsync(instance, int.Parse(move.ScanCommandId, CultureInfo.InvariantCulture), token);
+        SymlinkSetupOutcome state = AwaitCommand(link, command, "rename-scan");
+        if (state != SymlinkSetupOutcome.Completed) return state;
+        SonarrEpisodeResource? episode = await sonarr.FetchEpisodeAsync(instance, link.SonarrEpisodeId, token);
+        SonarrEpisodeFileResource? file = episode?.EpisodeFileId is int fileId ? await sonarr.FetchEpisodeFileAsync(instance, fileId, token) : null;
+        PathMappingResult? mapped = file?.Path is null ? null : await paths.TranslateToLibManagarrPathAsync(instance.Id, ArrApplicationKind.Sonarr, file.Path, token);
+        if (mapped?.Success != true || !IsSamePath(mapped.Path!, move.NewPath) || !OwnLink(move.NewPath, link.SourcePath))
+            return Pause(link, "rename-association-unconfirmed", "Sonarr has not assigned the renamed link to the selected episode.");
+        link.LinkPath = move.NewPath;
+        link.LinkText = files.ReadLinkTarget(move.NewPath)!;
+        link.SonarrFileId = file!.Id;
+        link.AppliedFilename = FileNameOf(move.NewPath);
+        link.NamingMove = null;
+        link.SetupStep = SymlinkSetupStep.MetadataMatched;
+        return SymlinkSetupOutcome.Completed;
+    }
+
+    private bool OwnLink(string path, string source) => files.IsSymlink(path) && files.ReadLinkTarget(path) is not null
+        && SymlinkPathGuard.ResolvesTo(files, path, source);
 }

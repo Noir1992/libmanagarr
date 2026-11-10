@@ -74,7 +74,7 @@ describe('RejectSymlinkDialogComponent', () => {
     const text: string = (element.textContent ?? '').replace(/\s+/g, ' ');
 
     expect(text).toContain('The Special Movie');
-    expect(text).toContain('Season 0, episode 4');
+    expect(text).toContain('Special 4');
     expect(text).toContain('Declined pairs stay in the rejection archive, where they can be released again.');
   });
 

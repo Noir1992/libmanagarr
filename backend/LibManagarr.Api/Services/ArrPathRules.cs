@@ -326,7 +326,7 @@ public static class ArrPathRules
             return false;
         }
 
-        if (segment.Any(char.IsControl) || segment.Contains(':'))
+        if (segment.Any(char.IsControl) || (syntax == ArrPathSyntax.Windows && segment.Contains(':')))
         {
             failure = "A path segment contains characters that are not allowed in a path.";
             return false;

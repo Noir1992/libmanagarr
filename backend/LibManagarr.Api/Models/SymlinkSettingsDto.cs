@@ -1,12 +1,15 @@
 namespace LibManagarr.Api.Models;
 
 /// <summary>
-/// The configuration together with the answer of the capability test per storage area. The two are one
-/// response on purpose: a mapping list without the probe result would let the interface show a setup
-/// that cannot produce a single link.
+/// The shared media directory and its capability result. The legacy collections remain in the
+/// response for existing clients; new clients configure only MediaRoot.
 /// </summary>
 public sealed class SymlinkSettingsDto
 {
+    public bool Enabled { get; set; } = true;
+
+    public string MediaRoot { get; set; } = "/media";
+
     public List<MediaStorageArea> StorageAreas { get; set; } = [];
 
     public List<ArrPathMapping> PathMappings { get; set; } = [];

@@ -21,6 +21,8 @@ public sealed class SymlinkSetupRunner(
     /// </summary>
     public async Task<int> RunDueSetupsAsync(CancellationToken cancellationToken)
     {
+        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
+        if (!await links.CanProcessAsync(cancellationToken)) return 0;
         await links.MarkReplacedSourcesAsync(cancellationToken);
 
         List<SymlinkLink> owed = (await store.GetLinksAsync(cancellationToken)).Where(HasOwedWork).ToList();
@@ -42,6 +44,7 @@ public sealed class SymlinkSetupRunner(
             }
             catch (Exception exception)
             {
+                waiting++;
                 // One pair that cannot be carried forward is never allowed to stop the others.
                 logger.LogError(exception, "Carrying managed link {LinkId} forward failed; it stays as it is.", link.Id);
             }
@@ -64,7 +67,7 @@ public sealed class SymlinkSetupRunner(
             return afterCheck == SymlinkSetupOutcome.Blocked ? afterCheck : SymlinkSetupOutcome.Waiting;
         }
 
-        if (link.OperationStatus == SymlinkOperationStatus.DeletePending)
+        if (link.OperationStatus is SymlinkOperationStatus.DeletePending or SymlinkOperationStatus.CleanupPending)
         {
             return await links.FinishDeletionAsync(link, cancellationToken);
         }
@@ -85,7 +88,7 @@ public sealed class SymlinkSetupRunner(
     /// </summary>
     private static bool HasOwedWork(SymlinkLink link) =>
         SymlinkService.WaitsForRestoreCheck(link)
-        || link.OperationStatus == SymlinkOperationStatus.DeletePending
+        || link.OperationStatus is SymlinkOperationStatus.DeletePending or SymlinkOperationStatus.CleanupPending
         || link.OperationStatus == SymlinkOperationStatus.Updating
         || (link.PendingUpdate is null && (link.SetupStep is null or SymlinkSetupStep.LinkCreated))
         || (link.OperationStatus == SymlinkOperationStatus.Active && link.SetupStep != SymlinkSetupStep.Completed);

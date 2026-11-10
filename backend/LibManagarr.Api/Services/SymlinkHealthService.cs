@@ -36,7 +36,8 @@ public sealed class SymlinkHealthService(
     ISymlinkFileSystem files,
     SymlinkSetupRequests setupRequests,
     TimeProvider clock,
-    ILogger<SymlinkHealthService> logger)
+    ILogger<SymlinkHealthService> logger,
+    SymlinkLiveStateService? live = null)
 {
     private const string LinkLostCode = "link-lost";
     private const string EntryNotALinkCode = "entry-not-a-link";
@@ -66,7 +67,8 @@ public sealed class SymlinkHealthService(
         LinkLostCode, EntryNotALinkCode, LinkMovedCode, SourceMissingCode, AccessDeniedCode,
         StorageUnreachableCode, RadarrUnsyncedCode, SourceReplacedCode, SonarrUnsyncedCode,
         EpisodeMissingCode, EpisodeFileMissingCode, MonitoringReopenedCode, FilenameDiffersCode,
-        MetadataUnconfirmedCode, SizeDeviationCode, LanguagesDeviationCode, ReleaseGroupDeviationCode
+        MetadataUnconfirmedCode, SizeDeviationCode, LanguagesDeviationCode, ReleaseGroupDeviationCode,
+        "arr-unreachable", "naming-outdated", "check-failed", "metadata-quality-deviation", "metadata-media-info-deviation", "sonarr-file-not-the-link"
     ];
 
     /// <summary>
@@ -77,7 +79,8 @@ public sealed class SymlinkHealthService(
     /// </summary>
     private static readonly string[] UnanswerableCodes =
     [
-        RadarrUnsyncedCode, SonarrUnsyncedCode, AccessDeniedCode, StorageUnreachableCode, MetadataUnconfirmedCode
+        RadarrUnsyncedCode, SonarrUnsyncedCode, AccessDeniedCode, StorageUnreachableCode, MetadataUnconfirmedCode,
+        "arr-unreachable", "check-failed"
     ];
 
     /// <summary>
@@ -97,7 +100,9 @@ public sealed class SymlinkHealthService(
         if (row is null) return null;
 
         AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
-        await CheckRowAsync(row, snapshot, cancellationToken);
+        if (!snapshot.Symlinks.Enabled) return row;
+        SymlinkLiveEvidence? evidence = live is null ? null : await live.ReadAsync(snapshot, [row], cancellationToken);
+        await CheckRowAsync(row, evidence?.Settings ?? snapshot, cancellationToken, evidence);
         // The row was written, so the answer handed back is read again rather than handed out as the copy in
         // hand: whoever received it is about to write against it and has to present the revision the store
         // holds, not the one this pass started from.
@@ -114,7 +119,10 @@ public sealed class SymlinkHealthService(
     {
         DateTimeOffset startedAt = clock.GetUtcNow();
         AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
+        if (!snapshot.Symlinks.Enabled) return new SymlinkHealthRun(0, 0, 0, 0, startedAt, clock.GetUtcNow());
         List<SymlinkLink> rows = [.. await store.GetLinksAsync(cancellationToken)];
+        SymlinkLiveEvidence? evidence = live is null ? null : await live.ReadAsync(snapshot, rows, cancellationToken);
+        snapshot = evidence?.Settings ?? snapshot;
         if (rows.Count == 0)
         {
             logger.LogDebug("Symlink health check found a register holding nothing at all.");
@@ -131,7 +139,7 @@ public sealed class SymlinkHealthService(
             {
                 try
                 {
-                    RowAnswer answer = await CheckRowAsync(row, snapshot, token);
+                    RowAnswer answer = await CheckRowAsync(row, snapshot, token, evidence);
                     if (answer.Reported) Interlocked.Increment(ref reported);
                     if (answer.Undetermined) Interlocked.Increment(ref undetermined);
                     if (answer.Queued) Interlocked.Increment(ref queued);
@@ -142,6 +150,12 @@ public sealed class SymlinkHealthService(
                 }
                 catch (Exception exception)
                 {
+                    Interlocked.Increment(ref reported);
+                    Interlocked.Increment(ref undetermined);
+                    row.Findings = [.. row.Findings.Where(value => value.Code != "check-failed"),
+                        new SymlinkFinding("check-failed", exception.Message, clock.GetUtcNow())];
+                    row.LastCheckedAt = clock.GetUtcNow();
+                    await store.UpdateLinkAsync(row, row.Revision, token);
                     logger.LogError(
                         exception,
                         "Checking managed link {LinkId} failed; the entry keeps what it had and the next pass looks again.",
@@ -173,10 +187,16 @@ public sealed class SymlinkHealthService(
     /// looked and what it found go down together, so a row can never carry today's timestamp next to last
     /// week's answer.
     /// </summary>
-    private async Task<RowAnswer> CheckRowAsync(SymlinkLink row, AppSettings snapshot, CancellationToken cancellationToken)
+    private async Task<RowAnswer> CheckRowAsync(SymlinkLink row, AppSettings snapshot, CancellationToken cancellationToken, SymlinkLiveEvidence? evidence = null)
     {
+        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
+        SymlinkLink? currentRow = await store.GetLinkAsync(row.Id, cancellationToken);
+        if (currentRow is null) return new RowAnswer(false, false, false);
+        row = currentRow;
         DateTimeOffset now = clock.GetUtcNow();
         List<SymlinkFinding> findings = [.. row.Findings.Where(existing => !OwnedCodes.Contains(existing.Code))];
+        if (evidence is not null) findings.AddRange(evidence.Findings[row.Id]);
+        CheckLocalState(row, snapshot, findings);
 
         bool queued = await FollowMovedSourceAsync(row, snapshot, findings, cancellationToken);
         if (queued)
@@ -188,15 +208,46 @@ public sealed class SymlinkHealthService(
             if (decided is not null) findings.Add(decided);
         }
 
-        CheckLocalState(row, snapshot, findings);
         CheckSonarrSide(row, snapshot, findings);
+        if (evidence is not null && row.SetupStep == SymlinkSetupStep.Completed)
+        {
+            SonarrEpisodeSnapshot? episode = snapshot.SonarrSnapshots.FirstOrDefault(value => value.InstanceId == row.SonarrInstanceId)
+                ?.Series.FirstOrDefault(value => value.SeriesId == row.SonarrSeriesId)?.Seasons.SelectMany(value => value.Episodes)
+                .FirstOrDefault(value => value.EpisodeId == row.SonarrEpisodeId);
+            if (episode?.HasFile == true && !await links.IsRegisteredEpisodeFileAsync(row, episode.File, cancellationToken))
+                findings.Add(Finding("sonarr-file-not-the-link", "Sonarr's episode file no longer matches the registered identity and path."));
+            if (episode is not null && row.ExpectedMetadata is { } expected)
+            {
+                if ((expected.Quality is not null && !string.Equals(expected.Quality, episode.File.Quality, StringComparison.OrdinalIgnoreCase))
+                    || (expected.QualityRevision is not null && expected.QualityRevision != episode.File.QualityRevision))
+                    findings.Add(Finding("metadata-quality-deviation", "The Sonarr quality differs from the selected source."));
+                if ((expected.VideoCodec is not null && expected.VideoCodec != episode.File.VideoCodec)
+                    || (expected.AudioCodec is not null && expected.AudioCodec != episode.File.AudioCodec)
+                    || (expected.Resolution is not null && expected.Resolution != episode.File.Resolution))
+                    findings.Add(Finding("metadata-media-info-deviation", "The Sonarr MediaInfo differs from the selected source."));
+            }
+        }
+        if (evidence?.NamingRevisions.TryGetValue(row.SonarrInstanceId, out string? naming) == true && naming != row.NamingRevision)
+            findings.Add(Finding("naming-outdated", "The Sonarr naming rules changed; the name will be recalculated."));
+        if (!queued && evidence is not null && row.OperationStatus == SymlinkOperationStatus.Active
+            && row.SetupStep == SymlinkSetupStep.Completed
+            && findings.Any(value => value.Code is MonitoringReopenedCode or ReleaseGroupDeviationCode or LanguagesDeviationCode or "naming-outdated" or "metadata-quality-deviation" or "metadata-media-info-deviation")
+            && !findings.Any(value => value.Code is LinkLostCode or EntryNotALinkCode or LinkMovedCode or "arr-unreachable" or "sonarr-file-not-the-link"))
+        {
+            row.SetupStep = SymlinkSetupStep.MonitoringDisabled;
+            row.SonarrScanCommandId = null;
+            row.SonarrRenameCommandId = null;
+            queued = true;
+            setupRequests.Request();
+        }
         bool undetermined = findings.Any(finding => UnanswerableCodes.Contains(finding.Code));
 
         row.Findings = [.. findings];
         row.LastCheckedAt = now;
         // The stamp means "this pass had nothing to say", and the queueing above may have said something of
         // its own directly on the row, so the answer is read from the row rather than from this pass's list.
-        if (!row.Findings.Any(finding => OwnedCodes.Contains(finding.Code))) row.LastSuccessfulCheckAt = now;
+        if (row.Findings.Count == 0 && row.OperationStatus == SymlinkOperationStatus.Active && row.SetupStep == SymlinkSetupStep.Completed)
+            row.LastSuccessfulCheckAt = now;
 
         if (!await store.UpdateLinkAsync(row, row.Revision, cancellationToken))
         {
@@ -235,7 +286,7 @@ public sealed class SymlinkHealthService(
         }
 
         if (current.Id is int fileId
-            && !string.Equals(SymlinkService.SourceVersionOf(fileId, current.Size), row.SourceVersion, StringComparison.Ordinal))
+            && !string.Equals(current.SourceVersion ?? SymlinkService.SourceVersionOf(fileId, current.Size), row.SourceVersion, StringComparison.Ordinal))
         {
             findings.Add(Finding(SourceReplacedCode,
                 $"{instanceName} has file {fileId} of movie {row.RadarrMovieId} now, while this entry still points at file {row.RadarrFileId}. Later upgrades are not followed for this entry, so this one is left to you."));
@@ -255,7 +306,7 @@ public sealed class SymlinkHealthService(
     {
         bool claimsALink = row.SetupStep is not null
                            && row.SetupStep != SymlinkSetupStep.LinkCreated
-                           && row.OperationStatus != SymlinkOperationStatus.DeletePending
+                           && row.OperationStatus is not (SymlinkOperationStatus.DeletePending or SymlinkOperationStatus.CleanupPending)
                            && !SymlinkService.WaitsForRestoreCheck(row);
         if (!claimsALink) return;
 
@@ -382,7 +433,7 @@ public sealed class SymlinkHealthService(
         }
 
         if (expected.Languages.Count > 0
-            && !episode.File.AudioLanguages.Any(language => expected.Languages.Contains(language, StringComparer.OrdinalIgnoreCase)))
+            && !expected.Languages.All(language => episode.File.AudioLanguages.Contains(language, StringComparer.OrdinalIgnoreCase)))
         {
             findings.Add(Finding(LanguagesDeviationCode,
                 $"The snapshot of {instance.InstanceName} found none of the audio languages of the chosen Radarr file ({string.Join(", ", expected.Languages)}); it knows {episode.File.AudioLanguages.Count} of its own."));
@@ -397,8 +448,7 @@ public sealed class SymlinkHealthService(
     /// </summary>
     private bool RootUnreadable(SymlinkLink row, AppSettings snapshot)
     {
-        MediaStorageArea? area = snapshot.Symlinks.StorageAreas
-            .FirstOrDefault(candidate => string.Equals(candidate.Id, row.StorageAreaId, StringComparison.OrdinalIgnoreCase));
+        MediaStorageArea? area = snapshot.Symlinks.FindStorageArea(row.StorageAreaId);
         if (area is null) return true;
 
         try

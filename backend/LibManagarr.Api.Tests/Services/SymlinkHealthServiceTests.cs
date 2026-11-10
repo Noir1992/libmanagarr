@@ -393,7 +393,7 @@ public sealed class SymlinkHealthServiceTests
         // The health pass reports the state it looked at and retires its own complaints only.
         SymlinkFinding finding = Assert.Single((await StoredAsync("link-1")).Findings);
         Assert.Equal("renaming-disabled", finding.Code);
-        Assert.Equal(Start, (await StoredAsync("link-1")).LastSuccessfulCheckAt);
+        Assert.Null((await StoredAsync("link-1")).LastSuccessfulCheckAt);
     }
 
     [Fact]
@@ -451,10 +451,11 @@ public sealed class SymlinkHealthServiceTests
         // A dying mount answers one entry; the rest of the register is still answered, and the row that could
         // not be read keeps what it had instead of gaining a guess.
         Assert.Equal(2, run.LinksChecked);
-        Assert.Equal(0, run.Reported);
+        Assert.Equal(1, run.Reported);
+        Assert.Equal(1, run.Undetermined);
         SymlinkLink unreadable = await StoredAsync("link-1");
-        Assert.Empty(unreadable.Findings);
-        Assert.Null(unreadable.LastCheckedAt);
+        Assert.Equal("check-failed", Assert.Single(unreadable.Findings).Code);
+        Assert.Equal(Start, unreadable.LastCheckedAt);
         Assert.Equal(1, (await StoredAsync("link-2")).Revision);
     }
 
@@ -567,6 +568,7 @@ public sealed class SymlinkHealthServiceTests
         AppSettings settings = ProvenLibrary();
         settings.RadarrSnapshots[0].Movies[0].File.Id = radarrFileId;
         settings.RadarrSnapshots[0].Movies[0].File.Size = size;
+        settings.RadarrSnapshots[0].Movies[0].File.SourceVersion = SymlinkFixture.SourceVersion(radarrFileId, size);
         return settings;
     }
 

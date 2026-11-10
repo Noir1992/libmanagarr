@@ -21,13 +21,16 @@ export interface SymlinkFinding {
 export interface SymlinkLink {
   id: string;
   radarrInstanceId: string;
+  radarrInstanceName?: string | null;
   radarrMovieId: number;
   radarrMovieTitle: string | null;
   radarrFileId: number;
   sonarrInstanceId: string;
+  sonarrInstanceName?: string | null;
   sonarrSeriesId: number;
   sonarrSeriesTitle: string | null;
   sonarrEpisodeId: number;
+  sonarrFileId?: number | null;
   sonarrEpisodeTitle: string | null;
   seasonNumber: number;
   episodeNumber: number;
@@ -58,8 +61,15 @@ export interface SymlinkLink {
 
 /** What confirming a pair would do and what stands in the way; the draft has no id, because nothing exists yet. */
 export interface SymlinkLinkPlan {
+  adoptsExisting?: boolean;
   runnable: boolean;
   draft: SymlinkLink;
   blockers: SymlinkFinding[];
   warnings: SymlinkFinding[];
+}
+
+export interface ExistingLinkConfirmation {
+  path: string;
+  linkText: string;
+  sonarrFileId: number;
 }

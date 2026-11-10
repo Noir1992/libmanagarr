@@ -64,11 +64,12 @@
   }
 
   .finding-code {
-    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--theme-muted);
   }
 
   .finding-detail {
-    color: var(--theme-muted);
+    color: var(--theme-text);
     overflow-wrap: anywhere;
   }
 }

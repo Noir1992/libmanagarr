@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using LibManagarr.Api.Clients;
 using LibManagarr.Api.Models;
 using LibManagarr.Api.Services;
 
@@ -21,6 +22,21 @@ public sealed class SymlinkSuggestionServiceTests
 
     private readonly FakeTimeProvider clock = new(Start);
     private readonly InMemorySymlinkStore store = new();
+
+    [Fact]
+    public async Task Disabled_LeavesSuggestionsUnchangedUntilReenabled()
+    {
+        AppSettings settings = Settings();
+        await Service(settings).RefreshAsync(force: true, CancellationToken.None);
+        SymlinkSuggestion original = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
+        settings.Symlinks.Enabled = false;
+        Assert.False((await Service(settings).RefreshAsync(force: true, CancellationToken.None)).DidWork);
+        SymlinkSuggestion paused = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
+        Assert.Equal(original.Revision, paused.Revision);
+        Assert.Equal(original.Status, paused.Status);
+        settings.Symlinks.Enabled = true;
+        Assert.Equal(2, (await Service(settings).RefreshAsync(force: true, CancellationToken.None)).InstancesConsidered);
+    }
 
     [Fact]
     public async Task Refresh_FindsThePairOnceAndStoresTheReasonsThatProducedIt()
@@ -230,6 +246,27 @@ public sealed class SymlinkSuggestionServiceTests
         Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData(SymlinkSuggestionStatus.Creating)]
+    [InlineData(SymlinkSuggestionStatus.Completed)]
+    public async Task Reactivate_DeletedLinkHistoryDoesNotHideThePair(SymlinkSuggestionStatus previousStatus)
+    {
+        AppSettings settings = Settings();
+        SymlinkSuggestion previous = Suggestion("old-link-suggestion", previousStatus, movieId: 70);
+        previous.LinkId = "deleted-link";
+        await store.UpsertSuggestionAsync(previous, CancellationToken.None);
+        await store.RejectAsync(previous.Pair, "The managed link of this pair was removed on purpose.", Start, CancellationToken.None);
+
+        Assert.True(await Service(settings).ReactivateAsync(previous.Pair, CancellationToken.None));
+
+        Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
+        SymlinkSuggestion reopened = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None),
+            row => row.Status == SymlinkSuggestionStatus.Pending);
+        Assert.Equal(previous.Pair, reopened.Pair);
+        Assert.Null(reopened.LinkId);
+        Assert.Contains(SpecialMovieMatchingRules.IdenticalTitleCode, reopened.Reasons.Select(reason => reason.Code));
+    }
+
     [Fact]
     public async Task Reactivate_APairNobodyDeclinedIsNotFoundAndChangesNothing()
     {
@@ -292,7 +329,7 @@ public sealed class SymlinkSuggestionServiceTests
     }
 
     [Fact]
-    public async Task Refresh_PairsThatAreManagedOrAlreadyAnsweredAreNotAskedAgain()
+    public async Task Refresh_ManagedPairsAreSkippedButDeletedLinksCanBeSuggestedAgain()
     {
         AppSettings settings = Settings(movies: [Film(SpecialTitle, movieId: 70), Film(SpecialTitle, movieId: 71)]);
         await store.InsertLinkAsync(new SymlinkLink
@@ -320,10 +357,53 @@ public sealed class SymlinkSuggestionServiceTests
 
         SymlinkMatchingRun run = await Service(settings).RefreshAsync(force: false, CancellationToken.None);
 
-        // A link that exists and a question that was answered are outcomes, not open questions.
-        Assert.Equal(0, run.Created + run.Updated + run.MarkedStale);
-        SymlinkSuggestion row = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
-        Assert.Equal(SymlinkSuggestionStatus.Completed, row.Status);
+        // Only the existing managed link reserves its pair; historic outcomes remain as history.
+        Assert.Equal(1, run.Created);
+        List<SymlinkSuggestion> rows = [.. await store.GetSuggestionsAsync(CancellationToken.None)];
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(SymlinkSuggestionStatus.Completed, rows.Single(row => row.Id == completed.Id).Status);
+        Assert.Equal(71, rows.Single(row => row.Status == SymlinkSuggestionStatus.Pending).Pair.RadarrMovieId);
+    }
+
+    [Fact]
+    public async Task FinishingDeletionAutomaticallyReopensTheSuggestionDespiteUnchangedSnapshots()
+    {
+        AppSettings settings = Settings();
+        settings.SonarrInstances = [new ArrInstanceSettings { Id = SonarrInstance, BaseUrl = "http://sonarr.local", ApiKey = "key" }];
+        FixedSettings configured = new(settings);
+        SymlinkSuggestionService matching = Service(settings);
+        await matching.RefreshAsync(false, CancellationToken.None);
+        SymlinkSuggestion previous = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
+        previous.Status = SymlinkSuggestionStatus.Completed;
+        previous.LinkId = "deleted-link";
+        Assert.True(await store.UpdateSuggestionAsync(previous, previous.Revision, CancellationToken.None));
+        SymlinkLink journal = new()
+        {
+            Id = "deleted-link", RadarrInstanceId = RadarrInstance, RadarrMovieId = 70,
+            SonarrInstanceId = SonarrInstance, SonarrSeriesId = 12, SonarrEpisodeId = 5,
+            LinkPath = SymlinkTestPaths.LibManagarr("series/Specials/special.mkv"),
+            OperationStatus = SymlinkOperationStatus.CleanupPending, SetupStep = SymlinkSetupStep.Completed,
+            CreatedAt = Start, UpdatedAt = Start
+        };
+        await store.InsertLinkAsync(journal, CancellationToken.None);
+        Assert.False((await matching.RefreshAsync(false, CancellationToken.None)).DidWork);
+        FakeLinkFileSystem files = new();
+        StubArrHandler handler = new(SymlinkFixture.HappyRoutes());
+        SymlinkService links = new(store, configured, new MediaPathMappingService(configured),
+            new SymlinkCapabilityService(store, configured, files, clock, NullLogger<SymlinkCapabilityService>.Instance),
+            new SymlinkSetupRequests(), new RadarrClient(new HttpClient(handler)), new SonarrClient(new HttpClient(handler)),
+            files, clock, NullLogger<SymlinkService>.Instance, matching: matching);
+
+        using IDisposable operation = await SymlinkOperationGate.EnterAsync(CancellationToken.None);
+        Assert.Equal(SymlinkSetupOutcome.Completed, await links.FinishDeletionAsync(journal, CancellationToken.None));
+
+        Assert.Null(await store.GetLinkAsync(journal.Id, CancellationToken.None));
+        SymlinkSuggestion reopened = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None),
+            row => row.Status == SymlinkSuggestionStatus.Pending);
+        Assert.Equal(previous.Pair, reopened.Pair);
+        Assert.Null(reopened.LinkId);
+        Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
+        Assert.DoesNotContain(handler.Requests, request => request.Method == "POST");
     }
 
     [Fact]
@@ -369,7 +449,8 @@ public sealed class SymlinkSuggestionServiceTests
 
         SymlinkSuggestionReason finding = Assert.Single(
             suggestion.Reasons, reason => reason.Code == SpecialMovieMatchingRules.EpisodeHasFileCode);
-        Assert.Contains("decision", finding.Detail, StringComparison.Ordinal);
+        Assert.Contains("inspected when offers are loaded", finding.Detail, StringComparison.Ordinal);
+        Assert.Contains("no existing file or link is automatically adopted or overwritten", finding.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

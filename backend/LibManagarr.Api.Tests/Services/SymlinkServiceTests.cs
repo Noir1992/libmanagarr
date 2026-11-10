@@ -44,6 +44,22 @@ public sealed class SymlinkServiceTests
     }
 
     [Fact]
+    public async Task Disabled_RejectsManualCreationBeforeAnyArrOrFilesystemAction()
+    {
+        AppSettings settings = Settings();
+        settings.Symlinks.Enabled = false;
+        StubArrHandler handler = new([]);
+        FakeLinkFileSystem files = new();
+        SymlinkService service = CreateService(handler, files, settings);
+        ApiProblemException error = await Assert.ThrowsAsync<ApiProblemException>(() =>
+            service.CreateAsync(Pair, RadarrFileId, ConfigRevision, null, CancellationToken.None));
+        Assert.Equal(409, error.StatusCode);
+        Assert.Empty(handler.Requests);
+        Assert.Empty(files.CreatedLinks);
+        Assert.Empty(await store.GetLinksAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ThePreviewDescribesTheEntryThatWouldBeReserved()
     {
         SymlinkService service = CreateService(new StubArrHandler(HappyRoutes()), new FakeLinkFileSystem());
@@ -74,7 +90,7 @@ public sealed class SymlinkServiceTests
         // The name is scene-style so the scan attributes the file to exactly this special, and it is
         // built from the series folder rather than the title, because the folder name is already legal.
         Assert.Equal(LinkName, Path.GetFileName(draft.LinkPath));
-        Assert.Equal($"radarr:{RadarrFileId}:5368709120", draft.SourceVersion);
+        Assert.Equal(SymlinkFixture.SourceVersion(RadarrFileId, SymlinkFixture.SourceSize), draft.SourceVersion);
         Assert.Equal("radarr", draft.ExpectedMetadata!.Origin);
         Assert.Equal("WFFF", draft.ExpectedMetadata!.ReleaseGroup);
         Assert.Equal("WEBDL-1080p", draft.ExpectedMetadata!.Quality);
@@ -100,10 +116,10 @@ public sealed class SymlinkServiceTests
     }
 
     [Fact]
-    public async Task AStorageAreaWhoseCapabilityTestAgedOutIsRefused()
+    public async Task AStorageAreaWhoseCapabilityTestAgedOutIsAutomaticallyRechecked()
     {
         SeedCapability(SymlinkCapabilityStatus.Available, ConfigRevision - 1);
-        await AssertBlockedAsync(HappyRoutes(), "capability-untested", StatusCodes.Status503ServiceUnavailable);
+        await AssertBlockedAsync(HappyRoutes(), "capability-unavailable", StatusCodes.Status503ServiceUnavailable);
     }
 
     [Fact]
@@ -314,6 +330,7 @@ public sealed class SymlinkServiceTests
     {
         await SeedSuggestionAsync();
         FakeLinkFileSystem files = new();
+        files.Entries[SourcePath()] = null;
         SymlinkService service = CreateService(new StubArrHandler(HappyRoutes()), files);
 
         SymlinkLink link = await service.CreateAsync(Pair, RadarrFileId, ConfigRevision, "suggestion-1", CancellationToken.None);
@@ -350,6 +367,7 @@ public sealed class SymlinkServiceTests
     {
         await SeedSuggestionAsync();
         FakeLinkFileSystem files = new();
+        files.Entries[SourcePath()] = null;
         files.RefusedWrites.Add(ExpectedLinkPath());
         SymlinkService service = CreateService(new StubArrHandler(HappyRoutes()), files);
 
@@ -401,7 +419,7 @@ public sealed class SymlinkServiceTests
     }
 
     [Fact]
-    public async Task DeletingRemovesTheLinkAsALinkAndDeclinesThePairAfterwards()
+    public async Task DeletingRemovesTheLinkAsALinkWithoutRejectingThePair()
     {
         SymlinkLink link = await SeedLinkAsync();
         FakeLinkFileSystem files = new();
@@ -411,14 +429,15 @@ public sealed class SymlinkServiceTests
 
         Assert.True(await service.DeleteAsync(link.Id, link.Revision, CancellationToken.None));
 
+        Assert.Equal(SymlinkOperationStatus.CleanupPending, (await StoredAsync(link.Id)).OperationStatus);
+        Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishDeletionAsync(await StoredAsync(link.Id), CancellationToken.None));
         Assert.Null(await store.GetLinkAsync(link.Id, CancellationToken.None));
         Assert.Equal([link.LinkPath], files.Removed);
         // The source is a movie file someone else paid for: it is never part of removing a link.
         Assert.DoesNotContain(files.Removed, path => path == link.SourcePath);
         Assert.True(files.Entries.ContainsKey(link.SourcePath));
-        // And the pair must not come back as a fresh suggestion by itself; the archive is where that
-        // decision lives, and it is the one thing the user can withdraw.
-        Assert.True(await store.IsRejectedAsync(Pair, CancellationToken.None));
+        // Removing a managed link is independent of rejecting a suggestion.
+        Assert.False(await store.IsRejectedAsync(Pair, CancellationToken.None));
     }
 
     [Fact]
@@ -515,6 +534,7 @@ public sealed class SymlinkServiceTests
     {
         SymlinkLink owed = await SeedOwedRowAsync(conflictWith: "link-not-created");
         FakeLinkFileSystem files = new();
+        files.Entries[SourcePath()] = null;
         SymlinkService service = CreateService(new StubArrHandler(HappyRoutes()), files);
 
         Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishCreationAsync(owed, CancellationToken.None));
@@ -545,18 +565,79 @@ public sealed class SymlinkServiceTests
     }
 
     [Fact]
-    public async Task AnOwedDeletionIsFinishedAndThePairIsDeclinedAfterwards()
+    public async Task AnOwedDeletionIsFinishedWithoutRejectingThePair()
     {
         SymlinkLink owed = await SeedOwedRowAsync(SymlinkOperationStatus.DeletePending, SymlinkSetupStep.Completed);
         FakeLinkFileSystem files = new();
         files.Entries[owed.LinkPath] = owed.LinkText;
         SymlinkService service = CreateService(new StubArrHandler(HappyRoutes()), files);
 
-        Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishDeletionAsync(owed, CancellationToken.None));
+        Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishDeletionAsync(await StoredAsync(owed.Id), CancellationToken.None));
 
         Assert.Null(await store.GetLinkAsync(owed.Id, CancellationToken.None));
         Assert.Equal([owed.LinkPath], files.Removed);
-        Assert.True(await store.IsRejectedAsync(Pair, CancellationToken.None));
+        Assert.False(await store.IsRejectedAsync(Pair, CancellationToken.None));
+        Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletionKeepsItsJournalUntilTheTargetedLibrarySyncSucceeds()
+    {
+        SymlinkLink link = await SeedLinkAsync();
+        FakeLinkFileSystem files = new();
+        files.Entries[link.LinkPath] = link.LinkText;
+        files.Entries[link.SourcePath] = null;
+        TargetedSyncStub sync = new();
+        SymlinkService service = CreateService(new StubArrHandler(HappyRoutes()), files, snapshotSync: sync);
+        Assert.True(await service.DeleteAsync(link.Id, link.Revision, CancellationToken.None));
+
+        SymlinkLink journal = await StoredAsync(link.Id);
+        await Assert.ThrowsAsync<HttpRequestException>(() => service.FinishDeletionAsync(journal, CancellationToken.None));
+        Assert.Equal(SymlinkOperationStatus.CleanupPending, (await StoredAsync(link.Id)).OperationStatus);
+        Assert.False(files.EntryExists(link.LinkPath));
+        sync.Fail = false;
+        Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishDeletionAsync(await StoredAsync(link.Id), CancellationToken.None));
+        Assert.Null(await store.GetLinkAsync(link.Id, CancellationToken.None));
+        Assert.Equal(2, sync.Calls);
+        Assert.Equal(SonarrInstanceId, sync.InstanceId);
+        Assert.Equal(SeriesId, sync.SeriesId);
+        Assert.Equal([link.LinkPath], files.Removed);
+        Assert.True(files.EntryExists(link.SourcePath));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DeletionTargetsOnlyItsOwnedSonarrFileWithoutARescan(bool ownedPath)
+    {
+        SymlinkLink link = await SeedLinkAsync();
+        FakeLinkFileSystem files = new();
+        files.Entries[link.LinkPath] = link.LinkText;
+        files.Entries[link.SourcePath] = null;
+        Dictionary<string, List<string>> routes = HappyRoutes();
+        routes["GET /api/v3/episode/5"] =
+        [
+            """{"id":5,"seriesId":12,"episodeFileId":99,"hasFile":true}""",
+            """{"id":5,"seriesId":12,"episodeFileId":0,"hasFile":false}"""
+        ];
+        string path = ownedPath ? SeriesInstance($"{SymlinkFixture.SeriesFolder}/Specials/{SymlinkFixture.LinkName}")
+            : SeriesInstance("another-series/another-episode.mkv");
+        routes["GET /api/v3/episodefile/99"] = [System.Text.Json.JsonSerializer.Serialize(new { id = 99, path })];
+        StubArrHandler handler = new(routes);
+        SymlinkService service = CreateService(handler, files);
+
+        Assert.True(await service.DeleteAsync(link.Id, link.Revision, CancellationToken.None));
+        Assert.Equal(SymlinkOperationStatus.CleanupPending, (await StoredAsync(link.Id)).OperationStatus);
+        Assert.Equal(SymlinkSetupOutcome.Completed,
+            await service.FinishDeletionAsync(await StoredAsync(link.Id), CancellationToken.None));
+
+        Assert.Equal(ownedPath ? 1 : 0, handler.Requests.Count(request => request.Method == "DELETE"));
+        Assert.DoesNotContain(handler.Requests, request => request.Path == "/api/v3/command");
+        Assert.DoesNotContain(handler.Requests, request => request.Method == "DELETE" && request.Path != "/api/v3/episodefile/99");
+        Assert.Null(await store.GetLinkAsync(link.Id, CancellationToken.None));
+        Assert.Equal([link.LinkPath], files.Removed);
+        Assert.True(files.EntryExists(link.SourcePath));
+        Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -574,6 +655,24 @@ public sealed class SymlinkServiceTests
         Assert.Equal("delete-entry-not-a-link", Assert.Single((await StoredAsync(owed.Id)).Findings).Code);
         Assert.Empty(files.Removed);
         Assert.False(await store.IsRejectedAsync(Pair, CancellationToken.None));
+    }
+
+    private sealed class TargetedSyncStub : ISnapshotSyncService
+    {
+        public bool Fail { get; set; } = true;
+        public int Calls { get; private set; }
+        public string? InstanceId { get; private set; }
+        public int SeriesId { get; private set; }
+        public Task<SyncInstanceResult> SyncSonarrSeriesAsync(string instanceId, int seriesId, CancellationToken token)
+        {
+            Calls++;
+            InstanceId = instanceId;
+            SeriesId = seriesId;
+            return Fail ? Task.FromException<SyncInstanceResult>(new HttpRequestException("History unavailable"))
+                : Task.FromResult(new SyncInstanceResult());
+        }
+        public Task<SyncInstanceResult> SyncAsync(SyncInstanceRequest request, CancellationToken token) =>
+            throw new InvalidOperationException("Deletion must use a targeted series sync.");
     }
 
     private async Task AssertBlockedAsync(
@@ -599,7 +698,7 @@ public sealed class SymlinkServiceTests
         Assert.Empty(await store.GetLinksAsync(CancellationToken.None));
     }
 
-    private SymlinkService CreateService(StubArrHandler handler, ISymlinkFileSystem files, AppSettings? settings = null)
+    private SymlinkService CreateService(StubArrHandler handler, ISymlinkFileSystem files, AppSettings? settings = null, ISnapshotSyncService? snapshotSync = null)
     {
         FixedSettings snapshot = new(settings ?? Settings());
         return new SymlinkService(
@@ -612,7 +711,7 @@ public sealed class SymlinkServiceTests
             new SonarrClient(new HttpClient(handler)),
             files,
             clock,
-            NullLogger<SymlinkService>.Instance);
+            NullLogger<SymlinkService>.Instance, snapshotSync: snapshotSync);
     }
 
     /// <summary>

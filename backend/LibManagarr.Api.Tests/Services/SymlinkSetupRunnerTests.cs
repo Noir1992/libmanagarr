@@ -19,6 +19,39 @@ public sealed class SymlinkSetupRunnerTests
     private static readonly string SourcePath = SymlinkTestPaths.LibManagarr("movies/The Battle of Unato (2016)/unato.mkv");
 
     [Fact]
+    public async Task Disabled_DoesNotCreateOrDeletePendingLinks()
+    {
+        InMemorySymlinkStore store = new();
+        SymlinkLink pending = await SeedAsync(store, operation: SymlinkOperationStatus.Pending);
+        FakeLinkFileSystem files = new();
+        AppSettings settings = SymlinkFixture.Settings();
+        settings.Symlinks.Enabled = false;
+        Assert.Equal(0, await RunAsync(store, files, settings));
+        Assert.Empty(files.CreatedLinks);
+        Assert.Empty(files.Removed);
+        Assert.Equal(SymlinkOperationStatus.Pending, (await StoredAsync(store, pending.Id)).OperationStatus);
+        settings.Symlinks.Enabled = true;
+        await RunAsync(store, files, settings);
+        Assert.Single(files.CreatedLinks);
+    }
+
+    [Fact]
+    public async Task EnabledWithoutCurrentProofLeavesPendingWorkUntilVerificationSucceeds()
+    {
+        InMemorySymlinkStore store = new();
+        SymlinkLink pending = await SeedAsync(store, operation: SymlinkOperationStatus.Pending);
+        FakeLinkFileSystem files = new();
+        AppSettings settings = SymlinkFixture.Settings();
+        Assert.True(settings.Symlinks.Enabled);
+        Assert.Equal(0, await RunAsync(store, files, settings, verified: false));
+        Assert.Empty(files.CreatedLinks);
+        Assert.Empty(files.Removed);
+        Assert.Equal(SymlinkOperationStatus.Pending, (await StoredAsync(store, pending.Id)).OperationStatus);
+        await RunAsync(store, files, settings);
+        Assert.Single(files.CreatedLinks);
+    }
+
+    [Fact]
     public async Task TheSweepWritesTheLinkThatADeadRunOwed()
     {
         InMemorySymlinkStore store = new();
@@ -37,7 +70,7 @@ public sealed class SymlinkSetupRunnerTests
     }
 
     [Fact]
-    public async Task TheSweepFinishesAnOwedDeletionAndLeavesThePairDeclined()
+    public async Task TheSweepFinishesAnOwedDeletionWithoutRejectingThePair()
     {
         InMemorySymlinkStore store = new();
         SymlinkLink owed = await SeedAsync(
@@ -54,8 +87,7 @@ public sealed class SymlinkSetupRunnerTests
         Assert.Equal([owed.LinkPath], files.Removed);
         Assert.True(files.Entries.ContainsKey(owed.SourcePath));
         Assert.Null(await store.GetLinkAsync(owed.Id, CancellationToken.None));
-        SymlinkRejection decline = Assert.Single(await store.GetRejectionsAsync(CancellationToken.None));
-        Assert.Equal(owed.Pair, decline.Pair);
+        Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -93,7 +125,7 @@ public sealed class SymlinkSetupRunnerTests
 
         int waiting = await RunAsync(store, files);
 
-        Assert.Equal(0, waiting);
+        Assert.Equal(1, waiting);
         // One pair that cannot be carried forward is never allowed to end the pass for the others: the
         // broken write is its own row's story, and the second entry got its link.
         Assert.Equal([healthy.LinkPath], files.CreatedLinks);
@@ -188,7 +220,7 @@ public sealed class SymlinkSetupRunnerTests
             Path.GetRelativePath(
                 Path.GetDirectoryName(marked.LinkPath)!,
                 SymlinkTestPaths.LibManagarr($"movies/{SymlinkFixture.MovieFolder}/{SymlinkFixture.UpgradedFileName}")),
-            files.Entries[marked.LinkPath]);
+            files.Entries[stored.LinkPath]);
         // The file Radarr owns was never touched.
         Assert.True(files.Entries.ContainsKey(marked.SourcePath));
     }
@@ -233,10 +265,20 @@ public sealed class SymlinkSetupRunnerTests
         InMemorySymlinkStore store,
         FakeLinkFileSystem files,
         AppSettings? settings = null,
-        HttpMessageHandler? handler = null)
+        HttpMessageHandler? handler = null,
+        bool verified = true)
     {
-        FixedSettings configured = new(settings ?? new AppSettings());
-        HttpMessageHandler arrHandler = handler ?? new NeverAskedHandler();
+        FixedSettings configured = new(settings ?? SymlinkFixture.Settings());
+        foreach (SymlinkLink row in await store.GetLinksAsync(CancellationToken.None)) files.Entries.TryAdd(row.SourcePath, null);
+        if (verified)
+            await store.SaveCapabilityCheckAsync(new SymlinkCapabilityCheck { StorageAreaId = "main", Status = SymlinkCapabilityStatus.Available,
+                CheckedAt = Start, ConfigRevision = (settings ?? SymlinkFixture.Settings()).Symlinks.Revision }, CancellationToken.None);
+        HttpMessageHandler arrHandler = handler ?? new StubArrHandler(SymlinkFixture.HappyRoutes());
+        if (arrHandler is StubArrHandler script && script.Routes.TryGetValue("GET /api/v3/moviefile", out List<string>? replies))
+            foreach (string reply in replies)
+            foreach (RadarrMovieFileResource source in System.Text.Json.JsonSerializer.Deserialize<List<RadarrMovieFileResource>>(reply,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)) ?? [])
+                if (source.Path is not null) files.Entries[SymlinkTestPaths.LibManagarr("movies/") + source.Path[(SymlinkFixture.MoviesInstance(string.Empty).Length + 1)..]] = null;
         SonarrClient sonarr = new(new HttpClient(arrHandler));
         SymlinkService links = new(
             store,

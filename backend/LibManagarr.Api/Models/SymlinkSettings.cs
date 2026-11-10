@@ -1,13 +1,23 @@
 namespace LibManagarr.Api.Models;
 
 /// <summary>
-/// Media paths only work when every process that opens a link resolves it against the same files.
-/// A stored path therefore always belongs to one of the views below and is never rewritten by a
-/// global string replacement, so <see cref="Revision"/> exists to age out probe results the moment
-/// any of these mappings changes.
+/// One common media mount for all readers. The revision invalidates capability checks when the
+/// configured paths change. Manual areas, mappings and views remain readable for legacy installations;
+/// saving a media root replaces them with one internal boundary and identity paths discovered from Arr.
 /// </summary>
 public sealed class SymlinkSettings
 {
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Shared mount prefix. Null is retained only for pre-existing manual configurations.</summary>
+    public string? MediaRoot { get; set; }
+
+    public const string SharedStorageAreaId = "01900000-0000-7000-8000-000000000001";
+
+    public MediaStorageArea? FindStorageArea(string id) => MediaRoot is not null
+        ? StorageAreas.FirstOrDefault()
+        : StorageAreas.FirstOrDefault(area => string.Equals(area.Id, id, StringComparison.OrdinalIgnoreCase));
+
     public List<MediaStorageArea> StorageAreas { get; set; } = [];
 
     public List<ArrPathMapping> PathMappings { get; set; } = [];

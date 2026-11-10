@@ -18,6 +18,7 @@ public sealed class SymlinkHealthCheckTaskHandler(
         cancellationToken.ThrowIfCancellationRequested();
         logger.LogInformation("Starting the symlink health pass.");
         SymlinkHealthRun run = await health.CheckAllAsync(cancellationToken);
+        if (run.Undetermined > 0) throw new IOException($"The state of {run.Undetermined} managed links could not be determined. See the link findings.");
         logger.LogInformation(
             "Symlink health pass finished: {LinksChecked} entries looked at, {Reported} with something to say, {FollowUpsQueued} waiting for their new source.",
             run.LinksChecked, run.Reported, run.FollowUpsQueued);

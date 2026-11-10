@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
-import { SymlinkFinding, SymlinkLink, SymlinkLinkPlan } from '../../../interfaces/symlinks/symlink-link';
+import { ExistingLinkConfirmation, SymlinkFinding, SymlinkLink, SymlinkLinkPlan } from '../../../interfaces/symlinks/symlink-link';
 import { SymlinkSuggestion } from '../../../interfaces/symlinks/symlink-suggestion';
 import { AppI18nService } from '../../../services/app-i18n.service';
 import { SymlinkService } from '../../../services/symlink.service';
@@ -61,7 +61,14 @@ export class ConfirmSymlinkDialogComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const link: SymlinkLink = await this.symlinks.confirmSuggestion(this.data.suggestion.id, this.data.configRevision);
+      const proposed = this.plan();
+      const consent: ExistingLinkConfirmation | undefined =
+        proposed?.adoptsExisting && typeof proposed.draft.sonarrFileId === 'number'
+          ? { path: proposed.draft.linkPath, linkText: proposed.draft.linkText, sonarrFileId: proposed.draft.sonarrFileId }
+          : undefined;
+      const link: SymlinkLink = consent
+        ? await this.symlinks.confirmSuggestion(this.data.suggestion.id, this.data.configRevision, proposed?.draft.sourceVersion, consent)
+        : await this.symlinks.confirmSuggestion(this.data.suggestion.id, this.data.configRevision, proposed?.draft.sourceVersion);
       this.dialogRef.close(link);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : this.t('symlinks.confirm.refused'));

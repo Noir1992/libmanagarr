@@ -11,6 +11,21 @@ namespace LibManagarr.Api.Tests.Clients;
 // client does not model.
 public sealed class SonarrClientSymlinkWriteTests
 {
+    [Theory]
+    [InlineData(HttpStatusCode.NoContent)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task Delete_RemovesOnlyTheSelectedFileAndAcceptsAnAlreadyMissingRecord(HttpStatusCode status)
+    {
+        StubArrHandler handler = new([], status);
+        SonarrClient client = new(new HttpClient(handler));
+        await client.DeleteEpisodeFileAsync(CreateSonarr(), 44, CancellationToken.None);
+        RecordedRequest sent = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Delete, sent.Method);
+        Assert.Equal("/api/v3/episodefile/44", sent.Path);
+        Assert.Equal("secret", sent.ApiKey);
+        Assert.Empty(sent.Body);
+    }
+
     [Fact]
     public async Task Rescan_QueuesOneCommandForTheSeriesAlone()
     {
@@ -56,7 +71,7 @@ public sealed class SonarrClientSymlinkWriteTests
         Assert.Equal("/api/v3/command", sent.Path);
         Assert.Contains("\"name\":\"RenameFiles\"", sent.Body);
         Assert.Contains("\"seriesId\":12", sent.Body);
-        Assert.Contains("\"fileIds\":[44]", sent.Body);
+        Assert.Contains("\"files\":[44]", sent.Body);
     }
 
     [Fact]
@@ -220,6 +235,42 @@ public sealed class SonarrClientSymlinkWriteTests
         // Without a document there is nothing to write back, so no PUT may have happened.
         RecordedRequest read = Assert.Single(handler.Requests);
         Assert.Equal(HttpMethod.Get, read.Method);
+    }
+
+    [Fact]
+    public async Task Metadata_MapsNamesToDestinationIdsAndUsesBulkWithoutBlankingOtherFields()
+    {
+        StubArrHandler handler = new(new Dictionary<string, string>
+        {
+            ["GET /api/v3/episodefile/44"] = """{"id":44,"quality":{"quality":{"id":1,"name":"HDTV-720p"},"revision":{"version":2}},"languages":[{"id":1,"name":"English"}],"customFormatScore":123}""",
+            ["GET /api/v3/qualitydefinition"] = """[{"quality":{"id":941,"name":"WEBDL-1080p","source":"web","resolution":1080}}]""",
+            ["GET /api/v3/language"] = """[{"id":47,"name":"German"},{"id":48,"name":"Japanese"}]""",
+            ["PUT /api/v3/episodefile/bulk"] = "[]"
+        });
+        await new SonarrClient(new HttpClient(handler)).SetMappedEpisodeFileMetadataAsync(CreateSonarr(), 44,
+            new SymlinkFileMetadata { Quality = "WEBDL-1080p", Languages = ["German", "Japanese"], ReleaseGroup = "NEW" }, CancellationToken.None);
+        RecordedRequest sent = Assert.Single(handler.Requests, value => value.Method == HttpMethod.Put);
+        Assert.Equal("/api/v3/episodefile/bulk", sent.Path);
+        using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(sent.Body);
+        System.Text.Json.JsonElement file = body.RootElement[0];
+        Assert.Equal(941, file.GetProperty("quality").GetProperty("quality").GetProperty("id").GetInt32());
+        Assert.Equal(2, file.GetProperty("quality").GetProperty("revision").GetProperty("version").GetInt32());
+        Assert.Equal([47, 48], file.GetProperty("languages").EnumerateArray().Select(value => value.GetProperty("id").GetInt32()));
+        Assert.Equal(123, file.GetProperty("customFormatScore").GetInt32());
+        Assert.Equal("NEW", file.GetProperty("releaseGroup").GetString());
+    }
+
+    [Fact]
+    public async Task Metadata_UnknownDestinationQualityDoesNotWrite()
+    {
+        StubArrHandler handler = new(new Dictionary<string, string>
+        {
+            ["GET /api/v3/episodefile/44"] = """{"id":44}""",
+            ["GET /api/v3/qualitydefinition"] = "[]"
+        });
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new SonarrClient(new HttpClient(handler))
+            .SetMappedEpisodeFileMetadataAsync(CreateSonarr(), 44, new SymlinkFileMetadata { Quality = "Unmapped" }, CancellationToken.None));
+        Assert.DoesNotContain(handler.Requests, value => value.Method == HttpMethod.Put);
     }
 
     private static ArrInstanceSettings CreateSonarr()

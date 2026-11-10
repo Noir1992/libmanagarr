@@ -6,7 +6,7 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { existsSync, lstatSync, realpathSync } from 'node:fs';
 import { mutation } from './app.js';
-import { arrRequest, expected, type Instances } from './library.js';
+import { arrRequest, expected } from './library.js';
 
 export interface ArrSeries {
   id: number;
@@ -38,6 +38,10 @@ export interface ArrMovieFile {
   movieId: number;
   path: string;
   size: number;
+  releaseGroup?: string;
+  quality?: { quality?: { name?: string } };
+  languages?: { name: string }[];
+  mediaInfo?: { videoCodec?: string; audioCodec?: string; audioLanguages?: string; resolution?: string };
 }
 // A file row of Sonarr 4 names no episode of its own — that association is only on the episode side, which is
 // why the scenarios read it from the episode rather than searching the file list for an identifier.
@@ -46,7 +50,10 @@ export interface ArrEpisodeFile {
   seriesId: number;
   path: string;
   size: number;
-  mediaInfo?: { videoCodec?: string; audioCodec?: string; audioLanguages?: string };
+  releaseGroup?: string;
+  quality?: { quality?: { name?: string } };
+  languages?: { name: string }[];
+  mediaInfo?: { videoCodec?: string; audioCodec?: string; audioLanguages?: string; resolution?: string };
 }
 export interface SeedPair {
   episode: ArrEpisode;
@@ -103,39 +110,16 @@ export async function seededPair(request: APIRequestContext): Promise<SeedPair> 
   return { episode: filmEpisode, series, film, filmFile: files[0] };
 }
 
-/// One storage area over the shared volume, one path mapping per instance and then the probe the feature
-/// insists on before writing anything. The stack shares a single volume, so both sides of a mapping are the
-/// same string — but the instance still has to say which prefix it reports, because no path may be used as a
-/// link source or target without a rule that claimed it.
+/// All services mount the complete media tree at /media. Library roots come from the Arr APIs.
 export async function configureSymlinks(request: APIRequestContext): Promise<number> {
-  const instances = await arrAppGet<Instances>(request, '/api/settings/instances');
-  const saved = (await (
-    await mutation(request, 'put', '/api/settings/symlinks', {
-      storageAreas: [{ name: 'E2E pool', moviesRoot: '/media/movies', seriesRoot: '/media/serien' }],
-      pathMappings: [
-        {
-          kind: 'Radarr',
-          instanceId: instances.radarrInstances[0].id,
-          instanceRoot: '/media/movies',
-          libManagarrRoot: '/media/movies',
-        },
-        {
-          kind: 'Sonarr',
-          instanceId: instances.sonarrInstances[0].id,
-          instanceRoot: '/media/serien',
-          libManagarrRoot: '/media/serien',
-        },
-      ],
-      readerViews: [],
-    })
-  ).json()) as { revision: number; storageAreas: { id: string }[] };
-  const probe = (await (
-    await mutation(request, 'post', `/api/settings/symlinks/storage-areas/${saved.storageAreas[0].id}/capability-test`, {})
-  ).json()) as {
-    status: string;
-    detail?: string;
+  const saved = (await (await mutation(request, 'put', '/api/settings/symlinks', { mediaRoot: '/media', enabled: true })).json()) as {
+    revision: number;
+    enabled: boolean;
+    capabilityChecks: { status: string; detail?: string }[];
   };
-  expect(probe.status, probe.detail ?? 'capability test').toBe('Available');
+  expect(saved.enabled, 'automatic capability checks must allow enabling symlinks').toBe(true);
+  expect(saved.capabilityChecks).not.toHaveLength(0);
+  for (const probe of saved.capabilityChecks) expect(probe.status, probe.detail ?? 'automatic capability check').toBe('Available');
   return saved.revision;
 }
 

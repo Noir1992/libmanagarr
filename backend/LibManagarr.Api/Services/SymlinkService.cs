@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text.Json;
 using LibManagarr.Api.Clients;
 using LibManagarr.Api.Models;
 using Microsoft.AspNetCore.Http;
@@ -17,6 +19,7 @@ public sealed record SymlinkLinkPlan(
     IReadOnlyList<SymlinkFinding> Warnings)
 {
     public bool Runnable => Blockers.Count == 0;
+    public bool AdoptsExisting => Draft.SonarrFileId.HasValue && Draft.SetupStep == SymlinkSetupStep.Completed;
 }
 
 /// <summary>
@@ -39,7 +42,11 @@ public sealed class SymlinkService(
     SonarrClient sonarr,
     ISymlinkFileSystem files,
     TimeProvider clock,
-    ILogger<SymlinkService> logger)
+    ILogger<SymlinkService> logger,
+    SymlinkLiveStateService? live = null,
+    ExistingEpisodeFileInspector? existingFiles = null,
+    SymlinkSuggestionService? matching = null,
+    ISnapshotSyncService? snapshotSync = null)
 {
     /// <summary>
     /// Where a special's file goes. Sonarr's own folder for specials is configurable, but its tokens are
@@ -55,7 +62,6 @@ public sealed class SymlinkService(
     private const string LinkNotCreatedCode = "link-not-created";
     private const string EntryNotALinkCode = "delete-entry-not-a-link";
     private const string DeletionRefusedCode = "delete-not-removed";
-    private const string RemovedOnPurposeDetail = "The managed link of this pair was removed on purpose.";
 
     /// <summary>
     /// What the register says about an entry that owes something nobody has carried out yet: the source
@@ -75,6 +81,21 @@ public sealed class SymlinkService(
     /// </summary>
     private const string RestoredEntryDiffersCode = "restored-entry-differs";
 
+    public async Task<bool> IsEnabledAsync(CancellationToken token) =>
+        (await settings.GetSnapshotAsync(token)).Symlinks.Enabled;
+
+    public async Task<bool> CanProcessAsync(CancellationToken token)
+    {
+        AppSettings snapshot = await settings.GetSnapshotAsync(token);
+        return snapshot.Symlinks.Enabled && await capability.IsReadyAsync(snapshot.Symlinks, token);
+    }
+
+    private async Task RequireEnabledAsync(CancellationToken token)
+    {
+        if (!await IsEnabledAsync(token))
+            throw new ApiProblemException(409, "Symlinks are disabled", "Enable symlinks in settings before performing this action.");
+    }
+
     /// <summary>
     /// Shows one pair as it stands right now: both live instances, both path translations, the storage
     /// area the two halves share and the entry that would be written. Reads only — no row, no file.
@@ -82,16 +103,19 @@ public sealed class SymlinkService(
     public async Task<SymlinkLinkPlan> PreviewAsync(
         SpecialMoviePair pair,
         int? radarrFileId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? replacesId = null)
     {
+        await RequireEnabledAsync(cancellationToken);
+        SymlinkLink? replaces = replacesId is null ? null : await store.GetLinkAsync(replacesId, cancellationToken);
         (SymlinkLink draft, List<Obstacle> blockers, List<SymlinkFinding> warnings) =
-            await PlannedAsync(pair, radarrFileId, replaces: null, cancellationToken);
+            await PlannedAsync(pair, radarrFileId, replaces, cancellationToken);
         return new SymlinkLinkPlan(draft, [.. blockers.Select(blocker => blocker.Finding)], warnings);
     }
 
     /// <summary>
-    /// Confirms a pair: the preview is computed again from live data, the row is reserved as owed, the
-    /// link is created and only then is the entry confirmed. The Sonarr side is not part of this call —
+    /// Confirms a pair: a matching existing link is explicitly registered without filesystem or Arr
+    /// writes; otherwise the row is reserved and a new link is created. The Sonarr setup is not part of this call —
     /// it starts from the row's setup step, so an instance that answers slowly never hangs the request.
     /// </summary>
     public async Task<SymlinkLink> CreateAsync(
@@ -99,8 +123,11 @@ public sealed class SymlinkService(
         int? radarrFileId,
         int configRevision,
         string? suggestionId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? expectedSourceVersion = null,
+        ExistingLinkConfirmation? existingLink = null)
     {
+        await RequireEnabledAsync(cancellationToken);
         SymlinkSettings configuration = (await settings.GetSnapshotAsync(cancellationToken)).Symlinks;
         if (configuration.Revision != configRevision)
         {
@@ -110,8 +137,9 @@ public sealed class SymlinkService(
 
         // Checked before anything is written, because the register keeps exactly one live entry per
         // special and the database index is the last resort rather than the usual way in.
+        await EnsureEpisodeFreeAsync(pair, null, cancellationToken);
         SymlinkLink? managed = (await store.GetLinksAsync(cancellationToken))
-            .FirstOrDefault(link => SharesPair(link, pair) && link.OperationStatus != SymlinkOperationStatus.DeletePending);
+            .FirstOrDefault(link => SharesPair(link, pair) && link.OperationStatus is not (SymlinkOperationStatus.DeletePending or SymlinkOperationStatus.CleanupPending));
         if (managed is not null)
         {
             throw Conflict($"Sonarr episode {pair.SonarrEpisodeId} is already managed by entry '{managed.Id}'.",
@@ -119,15 +147,49 @@ public sealed class SymlinkService(
         }
 
         (SymlinkLink draft, List<Obstacle> blockers, _) = await PlannedAsync(pair, radarrFileId, replaces: null, cancellationToken);
+        if (expectedSourceVersion is not null && expectedSourceVersion != draft.SourceVersion)
+            throw Conflict("The source changed after the preview.", "Refresh the preview before confirming.");
         if (blockers.Count > 0)
         {
             Obstacle blocker = blockers[0];
             throw new ApiProblemException(blocker.StatusCode, "The link cannot be created", blocker.Finding.Detail!);
         }
 
+        bool adopting = draft.SonarrFileId.HasValue;
+        if (adopting && (expectedSourceVersion is null || existingLink is null || existingLink.SonarrFileId != draft.SonarrFileId
+            || !string.Equals(existingLink.Path, draft.LinkPath, StringComparison.Ordinal) || existingLink.LinkText != draft.LinkText))
+            throw Conflict("The existing link was not confirmed from this preview or changed since it was shown.", "Refresh the preview before adopting it.");
+        if (!adopting && existingLink is not null)
+            throw Conflict("The existing episode file is no longer the one shown in the preview.", "Refresh the preview before confirming.");
+
         draft.Id = UuidV7.Create();
         draft.SuggestionId = suggestionId;
         draft.UpdatedAt = clock.GetUtcNow();
+        if (adopting)
+        {
+            if (!ResolvesToSource(draft)) throw Conflict("The existing symlink changed before adoption.", "Nothing was adopted or modified.");
+            if (snapshotSync is not null)
+            {
+                try
+                {
+                    await snapshotSync.SyncSonarrSeriesAsync(draft.SonarrInstanceId, draft.SonarrSeriesId, cancellationToken);
+                }
+                catch (HttpRequestException)
+                {
+                    throw UnavailableException("The Sonarr series could not be synchronized. The existing symlink was not adopted; try again once Sonarr is reachable.");
+                }
+            }
+            draft.OperationStatus = SymlinkOperationStatus.Active;
+            await store.InsertLinkAsync(draft, cancellationToken);
+            if (!ResolvesToSource(draft))
+            {
+                await MarkConflictAsync(draft, "adopted-link-changed", "The link changed while being registered. Nothing on disk was modified.", cancellationToken);
+                throw Conflict("The symlink changed while being adopted.", "Inspect the conflicted entry; nothing on disk was modified.");
+            }
+            await MarkSuggestionAsync(suggestionId, SymlinkSuggestionStatus.Completed, draft.Id, null, cancellationToken);
+            logger.LogInformation("Adopted the existing symlink {LinkId} at {LinkPath} without modifying it.", draft.Id, draft.LinkPath);
+            return (await store.GetLinkAsync(draft.Id, cancellationToken))!;
+        }
         await store.InsertLinkAsync(draft, cancellationToken);
         await MarkSuggestionAsync(suggestionId, SymlinkSuggestionStatus.Creating, draft.Id, detail: null, cancellationToken);
 
@@ -174,6 +236,7 @@ public sealed class SymlinkService(
         long expectedRevision,
         CancellationToken cancellationToken)
     {
+        await RequireEnabledAsync(cancellationToken);
         SymlinkLink? link = await store.GetLinkAsync(id, cancellationToken);
         if (link is null) return null;
         if (link.Revision != expectedRevision) throw StaleRevision();
@@ -184,7 +247,7 @@ public sealed class SymlinkService(
         {
             AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
             MediaFileSnapshot? current = SnapshotFileOf(snapshot, link);
-            if (current?.Id is int fileId && SourceVersionOf(fileId, current.Size) != link.SourceVersion)
+            if (current?.Id is int fileId && (current.SourceVersion ?? SourceVersionOf(fileId, current.Size)) != link.SourceVersion)
             {
                 string instanceName = snapshot.RadarrInstances
                     .FirstOrDefault(instance => string.Equals(instance.Id, link.RadarrInstanceId, StringComparison.OrdinalIgnoreCase))
@@ -208,16 +271,29 @@ public sealed class SymlinkService(
     /// </summary>
     public async Task<int> MarkReplacedSourcesAsync(CancellationToken cancellationToken)
     {
-        List<SymlinkLink> followable = (await store.GetLinksAsync(cancellationToken)).Where(FollowsUpgrades).ToList();
+        if (!await IsEnabledAsync(cancellationToken)) return 0;
+        List<SymlinkLink> followable = (await store.GetLinksAsync(cancellationToken))
+            .Where(link => link.OperationStatus == SymlinkOperationStatus.Active).ToList();
         if (followable.Count == 0) return 0;
 
         AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
+        SymlinkLiveEvidence? evidence = live is null ? null : await live.ReadAsync(snapshot, followable, cancellationToken);
+        snapshot = evidence?.Settings ?? snapshot;
         int marked = 0;
         foreach (SymlinkLink link in followable)
         {
             if (await MarkReplacedSourceAsync(link, snapshot, cancellationToken))
             {
                 marked += 1;
+            }
+            else if (evidence?.NamingRevisions.TryGetValue(link.SonarrInstanceId, out string? naming) == true
+                && link.SetupStep == SymlinkSetupStep.Completed && naming != link.NamingRevision && evidence.Findings[link.Id].Count == 0)
+            {
+                link.SetupStep = SymlinkSetupStep.MonitoringDisabled;
+                link.SonarrScanCommandId = null;
+                link.SonarrRenameCommandId = null;
+                link.UpdatedAt = clock.GetUtcNow();
+                if (await store.UpdateLinkAsync(link, link.Revision, cancellationToken)) marked++;
             }
         }
 
@@ -239,10 +315,11 @@ public sealed class SymlinkService(
     /// </summary>
     public async Task<bool> MarkReplacedSourceAsync(SymlinkLink link, AppSettings snapshot, CancellationToken cancellationToken)
     {
+        if (!snapshot.Symlinks.Enabled) return false;
         if (!FollowsUpgrades(link)) return false;
 
         MediaFileSnapshot? current = SnapshotFileOf(snapshot, link);
-        if (current is null || current.Id is null || SourceVersionOf(current.Id, current.Size) == link.SourceVersion)
+        if (current is null || current.Id is null || (current.SourceVersion ?? SourceVersionOf(current.Id, current.Size)) == link.SourceVersion)
         {
             return false;
         }
@@ -271,8 +348,7 @@ public sealed class SymlinkService(
     /// </summary>
     private static bool FollowsUpgrades(SymlinkLink link) =>
         link.AutoFollowUp
-        && link.OperationStatus == SymlinkOperationStatus.Active
-        && link.SetupStep == SymlinkSetupStep.Completed;
+        && link.OperationStatus == SymlinkOperationStatus.Active;
 
     /// <summary>
     /// Writes the answer that this entry is owed the way onto the file its movie has now. It is one method
@@ -285,6 +361,29 @@ public sealed class SymlinkService(
         string instanceName,
         CancellationToken cancellationToken)
     {
+        if (link.NamingMove is { } move)
+        {
+            SymlinkPathGuard.CheckParents(files, move.PreviousPath);
+            SymlinkPathGuard.CheckParents(files, move.NewPath);
+            SymlinkLink moved = new() { SourcePath = link.SourcePath, LinkText = move.LinkText };
+            if (files.EntryExists(move.NewPath) && !IsOwnLinkAt(moved, move.NewPath))
+            {
+                await MarkConflictAsync(link, "rename-destination-taken", "The in-progress name belongs to another entry.", cancellationToken);
+                return false;
+            }
+            if (files.EntryExists(move.PreviousPath) && !IsOwnLinkAt(link, move.PreviousPath))
+            {
+                await MarkConflictAsync(link, "previous-link-foreign", "The previous link changed during naming.", cancellationToken);
+                return false;
+            }
+            if (files.EntryExists(move.NewPath))
+            {
+                if (!IsSameLocalPath(move.PreviousPath, move.NewPath) && files.EntryExists(move.PreviousPath)) files.DeleteEntry(move.PreviousPath);
+                link.LinkPath = move.NewPath;
+                link.LinkText = move.LinkText;
+            }
+            link.NamingMove = null;
+        }
         link.OperationStatus = SymlinkOperationStatus.Updating;
         // Back to the file half: the entry has to be pointed at the new source before Sonarr is told about
         // it again, which is the same point a creation starts from.
@@ -347,6 +446,7 @@ public sealed class SymlinkService(
     /// </summary>
     public async Task<SymlinkSetupOutcome> CheckRestoredEntryAsync(SymlinkLink link, CancellationToken cancellationToken)
     {
+        if (!await IsEnabledAsync(cancellationToken)) return SymlinkSetupOutcome.Waiting;
         bool present = files.EntryExists(link.LinkPath);
         bool ownLink = present && IsOwnLinkAt(link, link.LinkPath);
         // Only an entry whose link was once proven has an expectation the file system can contradict: for
@@ -355,7 +455,7 @@ public sealed class SymlinkService(
         // deletion, which never removes anything it did not make.
         bool linkClaimed = link.SetupStep is not null && link.SetupStep != SymlinkSetupStep.LinkCreated;
         bool workable = ownLink
-            || link.OperationStatus == SymlinkOperationStatus.DeletePending
+            || link.OperationStatus is SymlinkOperationStatus.DeletePending or SymlinkOperationStatus.CleanupPending
             || !linkClaimed;
         DateTimeOffset now = clock.GetUtcNow();
         link.LastCheckedAt = now;
@@ -403,11 +503,15 @@ public sealed class SymlinkService(
     /// </summary>
     public async Task<bool> DeleteAsync(string id, long expectedRevision, CancellationToken cancellationToken)
     {
+        await RequireEnabledAsync(cancellationToken);
         SymlinkLink? link = await store.GetLinkAsync(id, cancellationToken);
         if (link is null) return false;
         if (link.Revision != expectedRevision) throw StaleRevision();
+        if (link.PendingUpdate is not null || link.NamingMove is not null)
+            throw Conflict("An update or rename is still pending.", "Finish or retry it before deleting this entry.");
 
-        if (files.EntryExists(link.LinkPath) && !files.IsSymlink(link.LinkPath))
+        SymlinkPathGuard.CheckParents(files, link.LinkPath);
+        if (files.EntryExists(link.LinkPath) && !IsOwnLinkAt(link, link.LinkPath))
         {
             // Said before anything is written down, because this row is not owed a deletion at all: what
             // stands at its path is not something this feature made.
@@ -417,6 +521,7 @@ public sealed class SymlinkService(
         }
 
         link.OperationStatus = SymlinkOperationStatus.DeletePending;
+        link.SonarrScanCommandId = null;
         link.UpdatedAt = clock.GetUtcNow();
         if (!await store.UpdateLinkAsync(link, expectedRevision, cancellationToken)) throw StaleRevision();
 
@@ -436,11 +541,11 @@ public sealed class SymlinkService(
             }
         }
 
-        if (!await store.DeleteLinkAsync(id, expectedRevision + 1, cancellationToken)) throw StaleRevision();
-
-        // A pair whose link was removed on purpose must not come back as a fresh suggestion by itself.
-        // The rejection archive is where that decision lives, and the user can withdraw it there.
-        await store.RejectAsync(link.Pair, RemovedOnPurposeDetail, clock.GetUtcNow(), cancellationToken);
+        // The file is gone. Retain the cleanup journal until the complete workflow finishes.
+        link.OperationStatus = SymlinkOperationStatus.CleanupPending;
+        link.UpdatedAt = clock.GetUtcNow();
+        if (!await store.UpdateLinkAsync(link, expectedRevision + 1, cancellationToken)) throw StaleRevision();
+        setupRequests.Request();
         logger.LogInformation("Removed the managed link {LinkId} at {LinkPath}.", link.Id, link.LinkPath);
         return true;
     }
@@ -453,6 +558,8 @@ public sealed class SymlinkService(
     /// </summary>
     public async Task<SymlinkSetupOutcome> FinishCreationAsync(SymlinkLink link, CancellationToken cancellationToken)
     {
+        if (!await IsEnabledAsync(cancellationToken)) return SymlinkSetupOutcome.Waiting;
+        if (!await MutationReadyAsync(link, cancellationToken)) return SymlinkSetupOutcome.Waiting;
         if (!files.EntryExists(link.LinkPath))
         {
             try
@@ -461,6 +568,12 @@ public sealed class SymlinkService(
             }
             catch (ApiProblemException exception)
             {
+                if (exception.StatusCode == StatusCodes.Status503ServiceUnavailable)
+                {
+                    Note(link, LinkNotCreatedCode, exception.Detail!);
+                    await store.UpdateLinkAsync(link, link.Revision, cancellationToken);
+                    return SymlinkSetupOutcome.Waiting;
+                }
                 await MarkConflictAsync(link, LinkNotCreatedCode, exception.Detail, cancellationToken);
                 return SymlinkSetupOutcome.Blocked;
             }
@@ -496,7 +609,9 @@ public sealed class SymlinkService(
     /// </summary>
     public async Task<SymlinkSetupOutcome> FinishDeletionAsync(SymlinkLink link, CancellationToken cancellationToken)
     {
-        if (files.EntryExists(link.LinkPath) && !files.IsSymlink(link.LinkPath))
+        if (!await IsEnabledAsync(cancellationToken)) return SymlinkSetupOutcome.Waiting;
+        SymlinkPathGuard.CheckParents(files, link.LinkPath);
+        if (files.EntryExists(link.LinkPath) && !IsOwnLinkAt(link, link.LinkPath))
         {
             await MarkConflictAsync(link, EntryNotALinkCode, EntryNotALinkDetail(link.LinkPath), cancellationToken);
             return SymlinkSetupOutcome.Blocked;
@@ -516,12 +631,28 @@ public sealed class SymlinkService(
             }
         }
 
-        if (!await store.DeleteLinkAsync(link.Id, link.Revision, cancellationToken))
+        if (link.OperationStatus != SymlinkOperationStatus.CleanupPending)
         {
-            return SymlinkSetupOutcome.Blocked;
+            link.OperationStatus = SymlinkOperationStatus.CleanupPending;
+            if (!await store.UpdateLinkAsync(link, link.Revision, cancellationToken)) return SymlinkSetupOutcome.Blocked;
+            link.Revision++;
         }
 
-        await store.RejectAsync(link.Pair, RemovedOnPurposeDetail, clock.GetUtcNow(), cancellationToken);
+        if (!await CleanupDeletedEpisodeFileAsync(link, cancellationToken))
+        {
+            Note(link, "sonarr-cleanup-pending", "Sonarr has not yet cleared the removed link's episode-file association.");
+            await store.UpdateLinkAsync(link, link.Revision, cancellationToken);
+            return SymlinkSetupOutcome.Waiting;
+        }
+
+        // Sonarr's confirmation must reach our persisted library, history and filter counts as well.
+        if (snapshotSync is not null)
+            await snapshotSync.SyncSonarrSeriesAsync(link.SonarrInstanceId, link.SonarrSeriesId, cancellationToken);
+
+        // Publish suggestions before dropping the cleanup journal, so the next UI read sees both changes.
+        if (matching is not null) await matching.RefreshAfterDeletionAsync(link.Id, cancellationToken);
+        if (!await store.DeleteLinkAsync(link.Id, link.Revision, cancellationToken)) return SymlinkSetupOutcome.Blocked;
+
         logger.LogInformation("Removed the managed link {LinkId} that an earlier run owed.", link.Id);
         return SymlinkSetupOutcome.Completed;
     }
@@ -537,6 +668,8 @@ public sealed class SymlinkService(
     /// </summary>
     public async Task<SymlinkSetupOutcome> FinishUpdateAsync(SymlinkLink link, CancellationToken cancellationToken)
     {
+        if (!await IsEnabledAsync(cancellationToken)) return SymlinkSetupOutcome.Waiting;
+        if (!await MutationReadyAsync(link, cancellationToken)) return SymlinkSetupOutcome.Waiting;
         SymlinkLink draft;
         if (link.PendingUpdate is SymlinkSourceUpdate pending)
         {
@@ -545,6 +678,7 @@ public sealed class SymlinkService(
             draft = NewDraft(link.Pair);
             ApplySource(pending, draft);
         }
+
         else
         {
             List<Obstacle> blockers;
@@ -582,6 +716,13 @@ public sealed class SymlinkService(
             link.Revision += 1;
         }
 
+        if (!await MutationReadyAsync(draft, cancellationToken)) return SymlinkSetupOutcome.Waiting;
+        if (files.EntryExists(link.LinkPath) && !IsOwnLinkAt(link, link.LinkPath)
+            && !(IsSameLocalPath(link.LinkPath, draft.LinkPath) && IsOwnLinkAt(draft, draft.LinkPath)))
+        {
+            await MarkConflictAsync(link, "previous-link-foreign", "The registered link was changed externally. Nothing was replaced.", cancellationToken);
+            return SymlinkSetupOutcome.Blocked;
+        }
         try
         {
             if (!IsOwnLinkAt(draft, draft.LinkPath))
@@ -594,10 +735,9 @@ public sealed class SymlinkService(
                             "The entry was left where it is; check the path before resuming the update.");
                     }
 
-                    files.DeleteEntry(draft.LinkPath);
+                    files.ReplaceFileSymlink(draft.LinkPath, files.ReadLinkTarget(draft.LinkPath)!, draft.LinkText);
                 }
-
-                PlaceLink(draft);
+                else PlaceLink(draft);
             }
 
             if (!IsSameLocalPath(link.LinkPath, draft.LinkPath))
@@ -607,11 +747,37 @@ public sealed class SymlinkService(
         }
         catch (ApiProblemException exception)
         {
+            if (exception.StatusCode == StatusCodes.Status503ServiceUnavailable)
+            {
+                Note(link, UpdateNotAppliedCode, exception.Detail!);
+                await store.UpdateLinkAsync(link, link.Revision, cancellationToken);
+                return SymlinkSetupOutcome.Waiting;
+            }
             await MarkConflictAsync(link, UpdateNotAppliedCode, exception.Detail, cancellationToken);
             return SymlinkSetupOutcome.Blocked;
         }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Note(link, UpdateNotAppliedCode, exception.Message);
+            await store.UpdateLinkAsync(link, link.Revision, cancellationToken);
+            return SymlinkSetupOutcome.Waiting;
+        }
 
-        ApplySource(link.PendingUpdate!, link);
+        SymlinkSourceUpdate applied = link.PendingUpdate!;
+        if (applied.PreviousPair is { } previous && applied.Pair is { } destination && previous != destination)
+        {
+            string? cleanup = await FinishCleanupAsync(previous, applied.CleanupCommandId?.ToString(CultureInfo.InvariantCulture), cancellationToken);
+            if (cleanup is not null)
+            {
+                link.PendingUpdate = applied with { CleanupCommandId = int.Parse(cleanup, CultureInfo.InvariantCulture) };
+                await store.UpdateLinkAsync(link, link.Revision, cancellationToken);
+                return SymlinkSetupOutcome.Waiting;
+            }
+            await store.RejectAsync(previous, "This pairing was replaced by an edited link.", clock.GetUtcNow(), cancellationToken);
+            link.SonarrFileId = null;
+            link.MonitoringOriginal = null;
+        }
+        ApplySource(applied, link);
         link.PendingUpdate = null;
         // This checkpoint survives a delayed Radarr read-back: the link changed, so Sonarr must still
         // process it even when the next live plan reports exactly the version now stored on the row.
@@ -674,6 +840,14 @@ public sealed class SymlinkService(
     /// <summary>The file facts of the source a followed entry now reflects.</summary>
     private static void ApplySource(SymlinkSourceUpdate draft, SymlinkLink link)
     {
+        if (draft.Pair is { } pair)
+        {
+            link.RadarrInstanceId = pair.RadarrInstanceId;
+            link.RadarrMovieId = pair.RadarrMovieId;
+            link.SonarrInstanceId = pair.SonarrInstanceId;
+            link.SonarrSeriesId = pair.SonarrSeriesId;
+            link.SonarrEpisodeId = pair.SonarrEpisodeId;
+        }
         link.RadarrFileId = draft.RadarrFileId;
         link.StorageAreaId = draft.StorageAreaId;
         link.SourcePath = draft.SourcePath;
@@ -695,8 +869,8 @@ public sealed class SymlinkService(
         if (!files.EntryExists(previousPath)) return;
 
         bool ours = files.IsSymlink(previousPath)
-            && files.ReadLinkTarget(previousPath) is string target
-            && IsSameLocalPath(Path.Combine(Path.GetDirectoryName(previousPath) ?? string.Empty, target), previousSource);
+            && files.ReadLinkTarget(previousPath) is not null
+            && SymlinkPathGuard.ResolvesTo(files, previousPath, previousSource);
         if (!ours)
         {
             Note(link, ReplacedLinkLeftBehindCode,
@@ -730,7 +904,7 @@ public sealed class SymlinkService(
         if (instance is null) return null;
 
         RadarrMovieFileResource? file = await ChooseSourceAsync(instance, link.Pair, radarrFileId: null, cancellationToken);
-        return file is null ? null : SourceVersionOf(file.Id, file.Size);
+        return file is null ? null : SourceVersionOf(file);
     }
 
     /// <summary>
@@ -777,15 +951,15 @@ public sealed class SymlinkService(
         SymlinkLink? replaces,
         CancellationToken cancellationToken)
     {
+        SymlinkLink draft = NewDraft(pair);
         try
         {
-            return await BuildPlanAsync(pair, radarrFileId, replaces, cancellationToken);
+            return await BuildPlanAsync(pair, radarrFileId, replaces, draft, cancellationToken);
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
         {
             // An instance that does not answer is a reason to try again later, not a pair that has
             // become wrong. Nothing was written, so the whole attempt simply repeats.
-            SymlinkLink draft = NewDraft(pair);
             return (draft,
                 [Unavailable("arr-unreachable", $"An Arr instance of this pair did not answer: {exception.Message}")],
                 []);
@@ -796,10 +970,10 @@ public sealed class SymlinkService(
         SpecialMoviePair pair,
         int? radarrFileId,
         SymlinkLink? replaces,
+        SymlinkLink draft,
         CancellationToken cancellationToken)
     {
         AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
-        SymlinkLink draft = NewDraft(pair);
         List<Obstacle> blockers = [];
         List<SymlinkFinding> warnings = [];
 
@@ -859,6 +1033,11 @@ public sealed class SymlinkService(
             return (draft, [ConflictFinding("source-outside-storage-area", sourceInArea.Failure!)], warnings);
         }
 
+        draft.SourcePath = sourceInArea.Path!;
+        draft.RadarrFileId = source.Id!.Value;
+        draft.ExpectedMetadata = ExpectedFromRadarr(source);
+        draft.SourceVersion = SourceVersionOf(source);
+
         SonarrEpisodeResource? episode = await sonarr.FetchEpisodeAsync(sonarrInstance, pair.SonarrEpisodeId, cancellationToken);
         if (episode?.Id is null)
         {
@@ -887,11 +1066,19 @@ public sealed class SymlinkService(
         // A follow-up runs on the episode that already carries the link this very entry made, so that file
         // is the reason the run exists rather than an obstacle in front of it. Anything the entry does not
         // know about still stops the plan.
-        if ((episode.HasFile == true || episode.EpisodeFileId is not null) && !IsOwnEpisodeFile(replaces, episode))
+        bool ownEpisodeFile = IsOwnEpisodeFile(replaces, episode);
+        if (!ownEpisodeFile && replaces is not null && episode.EpisodeFileId is int existingFileId && IsOwnLinkAt(replaces, replaces.LinkPath))
         {
-            return (draft, [ConflictFinding("sonarr-episode-has-file",
-                $"{sonarrInstance.Name} already has a file for episode {pair.SonarrEpisodeId}, so adding a link would put a second source in front of it.")], warnings);
+            SonarrEpisodeFileResource? existingFile = await sonarr.FetchEpisodeFileAsync(sonarrInstance, existingFileId, cancellationToken);
+            if (existingFile?.Path is string existingPath)
+            {
+                PathMappingResult mapped = await paths.TranslateToLibManagarrPathAsync(pair.SonarrInstanceId, ArrApplicationKind.Sonarr, existingPath, cancellationToken);
+                ownEpisodeFile = mapped.Success && IsSameLocalPath(mapped.Path!, replaces.LinkPath);
+            }
         }
+        bool unmanagedEpisodeFile = (episode.HasFile == true || episode.EpisodeFileId is not null) && !ownEpisodeFile;
+        draft.SeasonNumber = seasonNumber;
+        draft.EpisodeNumber = episodeNumber;
 
         SonarrSeriesResource? series = await sonarr.FetchSeriesAsync(sonarrInstance, pair.SonarrSeriesId, cancellationToken);
         if (series?.Id is null)
@@ -929,13 +1116,6 @@ public sealed class SymlinkService(
         }
 
         draft.StorageAreaId = area.Id;
-        draft.SourcePath = sourceInArea.Path!;
-        draft.RadarrFileId = source.Id!.Value;
-        draft.SeasonNumber = seasonNumber;
-        draft.EpisodeNumber = episodeNumber;
-        draft.ExpectedMetadata = ExpectedFromRadarr(source);
-        draft.SourceVersion = SourceVersionOf(source.Id, source.Size);
-
         string extension = Path.GetExtension(draft.SourcePath);
         if (string.IsNullOrEmpty(extension))
         {
@@ -945,32 +1125,52 @@ public sealed class SymlinkService(
 
         string linkFolder = Path.Combine(seriesInArea.Path!, SpecialsFolderName);
         draft.LinkPath = Path.Combine(linkFolder, LinkNameOf(series, seasonNumber, episodeNumber, extension));
+        if (replaces is not null && (replaces.SourceVersion != draft.SourceVersion || replaces.Pair != pair))
+        {
+            // Sonarr skips MediaInfo for existing same-size files. A distinct provisional path forces
+            // the replacement through its normal import/MediaInfo reader, even if the source ID survived.
+            string version = draft.SourceVersion![^12..];
+            draft.LinkPath = Path.Combine(linkFolder, Path.GetFileNameWithoutExtension(draft.LinkPath) + " - LM" + version + extension);
+        }
         // Relative, because that is the form the media tree keeps working in when the same shelf is
         // mounted somewhere else, and it is the shape the capability probe proved end to end.
         draft.LinkText = Path.GetRelativePath(linkFolder, draft.SourcePath);
+        draft.DesiredFilename = Path.GetFileName(draft.LinkPath);
+        if (unmanagedEpisodeFile)
+        {
+            if (replaces is not null)
+                return (draft, [ConflictFinding("sonarr-episode-has-file", "The replacement episode already has an unmanaged file. Adopt it separately instead of replacing another managed link.")], warnings);
+            Obstacle? adoptionBlocker = await PlanAdoptionAsync(snapshot, pair, draft, seriesInArea.Path!, episode, cancellationToken);
+            if (adoptionBlocker is Obstacle blocker) return (draft, [blocker], warnings);
+        }
+        try { SymlinkPathGuard.CheckParents(files, draft.LinkPath); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        { return (draft, [ConflictFinding("linked-parent-directory", exception.Message)], warnings); }
 
         // The same entry a follow-up is moving counts as ours only while it provably still points at the
         // source the row was built for. Anything else at that path has to be overwritten by a person.
-        if (files.EntryExists(draft.LinkPath) && !IsOwnLinkAt(replaces, draft.LinkPath))
+        if (draft.SonarrFileId is null && files.EntryExists(draft.LinkPath) && !IsOwnLinkAt(replaces, draft.LinkPath))
         {
             return (draft, [ConflictFinding("link-path-taken",
                 $"'{draft.LinkPath}' is already used by an entry that is not managed here, and it would have to be overwritten.")], warnings);
         }
 
         SymlinkCapabilityCheck check = await capability.GetStatusAsync(area.Id, cancellationToken);
-        if (!check.IsCurrent(snapshot.Symlinks.Revision))
+        if (draft.SonarrFileId is null && (snapshot.Symlinks.MediaRoot is not null || !check.IsCurrent(snapshot.Symlinks.Revision)))
+            check = await capability.ProbeAsync(area.Id, cancellationToken);
+        if (draft.SonarrFileId is null && !check.IsCurrent(snapshot.Symlinks.Revision))
         {
             return (draft, [Unavailable("capability-untested",
-                $"The symlink capability test for storage area '{area.Name}' has not run on the current path configuration: {check.Detail}")], warnings);
+                $"The symlink test has not run on the current media configuration: {check.Detail}")], warnings);
         }
 
-        if (check.Status != SymlinkCapabilityStatus.Available)
+        if (draft.SonarrFileId is null && check.Status != SymlinkCapabilityStatus.Available)
         {
             return (draft, [Unavailable("capability-unavailable",
-                $"Storage area '{area.Name}' cannot hold file links right now: {check.Detail}")], warnings);
+                $"The configured media folders cannot hold file links right now: {check.Detail}")], warnings);
         }
 
-        if (!snapshot.Symlinks.ReaderViews.Any(view =>
+        if (snapshot.Symlinks.MediaRoot is null && !snapshot.Symlinks.ReaderViews.Any(view =>
                 view.Kind == PathReaderKind.Sonarr && view.Verification == PathReaderVerification.Verified))
         {
             // Not a blocker: the link is written in this process' view, and a Sonarr on another host may
@@ -984,10 +1184,53 @@ public sealed class SymlinkService(
     }
 
     /// <summary>
-    /// The file the pair was confirmed for, and nothing else. Choosing "the newest file" would silently
-    /// follow an upgrade the user never saw, and several files on disk is the ambiguous case the plan
-    /// says has to be decided by a person.
+    /// Fills an adoption preview only after checking the assigned link and recording its existing
+    /// Sonarr state. Confirmation must separately authorize this exact file, path and link text.
     /// </summary>
+    private async Task<Obstacle?> PlanAdoptionAsync(AppSettings snapshot, SpecialMoviePair pair, SymlinkLink draft,
+        string seriesPath, SonarrEpisodeResource episode, CancellationToken token)
+    {
+        if (existingFiles is null)
+            return ConflictFinding("sonarr-episode-has-file", "Sonarr already has a file. It must be verified as a matching symlink before it can be adopted.");
+        ExistingEpisodeFileCheck? check = await existingFiles.CheckAsync(snapshot, new SymlinkSuggestion
+        {
+            Pair = pair, RadarrFileId = draft.RadarrFileId,
+            Reasons = [new(SpecialMovieMatchingRules.EpisodeHasFileCode, "Inspect the assigned file before adoption.")]
+        }, token);
+        if (check?.EpisodePath is string existingPath)
+        {
+            draft.LinkPath = existingPath;
+            draft.LinkText = check.LinkText ?? files.ReadLinkTarget(existingPath) ?? string.Empty;
+            draft.DesiredFilename = Path.GetFileName(existingPath);
+        }
+        if (check?.Status != ExistingEpisodeFileStatus.Matches || check.SonarrFileId is not int fileId
+            || check.LinkText is null || check.EpisodePath is null)
+            return ConflictFinding("sonarr-episode-has-file", check?.Detail ?? "The existing episode file could not be verified.");
+        if (!ArrPathRules.IsWithinRoot(seriesPath, check.EpisodePath))
+            return ConflictFinding("existing-link-outside-series", "The existing link is outside the selected series folder and cannot be adopted.");
+        if (episode.EpisodeFileId != fileId || check.ExpectedTarget is null || !IsSameLocalPath(check.ExpectedTarget, draft.SourcePath))
+            return ConflictFinding("existing-link-changed", "The episode assignment or movie source changed while planning. Refresh the preview.");
+        ArrInstanceSettings instance = snapshot.SonarrInstances.First(value => value.Id == pair.SonarrInstanceId);
+        SonarrEpisodeFileResource? file = await sonarr.FetchEpisodeFileAsync(instance, fileId, token);
+        if (file?.Id != fileId || file.Path is null)
+            return ConflictFinding("existing-link-changed", "Sonarr no longer returns the verified episode file.");
+        PathMappingResult currentPath = await paths.TranslateToLibManagarrPathAsync(instance.Id, ArrApplicationKind.Sonarr, file.Path, token);
+        if (!currentPath.Success || !IsSameLocalPath(currentPath.Path!, draft.LinkPath) || !ResolvesToSource(draft))
+            return ConflictFinding("existing-link-changed", "The verified episode file or symlink changed while planning. Refresh the preview.");
+        SonarrNamingConfigResource? naming = await sonarr.FetchNamingConfigAsync(instance, token);
+        if (naming?.RenameEpisodes is null)
+            return Unavailable("sonarr-naming-unavailable", "Sonarr's current naming configuration could not be recorded for the existing link.");
+        draft.SonarrFileId = fileId;
+        draft.ConfirmedMetadata = SonarrSpecialIntegrationService.MetadataFrom(file);
+        draft.MonitoringOriginal = episode.Monitored ?? false;
+        draft.MonitoringDisabled = episode.Monitored == false;
+        draft.NamingRevision = SonarrSpecialIntegrationService.NamingRevisionOf(naming);
+        draft.AppliedFilename = Path.GetFileName(draft.LinkPath);
+        draft.SetupStep = SymlinkSetupStep.Completed;
+        return null;
+    }
+
+    /// <summary>Uses the selected file only; never silently chooses another Radarr upgrade.</summary>
     private async Task<RadarrMovieFileResource?> ChooseSourceAsync(
         ArrInstanceSettings instance,
         SpecialMoviePair pair,
@@ -1011,6 +1254,15 @@ public sealed class SymlinkService(
     /// </summary>
     private void PlaceLink(SymlinkLink link)
     {
+        try
+        {
+            SymlinkPathGuard.CheckParents(files, link.SourcePath);
+            SymlinkPathGuard.CheckParents(files, link.LinkPath);
+            if (files.IsSymlink(link.SourcePath)) throw UnavailableException("The movie source must be a regular file, not a link.");
+            files.OpenForRead(link.SourcePath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        { throw UnavailableException($"The source or its parent directories cannot be used: {exception.Message}"); }
         string folder = Path.GetDirectoryName(link.LinkPath)!;
         if (!files.EntryExists(folder))
         {
@@ -1061,9 +1313,9 @@ public sealed class SymlinkService(
     {
         if (!files.IsSymlink(link.LinkPath)) return false;
         string? target = files.ReadLinkTarget(link.LinkPath);
-        if (target is null) return false;
+        if (target is null || target != link.LinkText) return false;
         string? folder = Path.GetDirectoryName(link.LinkPath);
-        return folder is not null && IsSameLocalPath(Path.Combine(folder, target), link.SourcePath);
+        return folder is not null && SymlinkPathGuard.ResolvesTo(files, link.LinkPath, link.SourcePath);
     }
 
     private async Task MarkSuggestionAsync(
@@ -1172,7 +1424,11 @@ public sealed class SymlinkService(
                 .Distinct(StringComparer.OrdinalIgnoreCase)
         ],
         Quality = file.Quality?.Quality?.Name,
-        Size = file.Size
+        QualityRevision = file.Quality?.Revision,
+        Size = file.Size,
+        VideoCodec = file.MediaInfo?.VideoCodec,
+        AudioCodec = file.MediaInfo?.AudioCodec,
+        Resolution = file.MediaInfo?.Resolution
     };
 
     /// <summary>
@@ -1182,6 +1438,39 @@ public sealed class SymlinkService(
     /// </summary>
     public static string SourceVersionOf(int? fileId, long? fileSize) =>
         string.Create(CultureInfo.InvariantCulture, $"radarr:{fileId}:{fileSize}");
+
+    public static string SourceVersionOf(RadarrMovieFileResource file) =>
+        SourceVersionOf(file.Id, file.Size) + ":" + Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            file.Path, file.RelativePath, file.DateAdded, file.ReleaseGroup, file.Quality,
+            Languages = file.Languages?.Select(value => value.Name).Order(StringComparer.OrdinalIgnoreCase),
+            Subtitles = file.SubtitleLanguages?.Select(value => value.Name).Order(StringComparer.OrdinalIgnoreCase),
+            file.MediaInfo
+        })));
+
+    private async Task<bool> MutationReadyAsync(SymlinkLink link, CancellationToken cancellationToken)
+    {
+        AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
+        SymlinkCapabilityCheck check = await capability.GetStatusAsync(link.StorageAreaId, cancellationToken);
+        if (!check.IsCurrent(snapshot.Symlinks.Revision))
+            check = await capability.ProbeAsync(link.StorageAreaId, cancellationToken);
+        if (!check.IsCurrent(snapshot.Symlinks.Revision) || check.Status != SymlinkCapabilityStatus.Available)
+        {
+            Note(link, "capability-untested", $"The automatic symlink check could not verify the current media configuration: {check.Detail}");
+            await store.UpdateLinkAsync(link, link.Revision, cancellationToken);
+            return false;
+        }
+        MediaStorageArea? area = snapshot.Symlinks.FindStorageArea(link.StorageAreaId);
+        if (area is null || !ArrPathRules.IsWithinRoot(area.SeriesRoot, link.LinkPath)
+            || !ArrPathRules.IsWithinRoot(area.MoviesRoot, link.SourcePath))
+        {
+            await MarkConflictAsync(link, "paths-no-longer-allowed", "The registered paths are outside the configured media directories.", cancellationToken);
+            return false;
+        }
+        SymlinkPathGuard.CheckParents(files, link.SourcePath);
+        SymlinkPathGuard.CheckParents(files, link.LinkPath);
+        return true;
+    }
 
     /// <summary>
     /// The file the library currently says the entry's movie has. The snapshots are the only place the
@@ -1211,7 +1500,8 @@ public sealed class SymlinkService(
         replaces is not null
         && files.IsSymlink(linkPath)
         && files.ReadLinkTarget(linkPath) is string target
-        && IsSameLocalPath(Path.Combine(Path.GetDirectoryName(linkPath) ?? string.Empty, target), replaces.SourcePath);
+        && target == replaces.LinkText
+        && SymlinkPathGuard.ResolvesTo(files, linkPath, replaces.SourcePath);
 
     private static MediaStorageArea? FindArea(SymlinkSettings configuration, string sourcePath, string seriesPath) =>
         configuration.StorageAreas.FirstOrDefault(area =>
@@ -1223,6 +1513,126 @@ public sealed class SymlinkService(
         && string.Equals(link.SonarrInstanceId, pair.SonarrInstanceId, StringComparison.OrdinalIgnoreCase)
         && link.SonarrSeriesId == pair.SonarrSeriesId
         && link.SonarrEpisodeId == pair.SonarrEpisodeId;
+
+    public async Task<bool> IsRegisteredEpisodeFileAsync(SymlinkLink link, MediaFileSnapshot file, CancellationToken token)
+    {
+        if (file.Id != link.SonarrFileId || file.Path is null) return false;
+        PathMappingResult mapped = await paths.TranslateToLibManagarrPathAsync(link.SonarrInstanceId, ArrApplicationKind.Sonarr, file.Path, token);
+        return mapped.Success && IsSameLocalPath(mapped.Path!, link.LinkPath);
+    }
+
+    private async Task<bool> CleanupDeletedEpisodeFileAsync(SymlinkLink link, CancellationToken token)
+    {
+        ArrInstanceSettings? instance = (await settings.GetSnapshotAsync(token)).SonarrInstances.FirstOrDefault(value => value.Id == link.SonarrInstanceId);
+        if (instance is null) return false;
+        try
+        {
+            SonarrEpisodeResource? episode = await sonarr.FetchEpisodeAsync(instance, link.SonarrEpisodeId, token);
+            if (episode?.Id != link.SonarrEpisodeId) return false;
+            if (episode.EpisodeFileId is not > 0) return episode.HasFile == false;
+            int fileId = episode.EpisodeFileId.Value;
+            // A different imported file is not this deletion's to remove.
+            if (link.SonarrFileId is int ownedId && ownedId != fileId) return true;
+            SonarrEpisodeFileResource? file = await sonarr.FetchEpisodeFileAsync(instance, fileId, token);
+            if (file?.Id != fileId || file.Path is null) return false;
+            PathMappingResult mapped = await paths.TranslateToLibManagarrPathAsync(link.SonarrInstanceId, ArrApplicationKind.Sonarr, file.Path, token);
+            if (!mapped.Success) return false;
+            if (!IsSameLocalPath(mapped.Path!, link.LinkPath)) return true;
+            SymlinkPathGuard.CheckParents(files, link.LinkPath);
+            if (files.EntryExists(link.LinkPath)) return false;
+            await sonarr.DeleteEpisodeFileAsync(instance, fileId, token);
+            // Confirm just this episode. Sonarr may briefly still expose its old association.
+            SonarrEpisodeResource? after = await sonarr.FetchEpisodeAsync(instance, link.SonarrEpisodeId, token);
+            if (after?.Id != link.SonarrEpisodeId) return false;
+            if (after.EpisodeFileId is not > 0) return after.HasFile == false;
+            if (after.EpisodeFileId != fileId) return true;
+            await sonarr.FetchEpisodeFileAsync(instance, fileId, token);
+            return false;
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return true;
+        }
+    }
+
+    private async Task<string?> FinishCleanupAsync(SpecialMoviePair pair, string? commandId, CancellationToken token)
+    {
+        ArrInstanceSettings? instance = (await settings.GetSnapshotAsync(token)).SonarrInstances.FirstOrDefault(value => value.Id == pair.SonarrInstanceId);
+        if (instance is null) throw UnavailableException("The Sonarr instance needed for cleanup is missing.");
+        if (commandId is null)
+        {
+            SonarrCommandResource? queued = await sonarr.StartRescanSeriesAsync(instance, pair.SonarrSeriesId, token);
+            return queued?.Id?.ToString(CultureInfo.InvariantCulture)
+                ?? throw UnavailableException("Sonarr returned no cleanup command.");
+        }
+        SonarrCommandResource? command = await sonarr.FetchCommandAsync(instance, int.Parse(commandId, CultureInfo.InvariantCulture), token);
+        if (command is null || (command.IsFinished && !command.Completed))
+            throw UnavailableException("The Sonarr cleanup command failed or expired. Retry the operation.");
+        return command.Completed ? null : commandId;
+    }
+
+    public async Task<SymlinkLink?> EditAsync(string id, SaveSymlinkLinkRequest request, CancellationToken token)
+    {
+        await RequireEnabledAsync(token);
+        SymlinkLink? link = await store.GetLinkAsync(id, token);
+        if (link is null) return null;
+        if (link.Revision != request.Revision) throw StaleRevision();
+        if (link.OperationStatus != SymlinkOperationStatus.Active || link.SetupStep != SymlinkSetupStep.Completed)
+            throw Conflict("The current operation is not complete.", "Resolve or retry it before changing the pairing.");
+        AppSettings snapshot = await settings.GetSnapshotAsync(token);
+        if (snapshot.Symlinks.Revision != request.ConfigRevision) throw StaleRevision();
+        SpecialMoviePair pair = request.ToPair();
+        await EnsureEpisodeFreeAsync(pair, id, token);
+        (SymlinkLink draft, List<Obstacle> blockers, _) = await PlannedAsync(pair, request.RadarrFileId, link, token);
+        if (blockers.Count > 0) throw new ApiProblemException(blockers[0].StatusCode, "The link cannot be changed", blockers[0].Finding.Detail!);
+        if (request.SourceVersion != draft.SourceVersion) throw Conflict("The source changed after the preview.", "Preview the new source again.");
+        link.PendingUpdate = SourceUpdateOf(draft) with { Pair = pair, PreviousPair = link.Pair };
+        link.OperationStatus = SymlinkOperationStatus.Updating;
+        link.SetupStep = SymlinkSetupStep.LinkCreated;
+        link.UpdateRevision++;
+        link.UpdatedAt = clock.GetUtcNow();
+        if (!await store.UpdateLinkAsync(link, link.Revision, token)) throw StaleRevision();
+        setupRequests.Request();
+        return await store.GetLinkAsync(id, token);
+    }
+
+    public async Task<SymlinkLink?> RetryAsync(string id, long revision, CancellationToken token)
+    {
+        await RequireEnabledAsync(token);
+        SymlinkLink? link = await store.GetLinkAsync(id, token);
+        if (link is null) return null;
+        if (link.Revision != revision) throw StaleRevision();
+        if (files.EntryExists(link.LinkPath) && !IsOwnLinkAt(link, link.LinkPath)
+            && !(link.PendingUpdate is { } pending && IsOwnLinkAt(new SymlinkLink { SourcePath = pending.SourcePath, LinkText = pending.LinkText }, link.LinkPath)))
+            throw Conflict("The entry is foreign or was changed externally.", "Resolve the conflict at the registered path first.");
+        link.SonarrScanCommandId = null;
+        link.SonarrRenameCommandId = null;
+        if (link.NamingMove is { } move) link.NamingMove = move with { ScanCommandId = null };
+        if (link.PendingUpdate is { } update) link.PendingUpdate = update with { CleanupCommandId = null };
+        if (link.OperationStatus is not (SymlinkOperationStatus.DeletePending or SymlinkOperationStatus.CleanupPending))
+        {
+            link.OperationStatus = link.PendingUpdate is null ? SymlinkOperationStatus.Active : SymlinkOperationStatus.Updating;
+            if (link.SetupStep == SymlinkSetupStep.Completed) link.SetupStep = SymlinkSetupStep.MonitoringDisabled;
+        }
+        link.Findings = [.. link.Findings.Where(value => value.Code == RestoredUncheckedCode)];
+        link.UpdatedAt = clock.GetUtcNow();
+        if (!await store.UpdateLinkAsync(link, revision, token)) throw StaleRevision();
+        setupRequests.Request();
+        return await store.GetLinkAsync(id, token);
+    }
+
+    private async Task EnsureEpisodeFreeAsync(SpecialMoviePair pair, string? exceptId, CancellationToken token)
+    {
+        foreach (SymlinkLink row in await store.GetLinksAsync(token))
+        {
+            if (row.Id == exceptId) continue;
+            if (SameEpisode(row.Pair, pair) || (row.PendingUpdate?.Pair is { } reserved && SameEpisode(reserved, pair)))
+                throw Conflict("The special is already reserved by another link.", "Edit the existing entry instead.");
+        }
+    }
+
+    private static bool SameEpisode(SpecialMoviePair left, SpecialMoviePair right) =>
+        left.SonarrInstanceId == right.SonarrInstanceId && left.SonarrSeriesId == right.SonarrSeriesId && left.SonarrEpisodeId == right.SonarrEpisodeId;
 
     private static string EntryNotALinkDetail(string linkPath) =>
         $"'{linkPath}' is not a symbolic link anymore, so nothing was removed. Clear that entry by hand and delete this row again.";

@@ -10,6 +10,7 @@ public sealed class SymlinkLinkDto
     public required string Id { get; set; }
 
     public string RadarrInstanceId { get; set; } = string.Empty;
+    public string? RadarrInstanceName { get; set; }
 
     public int RadarrMovieId { get; set; }
 
@@ -18,12 +19,14 @@ public sealed class SymlinkLinkDto
     public int RadarrFileId { get; set; }
 
     public string SonarrInstanceId { get; set; } = string.Empty;
+    public string? SonarrInstanceName { get; set; }
 
     public int SonarrSeriesId { get; set; }
 
     public string? SonarrSeriesTitle { get; set; }
 
     public int SonarrEpisodeId { get; set; }
+    public int? SonarrFileId { get; set; }
 
     public string? SonarrEpisodeTitle { get; set; }
 
@@ -87,6 +90,7 @@ public sealed class SymlinkLinkDto
 /// </summary>
 public sealed class SymlinkLinkPlanDto
 {
+    public bool AdoptsExisting { get; set; }
     public bool Runnable { get; set; }
 
     public required SymlinkLinkDto Draft { get; set; }
@@ -105,6 +109,22 @@ public sealed class PreviewSymlinkLinkRequest : SpecialMoviePairRequest
     /// one file; several is a decision for a person, not a tie to break here.
     /// </summary>
     public int? RadarrFileId { get; set; }
+
+    public string? ReplacesId { get; set; }
+}
+
+public sealed class SaveSymlinkLinkRequest : SpecialMoviePairRequest
+{
+    public int? RadarrFileId { get; set; }
+    public int ConfigRevision { get; set; }
+    public long Revision { get; set; }
+    public string? SourceVersion { get; set; }
+    public ExistingLinkConfirmation? ExistingLink { get; set; }
+}
+
+public sealed class RetrySymlinkRequest
+{
+    public long Revision { get; set; }
 }
 
 /// <summary>Whether later upgrades of the source keep being followed, plus the row that was looked at.</summary>

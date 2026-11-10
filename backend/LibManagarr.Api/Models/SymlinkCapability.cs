@@ -21,6 +21,10 @@ public enum SymlinkCapabilityStatus
 /// </summary>
 public sealed class SymlinkCapabilityCheck
 {
+    // Persisted to distinguish evidence from this process from an earlier run or restored database.
+    public static string CurrentProcessId { get; } = Guid.NewGuid().ToString("N");
+
+    public string? ProcessId { get; init; } = CurrentProcessId;
     public required string StorageAreaId { get; init; }
 
     public SymlinkCapabilityStatus Status { get; init; }
@@ -34,5 +38,6 @@ public sealed class SymlinkCapabilityCheck
 
     /// <summary>True when the link test passed under the revision that is still configured.</summary>
     public bool IsCurrent(int currentRevision) =>
-        Status != SymlinkCapabilityStatus.NotTested && CheckedAt is not null && ConfigRevision == currentRevision;
+        Status != SymlinkCapabilityStatus.NotTested && CheckedAt is not null && ConfigRevision == currentRevision
+        && ProcessId == CurrentProcessId;
 }

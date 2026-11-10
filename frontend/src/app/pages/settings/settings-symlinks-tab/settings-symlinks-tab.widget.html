@@ -1,342 +1,90 @@
 <section class="tab-header">{{ t('settings.symlinksTab.description') }}</section>
 
 <section class="tab-content">
-  @if (symlinkService.settingsError(); as error) {
+  @if (generalError(); as error) {
     <section class="feedback error">{{ error }}</section>
   }
 
   <form class="symlink-form" [formGroup]="form">
     <section class="card">
-      <section>
-        <div class="card-header">
-          <h2 class="card-title">{{ t('settings.symlinks.areas.title') }}</h2>
-          <app-info-icon [messageText]="t('settings.symlinks.areas.info')" />
-          <div class="card-header-actions">
-            <button type="button" mat-stroked-button class="secondary-button" (click)="addStorageArea()">
-              <mat-icon class="material-symbols-outlined">add</mat-icon>
-              {{ t('settings.symlinks.areas.add') }}
-            </button>
-          </div>
+      <div class="card-content symlink-rows">
+        <div class="enabled-control">
+          <mat-slide-toggle
+            [aria-describedby]="enableHint() ? 'symlinks-enable-hint' : ''"
+            formControlName="enabled"
+            (change)="saveAsync('enabled')"
+            >{{ t('settings.symlinks.enabled') }}</mat-slide-toggle
+          >
+          <app-feedback-icon
+            [state]="feedbackField() === 'enabled' ? (isBusy() ? 'loading' : feedbackState()) : null"
+            variant="inline"
+            [tooltipText]="feedback()"
+          />
         </div>
-
-        <div class="card-content symlink-rows">
-          @if (storageAreas.controls.length === 0) {
-            <p class="rows-empty">{{ t('settings.symlinks.areas.empty') }}</p>
-          }
-          @for (area of storageAreas.controls; track area) {
-            <div class="symlink-row" [formGroup]="area">
-              <div class="field">
-                <div class="field-label-row">
-                  <label [for]="'area-name-' + $index">{{ t('settings.symlinks.areas.name') }}</label>
-                </div>
-                <input
-                  matInput
-                  [id]="'area-name-' + $index"
-                  formControlName="name"
-                  [class.has-error]="fieldError('storageAreas.' + $index + '.name') !== null"
-                />
-                @if (fieldError('storageAreas.' + $index + '.name'); as rowError) {
-                  <p class="field-error" role="alert">{{ rowError }}</p>
-                }
-              </div>
-
-              <div class="field">
-                <div class="field-label-row">
-                  <label [for]="'area-movies-' + $index">{{ t('settings.symlinks.areas.moviesRoot') }}</label>
-                </div>
-                <input
-                  matInput
-                  [id]="'area-movies-' + $index"
-                  formControlName="moviesRoot"
-                  [class.has-error]="fieldError('storageAreas.' + $index + '.moviesRoot') !== null"
-                />
-                @if (fieldError('storageAreas.' + $index + '.moviesRoot'); as rowError) {
-                  <p class="field-error" role="alert">{{ rowError }}</p>
-                }
-              </div>
-
-              <div class="field">
-                <div class="field-label-row">
-                  <label [for]="'area-series-' + $index">{{ t('settings.symlinks.areas.seriesRoot') }}</label>
-                </div>
-                <input
-                  matInput
-                  [id]="'area-series-' + $index"
-                  formControlName="seriesRoot"
-                  [class.has-error]="fieldError('storageAreas.' + $index + '.seriesRoot') !== null"
-                />
-                @if (fieldError('storageAreas.' + $index + '.seriesRoot'); as rowError) {
-                  <p class="field-error" role="alert">{{ rowError }}</p>
-                }
-              </div>
-
-              <div class="row-actions">
-                <button
-                  type="button"
-                  mat-stroked-button
-                  class="secondary-button"
-                  [attr.aria-label]="t('settings.remove')"
-                  (click)="removeStorageArea($index)"
-                >
-                  <mat-icon class="material-symbols-outlined">delete</mat-icon>
-                </button>
-              </div>
-            </div>
-          }
-        </div>
-      </section>
+        <p class="structure-hint">{{ t('settings.symlinks.enabledHint') }}</p>
+        @if (enableHint(); as hint) {
+          <p class="structure-hint enable-hint" id="symlinks-enable-hint" role="status">{{ hint }}</p>
+        }
+      </div>
     </section>
-
     <section class="card">
       <section>
         <div class="card-header">
-          <h2 class="card-title">{{ t('settings.symlinks.mappings.title') }}</h2>
-          <app-info-icon [messageText]="t('settings.symlinks.mappings.info')" />
-          <div class="card-header-actions">
-            <button type="button" mat-stroked-button class="secondary-button" (click)="addPathMapping()">
-              <mat-icon class="material-symbols-outlined">add</mat-icon>
-              {{ t('settings.symlinks.mappings.add') }}
-            </button>
+          <h2 class="card-title">{{ t('settings.symlinks.mediaRoot') }}</h2>
+        </div>
+        <div class="card-content symlink-rows">
+          <p class="structure-hint" id="symlink-structure-hint">{{ t('settings.symlinks.structureHint') }}</p>
+          <pre class="media-structure">{{ structureExample() }}</pre>
+          <div class="field">
+            <div class="field-label-row">
+              <label for="symlink-media-root">{{ t('settings.symlinks.mediaRoot') }}</label>
+            </div>
+            <div class="media-root-controls">
+              <div class="field-control-wrap">
+                <input
+                  matInput
+                  id="symlink-media-root"
+                  formControlName="mediaRoot"
+                  placeholder="/media"
+                  aria-describedby="symlink-structure-hint"
+                  [class.has-error]="fieldError() !== null"
+                  [attr.aria-invalid]="fieldError() !== null"
+                  (blur)="saveAsync()"
+                  (keydown.enter)="$event.preventDefault(); saveAsync()"
+                />
+                <app-feedback-icon
+                  [state]="feedbackField() === 'mediaRoot' ? (isBusy() ? 'loading' : feedbackState()) : null"
+                  variant="overlay"
+                  [tooltipText]="fieldError() ?? feedback()"
+                />
+              </div>
+              <button
+                type="button"
+                mat-stroked-button
+                class="secondary-button"
+                [disabled]="isBusy() || !symlinkService.settings()"
+                (pointerdown)="$event.preventDefault()"
+                (click)="browseDirectory()"
+              >
+                <mat-icon class="material-symbols-outlined">folder_open</mat-icon>{{ t('settings.symlinks.browse') }}
+              </button>
+            </div>
+            @if (fieldError(); as error) {
+              <p class="field-error" role="alert">{{ error }}</p>
+            }
           </div>
-        </div>
-
-        <div class="card-content symlink-rows">
-          @if (pathMappings.controls.length === 0) {
-            <p class="rows-empty">{{ t('settings.symlinks.mappings.empty') }}</p>
-          }
-          @for (mapping of pathMappings.controls; track mapping) {
-            <div class="symlink-row" [formGroup]="mapping">
-              <div class="field">
-                <div class="field-label-row">
-                  <label [id]="'mapping-kind-label-' + $index" [for]="'mapping-kind-' + $index">{{
-                    t('settings.symlinks.mappings.kind')
-                  }}</label>
-                </div>
-                <mat-select
-                  [id]="'mapping-kind-' + $index"
-                  formControlName="kind"
-                  [attr.aria-labelledby]="'mapping-kind-label-' + $index"
-                  (valueChange)="handleMappingKindChanged(mapping)"
-                >
-                  @for (kind of mappingKindOptions; track kind) {
-                    <mat-option [value]="kind">{{ kind }}</mat-option>
-                  }
-                </mat-select>
-                @if (fieldError('pathMappings.' + $index + '.kind'); as rowError) {
-                  <p class="field-error" role="alert">{{ rowError }}</p>
-                }
-              </div>
-
-              <div class="field">
-                <div class="field-label-row">
-                  <label [id]="'mapping-instance-label-' + $index" [for]="'mapping-instance-' + $index">{{
-                    t('settings.symlinks.mappings.instance')
-                  }}</label>
-                </div>
-                <mat-select
-                  [id]="'mapping-instance-' + $index"
-                  formControlName="instanceId"
-                  [attr.aria-labelledby]="'mapping-instance-label-' + $index"
-                  [class.has-error]="fieldError('pathMappings.' + $index + '.instanceId') !== null"
-                >
-                  @for (instance of instancesFor(mapping.controls.kind.value); track instance.id) {
-                    <mat-option [value]="instance.id">{{ instance.name }}</mat-option>
-                  }
-                </mat-select>
-                @if (fieldError('pathMappings.' + $index + '.instanceId'); as rowError) {
-                  <p class="field-error" role="alert">{{ rowError }}</p>
-                }
-              </div>
-
-              <div class="field">
-                <div class="field-label-row">
-                  <label [for]="'mapping-instance-root-' + $index">{{ t('settings.symlinks.mappings.instanceRoot') }}</label>
-                  <app-info-icon [messageText]="t('settings.symlinks.mappings.instanceRoot.info')" />
-                </div>
-                <input
-                  matInput
-                  [id]="'mapping-instance-root-' + $index"
-                  formControlName="instanceRoot"
-                  [class.has-error]="fieldError('pathMappings.' + $index + '.instanceRoot') !== null"
-                />
-                @if (fieldError('pathMappings.' + $index + '.instanceRoot'); as rowError) {
-                  <p class="field-error" role="alert">{{ rowError }}</p>
-                }
-              </div>
-
-              <div class="field">
-                <div class="field-label-row">
-                  <label [for]="'mapping-libmanagarr-root-' + $index">{{ t('settings.symlinks.mappings.libManagarrRoot') }}</label>
-                  <app-info-icon [messageText]="t('settings.symlinks.mappings.libManagarrRoot.info')" />
-                </div>
-                <input
-                  matInput
-                  [id]="'mapping-libmanagarr-root-' + $index"
-                  formControlName="libManagarrRoot"
-                  [class.has-error]="fieldError('pathMappings.' + $index + '.libManagarrRoot') !== null"
-                />
-                @if (fieldError('pathMappings.' + $index + '.libManagarrRoot'); as rowError) {
-                  <p class="field-error" role="alert">{{ rowError }}</p>
-                }
-              </div>
-
-              <div class="row-actions">
-                <button
-                  type="button"
-                  mat-stroked-button
-                  class="secondary-button"
-                  [attr.aria-label]="t('settings.remove')"
-                  (click)="removePathMapping($index)"
-                >
-                  <mat-icon class="material-symbols-outlined">delete</mat-icon>
-                </button>
-              </div>
-            </div>
-          }
+          <section class="permissions-hint structure-hint" aria-labelledby="symlink-permissions-title">
+            <p class="permissions-title" id="symlink-permissions-title"><strong>{{ t('settings.symlinks.permissions.title') }}</strong></p>
+            <p>{{ t('settings.symlinks.permissions.intro') }}</p>
+            <ul>
+              <li>{{ t('settings.symlinks.permissions.movies') }}</li>
+              <li>{{ t('settings.symlinks.permissions.series') }}</li>
+              <li>{{ t('settings.symlinks.permissions.appData') }}</li>
+            </ul>
+            <p>{{ t('settings.symlinks.permissions.help') }}</p>
+          </section>
         </div>
       </section>
     </section>
-
-    <section class="card">
-      <section>
-        <div class="card-header">
-          <h2 class="card-title">{{ t('settings.symlinks.readers.title') }}</h2>
-          <app-info-icon [messageText]="t('settings.symlinks.readers.info')" />
-          <div class="card-header-actions">
-            <button type="button" mat-stroked-button class="secondary-button" (click)="addReaderView()">
-              <mat-icon class="material-symbols-outlined">add</mat-icon>
-              {{ t('settings.symlinks.readers.add') }}
-            </button>
-          </div>
-        </div>
-
-        <div class="card-content symlink-rows">
-          @if (readerViews.controls.length === 0) {
-            <p class="rows-empty">{{ t('settings.symlinks.readers.empty') }}</p>
-          }
-          @for (view of readerViews.controls; track view) {
-            <div class="symlink-row" [formGroup]="view">
-              <div class="field">
-                <div class="field-label-row">
-                  <label [id]="'reader-kind-label-' + $index" [for]="'reader-kind-' + $index">{{
-                    t('settings.symlinks.readers.kind')
-                  }}</label>
-                </div>
-                <mat-select
-                  [id]="'reader-kind-' + $index"
-                  formControlName="kind"
-                  [attr.aria-labelledby]="'reader-kind-label-' + $index"
-                  (valueChange)="resetVerification(view)"
-                >
-                  @for (kind of readerKindOptions; track kind) {
-                    <mat-option [value]="kind">{{ readerKindLabel(kind) }}</mat-option>
-                  }
-                </mat-select>
-                @if (fieldError('readerViews.' + $index + '.kind'); as rowError) {
-                  <p class="field-error" role="alert">{{ rowError }}</p>
-                }
-              </div>
-
-              <div class="field">
-                <div class="field-label-row">
-                  <label [for]="'reader-root-' + $index">{{ t('settings.symlinks.readers.root') }}</label>
-                  <app-info-icon [messageText]="t('settings.symlinks.readers.root.info')" />
-                </div>
-                <input
-                  matInput
-                  [id]="'reader-root-' + $index"
-                  formControlName="root"
-                  (input)="resetVerification(view)"
-                  [class.has-error]="fieldError('readerViews.' + $index + '.root') !== null"
-                />
-                @if (fieldError('readerViews.' + $index + '.root'); as rowError) {
-                  <p class="field-error" role="alert">{{ rowError }}</p>
-                }
-              </div>
-
-              <div class="field">
-                <div class="field-label-row">
-                  <label [for]="'reader-verification-' + $index">{{ t('settings.symlinks.readers.verification') }}</label>
-                  <app-info-icon [messageText]="t('settings.symlinks.readers.verification.info')" />
-                </div>
-                <input
-                  matInput
-                  [id]="'reader-verification-' + $index"
-                  [value]="verificationLabel(view.controls.verification.value)"
-                  [disabled]="true"
-                />
-              </div>
-
-              <div class="row-actions">
-                <button
-                  type="button"
-                  mat-stroked-button
-                  class="secondary-button"
-                  [attr.aria-label]="t('settings.remove')"
-                  (click)="removeReaderView($index)"
-                >
-                  <mat-icon class="material-symbols-outlined">delete</mat-icon>
-                </button>
-              </div>
-            </div>
-          }
-        </div>
-      </section>
-    </section>
-
-    <section class="card">
-      <section>
-        <div class="card-header">
-          <h2 class="card-title">{{ t('settings.symlinks.capability.title') }}</h2>
-          <app-info-icon [messageText]="t('settings.symlinks.capability.info')" />
-        </div>
-
-        <div class="card-content symlink-rows">
-          @if (capabilityChecks().length === 0) {
-            <p class="rows-empty">{{ t('settings.symlinks.capability.empty') }}</p>
-          }
-          @for (check of capabilityChecks(); track check.storageAreaId) {
-            <div class="capability-row">
-              <div class="capability-identity">
-                <span class="capability-area">{{ savedAreaNames()[check.storageAreaId] }}</span>
-                <span class="capability-status">{{ capabilityLabel(check) }}</span>
-                @if (check.stale) {
-                  <span class="capability-stale">{{ t('settings.symlinks.capability.stale') }}</span>
-                }
-              </div>
-              <p class="capability-detail">{{ capabilityMessage(check) }}</p>
-              <div class="capability-actions">
-                <span class="capability-checked"
-                  >{{ t('settings.symlinks.capability.checkedAt') }} {{ check.checkedAt | appDate: 'medium' }}</span
-                >
-                <app-feedback-icon [state]="capabilityFeedback(check)" variant="inline" [tooltipText]="capabilityMessage(check)" />
-                <button
-                  type="button"
-                  mat-stroked-button
-                  class="secondary-button"
-                  [disabled]="capabilityFeedback(check) === 'loading'"
-                  (click)="testCapabilityAsync(check)"
-                >
-                  {{ t('settings.symlinks.capability.run') }}
-                </button>
-              </div>
-            </div>
-          }
-        </div>
-      </section>
-    </section>
-
-    <div class="save-bar">
-      <app-feedback-icon [state]="isBusy() ? 'loading' : feedbackState()" variant="inline" [tooltipText]="feedback()" />
-      <button type="button" mat-stroked-button class="secondary-button" [disabled]="!hasUnsavedChanges() || isBusy()" (click)="saveAsync()">
-        {{ t('settings.save') }}
-      </button>
-      <button type="button" mat-stroked-button class="secondary-button" [disabled]="!hasUnsavedChanges()" (click)="discardAsync()">
-        {{ t('settings.symlinks.discard') }}
-      </button>
-      @if (feedback(); as message) {
-        <span class="save-feedback">{{ message }}</span>
-      }
-    </div>
   </form>
 </section>

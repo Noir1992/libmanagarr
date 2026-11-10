@@ -45,11 +45,26 @@ export interface SymlinkCapabilityCheck {
   stale: boolean;
 }
 
-/** The configuration plus the probe answers; a mapping list without them would show an unusable setup. */
+/** The media directory and probe results. Legacy collections are read-only compatibility data. */
 export interface SymlinkSettings {
+  enabled?: boolean;
+  mediaRoot?: string;
   storageAreas: MediaStorageArea[];
   pathMappings: ArrPathMapping[];
   readerViews: PathReaderView[];
   revision: number;
   capabilityChecks: SymlinkCapabilityCheck[];
+}
+
+export interface SymlinkSettingsInput {
+  enabled?: boolean;
+  mediaRoot: string;
+}
+
+export interface SymlinkDirectoryListing {
+  path: string | null;
+  parentPath: string | null;
+  canSelect: boolean;
+  directories: { name: string; path: string }[];
+  truncated: boolean;
 }

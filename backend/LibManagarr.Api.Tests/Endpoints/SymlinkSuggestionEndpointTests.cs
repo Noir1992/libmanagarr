@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using LibManagarr.Api.Endpoints;
+using LibManagarr.Api.Clients;
 using LibManagarr.Api.Models;
 using LibManagarr.Api.Services;
 using LibManagarr.Api.Tests.Services;
@@ -22,8 +23,48 @@ public sealed class SymlinkSuggestionEndpointTests
     private const string SeriesTitle = "Kabaneri of the Iron Fortress";
     private const string SpecialTitle = "Kabaneri of the Iron Fortress: The Battle of Unato";
     private const string SourcePath = @"\\nas\radarr\kabaneri\unato.mkv";
+    private const string SeriesPath = "/media/series/Kabaneri";
 
     private static readonly DateTimeOffset Start = new(2026, 11, 6, 9, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public async Task Suggestions_IncludeTheLiveFileCheckWithoutAdoptingOrChangingStoredRows()
+    {
+        AppSettings settings = ExistingEpisodeFileInspectorTests.Settings();
+        SymlinkSuggestion suggestion = ExistingEpisodeFileInspectorTests.Suggestion();
+        InMemorySymlinkStore store = await Store(suggestion);
+        string before = System.Text.Json.JsonSerializer.Serialize(await store.GetSuggestionsAsync(CancellationToken.None));
+        string source = Path.Combine(settings.Symlinks.StorageAreas[0].MoviesRoot, "Film", "movie.mkv");
+        string episode = Path.Combine(settings.Symlinks.StorageAreas[0].SeriesRoot, "Show", "Specials", "s00e01.mkv");
+        FakeLinkFileSystem files = new();
+        files.Entries[source] = null;
+        files.Entries[episode] = Path.GetRelativePath(Path.GetDirectoryName(episode)!, source);
+        ExistingEpisodeFileInspector inspector = ExistingEpisodeFileInspectorTests.Inspector(settings, files,
+            ExistingEpisodeFileInspectorTests.Handler(episode, source));
+        Ok<IReadOnlyList<SymlinkSuggestionDto>> response = await Invoke<Ok<IReadOnlyList<SymlinkSuggestionDto>>>(
+            "GetSuggestionsAsync", new StubSettingsService(settings), store, inspector, CancellationToken.None);
+        ExistingEpisodeFileCheck check = Assert.Single(response.Value!).ExistingFileCheck!;
+        Assert.Equal(ExistingEpisodeFileStatus.Matches, check.Status);
+        Assert.Equal(source, check.ActualTarget);
+        Assert.Equal(before, System.Text.Json.JsonSerializer.Serialize(await store.GetSuggestionsAsync(CancellationToken.None)));
+        Assert.Empty(await store.GetLinksAsync(CancellationToken.None));
+        Assert.Empty(files.CreatedLinks);
+        Assert.Empty(files.Removed);
+    }
+
+    [Fact]
+    public async Task Suggestions_FromAnOlderSnapshotHaveNoInventedSeriesPath()
+    {
+        AppSettings settings = Settings();
+        SonarrSeriesSnapshot previous = settings.SonarrSnapshots[0].Series[0];
+        settings.SonarrSnapshots[0].Series[0] = new SonarrSeriesSnapshot
+        {
+            SeriesId = previous.SeriesId, Title = previous.Title, Seasons = previous.Seasons
+        };
+        SymlinkSuggestionDto dto = Assert.Single(await GetSuggestions(settings, await Store(suggestion())));
+        Assert.Equal(SeriesTitle, dto.SonarrSeriesTitle);
+        Assert.Null(dto.SonarrSeriesPath);
+    }
     private static readonly SpecialMoviePair Pair = new(RadarrInstance, 70, SonarrInstance, 12, 5);
 
     [Fact]
@@ -42,6 +83,7 @@ public sealed class SymlinkSuggestionEndpointTests
         Assert.Equal(SpecialTitle, dto.RadarrMovieTitle);
         Assert.Equal(SonarrInstance, dto.SonarrInstanceId);
         Assert.Equal(SeriesTitle, dto.SonarrSeriesTitle);
+        Assert.Equal(SeriesPath, dto.SonarrSeriesPath);
         Assert.Equal(SpecialTitle, dto.SonarrEpisodeTitle);
         Assert.Equal(0, dto.SeasonNumber);
         Assert.Equal(3, dto.EpisodeNumber);
@@ -231,14 +273,21 @@ public sealed class SymlinkSuggestionEndpointTests
 
         using IServiceScope scope = factory.Services.CreateScope();
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<SymlinkSuggestionService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ExistingEpisodeFileInspector>());
         // The pass runs outside the request that noticed a change, so the signal has to be one per process
         // while the pass itself is resolved per run. (The test host unregisters every hosted service on
         // purpose, so the background run itself is only visible in a real start of the app.)
         Assert.Same(factory.Services.GetRequiredService<SymlinkMatchingRequests>(), factory.Services.GetRequiredService<SymlinkMatchingRequests>());
     }
 
-    private static async Task<IReadOnlyList<SymlinkSuggestionDto>> GetSuggestions(AppSettings settings, InMemorySymlinkStore store) =>
-        (await Invoke<Ok<IReadOnlyList<SymlinkSuggestionDto>>>("GetSuggestionsAsync", new StubSettingsService(settings), store, CancellationToken.None)).Value!;
+    private static async Task<IReadOnlyList<SymlinkSuggestionDto>> GetSuggestions(AppSettings settings, InMemorySymlinkStore store)
+    {
+        StubSettingsService settingsService = new(settings);
+        using HttpClient http = new(new NeverAskedHandler());
+        ExistingEpisodeFileInspector inspector = new(new SonarrClient(http), new RadarrClient(http),
+            new MediaPathMappingService(settingsService), new FakeLinkFileSystem(), new FakeTimeProvider(Start));
+        return (await Invoke<Ok<IReadOnlyList<SymlinkSuggestionDto>>>("GetSuggestionsAsync", settingsService, store, inspector, CancellationToken.None)).Value!;
+    }
 
     private static async Task<IReadOnlyList<SymlinkRejectionDto>> GetRejections(AppSettings settings, InMemorySymlinkStore store) =>
         (await Invoke<Ok<IReadOnlyList<SymlinkRejectionDto>>>("GetRejectionsAsync", new StubSettingsService(settings), store, CancellationToken.None)).Value!;
@@ -308,6 +357,7 @@ public sealed class SymlinkSuggestionEndpointTests
                     {
                         SeriesId = 12,
                         Title = SeriesTitle,
+                        Path = SeriesPath,
                         Seasons =
                         [
                             new SonarrSeasonSnapshot

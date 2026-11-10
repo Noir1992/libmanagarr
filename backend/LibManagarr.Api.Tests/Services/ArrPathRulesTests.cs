@@ -10,6 +10,7 @@ public sealed class ArrPathRulesTests
     [InlineData("C:/media/movies", ArrPathSyntax.Windows, @"C:\", "media|movies")]
     [InlineData(@"\\nas\media\movies", ArrPathSyntax.Windows, @"\\nas\media\", "movies")]
     [InlineData("/media/movies", ArrPathSyntax.Unix, "/", "media|movies")]
+    [InlineData("/media/mov:ies", ArrPathSyntax.Unix, "/", "media|mov:ies")]
     [InlineData("/media//movies/", ArrPathSyntax.Unix, "/", "media|movies")]
     public void TryParse_AcceptsAbsolutePathsInEitherGrammar(string value, ArrPathSyntax syntax, string root, string segments)
     {
@@ -30,7 +31,7 @@ public sealed class ArrPathRulesTests
     [InlineData("/media/../secret")]
     [InlineData(@"C:\media\.\movies")]
     [InlineData(@"\\nas")]
-    [InlineData("/media/mov:ies")]
+    [InlineData(@"C:\media\mov:ies")]
     [InlineData(@"C:\media\movies.")]
     [InlineData(@"C:\media\con")]
     public void TryParse_RefusesPathsThatCannotNameOneShelf(string? value)

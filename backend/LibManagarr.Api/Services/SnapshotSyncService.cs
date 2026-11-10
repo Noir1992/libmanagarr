@@ -67,7 +67,7 @@ public sealed class SnapshotSyncService(
             instanceId,
             cancellationToken);
         SonarrInstanceSnapshot snapshot = await sonarrClient.FetchSnapshotAsync(instance, cancellationToken);
-        DateTimeOffset historyStart = previousSnapshot?.SyncedAt ?? GetSonarrBootstrapDate(snapshot);
+        DateTimeOffset historyStart = previousSnapshot?.LastFullSyncAt ?? previousSnapshot?.SyncedAt ?? GetSonarrBootstrapDate(snapshot);
         if (!hasSonarrLibraryHistory)
         {
             historyStart = GetSonarrBootstrapDate(snapshot);
@@ -76,47 +76,10 @@ public sealed class SnapshotSyncService(
             instance,
             historyStart,
             cancellationToken);
-        IReadOnlyList<LibraryChangeHistoryEntry> historyEntries = LibraryChangeHistoryBuilder.BuildSonarrEntries(
-            instance,
-            snapshot,
-            previousSnapshot,
-            historyResources);
-        settings.SonarrSnapshots = [
-            .. settings.SonarrSnapshots.Where(currentSnapshot => currentSnapshot.InstanceId != instanceId),
-            snapshot
-        ];
-        await historyStore.AppendSnapshotHistoryAsync(
-            ArrApplicationKind.Sonarr,
-            snapshot.InstanceId,
-            snapshot.InstanceName,
-            snapshot.SyncedAt,
-            snapshot,
-            cancellationToken);
-        IReadOnlyList<LibraryChangeHistoryEntry> persistedSonarrHistory = await historyStore.GetLibraryHistoryAsync(
-            ArrApplicationKind.Sonarr,
-            cancellationToken);
-        List<LibraryChangeHistoryEntry> combinedSonarrHistory = [.. persistedSonarrHistory, .. historyEntries];
-        IReadOnlyList<LibraryChangeHistoryEntry> sonarrSeedEntries = LibraryHistorySeedBuilder.BuildSonarrSeeds(
-            instance,
-            snapshot,
-            combinedSonarrHistory);
-        await historyStore.ReplaceLibraryHistoryAsync(
-            ArrApplicationKind.Sonarr,
-            LibraryChangeHistoryNormalizer.Normalize(combinedSonarrHistory.Concat(sonarrSeedEntries)),
-            cancellationToken);
-
-        LibraryFilterValues sonarrFilterValues = LibraryFilterValuesBuilder.Build(instance.Id, snapshot);
-        settings.LibraryFilterValues = [
-            .. settings.LibraryFilterValues.Where(fv => fv.InstanceId != instanceId),
-            sonarrFilterValues
-        ];
-
-        await settingsService.UpdateAsync(current =>
-        {
-            if (!current.SonarrInstances.Any(item => item.Id == instanceId)) return;
-            current.SonarrSnapshots = [.. current.SonarrSnapshots.Where(item => item.InstanceId != instanceId), snapshot];
-            current.LibraryFilterValues = [.. current.LibraryFilterValues.Where(item => item.InstanceId != instanceId), sonarrFilterValues];
-        }, cancellationToken);
+        historyResources = historyResources.Where(history => history.SeriesId is not int id
+            || previousSnapshot?.SeriesSyncTimes.TryGetValue(id, out DateTimeOffset alreadySynced) != true
+            || history.Date > alreadySynced).ToArray();
+        await PersistSonarrSnapshotAsync(instance, previousSnapshot, snapshot, historyResources, cancellationToken);
 
         logger.LogInformation(
             "Completed Sonarr snapshot sync for instance {InstanceName} with {ItemCount} items.",
@@ -133,6 +96,65 @@ public sealed class SnapshotSyncService(
             SyncedAt = snapshot.SyncedAt,
             ItemCount = snapshot.Series.Count
         };
+    }
+
+    /// <summary>Refreshes one series through the same persistence pipeline as a full sync.</summary>
+    public async Task<SyncInstanceResult> SyncSonarrSeriesAsync(string instanceId, int seriesId, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(seriesId);
+        await SyncLock.WaitAsync(cancellationToken);
+        try
+        {
+            AppSettings settings = await settingsService.GetAsync(cancellationToken);
+            ArrInstanceSettings instance = settings.SonarrInstances.FirstOrDefault(value => value.Id == instanceId)
+                ?? throw new ApiProblemException(StatusCodes.Status404NotFound, "Sonarr instance not found", $"No Sonarr instance exists for id '{instanceId}'.");
+            SonarrInstanceSnapshot? previous = settings.SonarrSnapshots.FirstOrDefault(value => value.InstanceId == instanceId);
+            // Establish the baseline once; subsequent targeted syncs never read unrelated series.
+            if (previous is null) return await SyncSonarrAsync(instanceId, settings, cancellationToken);
+
+            DateTimeOffset observedAt = DateTimeOffset.UtcNow;
+            SonarrSeriesSnapshot series = await sonarrClient.FetchSeriesSnapshotAsync(instance, seriesId, cancellationToken);
+            IReadOnlyList<SonarrHistoryResource> resources = await sonarrClient.FetchSeriesHistoryAsync(instance, seriesId, cancellationToken);
+            DateTimeOffset since = previous.SeriesSyncTimes.GetValueOrDefault(seriesId,
+                previous.LastFullSyncAt ?? previous.SyncedAt);
+            resources = resources.Where(history => history.SeriesId == seriesId && history.Date > since && history.Date <= observedAt).ToArray();
+            SonarrInstanceSnapshot merged = new()
+            {
+                InstanceId = instance.Id, InstanceName = instance.Name, SyncedAt = observedAt,
+                LastFullSyncAt = previous.LastFullSyncAt ?? previous.SyncedAt,
+                SeriesSyncTimes = new(previous.SeriesSyncTimes) { [seriesId] = observedAt },
+                Series = [.. previous.Series.Where(value => value.SeriesId != seriesId), series],
+                PosterUrls = new(previous.PosterUrls) { [seriesId] = series.PosterRemoteUrl }
+            };
+            merged.Series = merged.Series.OrderBy(value => value.Title, StringComparer.OrdinalIgnoreCase).ToList();
+            await PersistSonarrSnapshotAsync(instance, previous, merged, resources, cancellationToken);
+            symlinkMatching.Request();
+            logger.LogInformation("Synchronized Sonarr series {SeriesId} in instance {InstanceId}.", seriesId, instanceId);
+            return new SyncInstanceResult { Message = "Sonarr series synchronized.", SyncedAt = observedAt, ItemCount = 1 };
+        }
+        finally { SyncLock.Release(); }
+    }
+
+    private async Task PersistSonarrSnapshotAsync(ArrInstanceSettings instance, SonarrInstanceSnapshot? previous,
+        SonarrInstanceSnapshot snapshot, IReadOnlyList<SonarrHistoryResource> resources, CancellationToken token)
+    {
+        IReadOnlyList<LibraryChangeHistoryEntry> historyEntries = LibraryChangeHistoryBuilder.BuildSonarrEntries(instance, snapshot, previous, resources);
+        IReadOnlyList<LibraryChangeHistoryEntry> persisted = await historyStore.GetLibraryHistoryAsync(ArrApplicationKind.Sonarr, token);
+        // Preserve previously recorded deltas when a partial sync's events are seen by a later full sync.
+        List<LibraryChangeHistoryEntry> combined = persisted.Concat(historyEntries)
+            .DistinctBy(entry => (entry.Kind, entry.InstanceId, entry.SourceKey)).ToList();
+        IReadOnlyList<LibraryChangeHistoryEntry> seeds = LibraryHistorySeedBuilder.BuildSonarrSeeds(instance, snapshot, combined);
+        await historyStore.AppendSnapshotHistoryAsync(ArrApplicationKind.Sonarr, snapshot.InstanceId, snapshot.InstanceName,
+            snapshot.SyncedAt, snapshot, token);
+        await historyStore.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr,
+            LibraryChangeHistoryNormalizer.Normalize(combined.Concat(seeds)), token);
+        LibraryFilterValues filterValues = LibraryFilterValuesBuilder.Build(instance.Id, snapshot);
+        await settingsService.UpdateAsync(current =>
+        {
+            if (!current.SonarrInstances.Any(value => value.Id == instance.Id)) return;
+            current.SonarrSnapshots = [.. current.SonarrSnapshots.Where(value => value.InstanceId != instance.Id), snapshot];
+            current.LibraryFilterValues = [.. current.LibraryFilterValues.Where(value => value.InstanceId != instance.Id), filterValues];
+        }, token);
     }
 
     private async Task<SyncInstanceResult> SyncRadarrAsync(

@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
-import { SymlinkFinding, SymlinkLink, SymlinkLinkPlan } from '../../../interfaces/symlinks/symlink-link';
+import { ExistingLinkConfirmation, SymlinkFinding, SymlinkLink, SymlinkLinkPlan } from '../../../interfaces/symlinks/symlink-link';
 import { SymlinkSuggestion } from '../../../interfaces/symlinks/symlink-suggestion';
 import { AppI18nService } from '../../../services/app-i18n.service';
 import { SymlinkService } from '../../../services/symlink.service';
@@ -84,7 +84,9 @@ describe('ConfirmSymlinkDialogComponent', () => {
   let fixture: ComponentFixture<ConfirmSymlinkDialogComponent>;
   let element: HTMLElement;
   let previewLink: jasmine.Spy<(request: unknown) => Promise<SymlinkLinkPlan>>;
-  let confirmSuggestion: jasmine.Spy<(id: string, configRevision: number) => Promise<SymlinkLink>>;
+  let confirmSuggestion: jasmine.Spy<
+    (id: string, configRevision: number, sourceVersion?: string | null, existingLink?: ExistingLinkConfirmation) => Promise<SymlinkLink>
+  >;
   let dialogRef: jasmine.SpyObj<MatDialogRef<ConfirmSymlinkDialogComponent>>;
 
   const data: ConfirmSymlinkDialogData = { suggestion: createSuggestion(), configRevision: 7 };
@@ -138,8 +140,34 @@ describe('ConfirmSymlinkDialogComponent', () => {
     const text: string = (element.querySelector('.dialog-content')?.textContent ?? '').replace(/\s+/g, ' ');
     expect(text).toContain('The Special Movie');
     expect(text).toContain('Season 0, episode 4');
-    expect(text).toContain('/data/series/the-series/season-00/s00e04.mkv');
-    expect(text).toContain('the-series-s00e04.mkv');
+    expect(text).not.toContain('/data/series/the-series/season-00/s00e04.mkv');
+    expect(text).not.toContain('the-series-s00e04.mkv');
+  });
+
+  it('omits the provisional link path and its explanation from the confirmation', async () => {
+    await open();
+    const content = element.querySelector('.plan-grid')!;
+    expect(content.textContent).toContain('/data/movies/the-special-movie.mkv');
+    expect(Array.from(content.querySelectorAll('dt'), (label) => label.textContent?.trim())).not.toContain('Link path');
+    expect(element.textContent).not.toContain('Provisional name.');
+  });
+
+  it('shows the source and destination instance names from the current preview', async () => {
+    previewLink.and.resolveTo({
+      runnable: true,
+      draft: createDraft({ radarrInstanceName: 'Movies on NAS', sonarrInstanceName: 'Test Sonarr' }),
+      blockers: [],
+      warnings: [],
+    });
+    await open();
+    expect(element.querySelector('.plan-radarr-instance')?.textContent?.trim()).toBe('Movies on NAS');
+    expect(element.querySelector('.plan-sonarr-instance')?.textContent?.trim()).toBe('Test Sonarr');
+  });
+
+  it('still identifies both instances when their display names are unavailable', async () => {
+    await open();
+    expect(element.querySelector('.plan-radarr-instance')?.textContent?.trim()).toBe('radarr-1');
+    expect(element.querySelector('.plan-sonarr-instance')?.textContent?.trim()).toBe('sonarr-1');
   });
 
   it('leaves the last word to the blocker that stands in the way', async () => {
@@ -166,8 +194,45 @@ describe('ConfirmSymlinkDialogComponent', () => {
     actionButtons()[1].click();
     await settle();
 
-    expect(confirmSuggestion).toHaveBeenCalledWith('suggestion-1', 7);
+    expect(confirmSuggestion).toHaveBeenCalledWith('suggestion-1', 7, null);
     expect(dialogRef.close).toHaveBeenCalledWith(jasmine.objectContaining({ id: 'link-1' }));
+  });
+
+  it('shows the existing link and its metadata and explicitly confirms adoption', async () => {
+    previewLink.and.resolveTo({
+      runnable: true,
+      adoptsExisting: true,
+      draft: createDraft({
+        sonarrFileId: 88,
+        sourceVersion: 'source-v1',
+        desiredFilename: 'existing-special.mkv',
+        linkPath: '/data/series/the-series/Season 00/existing-special.mkv',
+        linkText: '../../../movies/the-special-movie.mkv',
+        expectedMetadata: { origin: 'radarr', releaseGroup: 'Group', languages: ['German'], quality: 'WEBDL-1080p', size: 123 },
+      }),
+      blockers: [],
+      warnings: [],
+    });
+    await open();
+    expect(element.querySelector('.dialog-title')?.textContent).toContain('Adopt existing symlink');
+    expect(element.querySelector('.plan-link-path app-info-icon')).toBeNull();
+    expect(element.querySelector('.dialog-content')?.textContent).toContain('without recreating, moving or renaming');
+    const paths = Array.from(element.querySelectorAll('.plan-path'), (path) => path.textContent?.trim());
+    expect(paths).toEqual(['/data/movies/the-special-movie.mkv', '../../../movies/the-special-movie.mkv']);
+    const content = element.querySelector('.plan-grid')?.textContent;
+    expect(content).toContain('Group');
+    expect(content).toContain('German');
+    expect(content).toContain('WEBDL-1080p');
+    expect(Array.from(element.querySelectorAll('.plan-grid dt'), (label) => label.textContent?.trim())).not.toContain('Desired filename');
+    expect(actionButtons()[1].textContent).toContain('Adopt this link');
+    expect(actionButtons()[1].disabled).toBeFalse();
+    actionButtons()[1].click();
+    await settle();
+    expect(confirmSuggestion).toHaveBeenCalledWith('suggestion-1', 7, 'source-v1', {
+      path: '/data/series/the-series/Season 00/existing-special.mkv',
+      linkText: '../../../movies/the-special-movie.mkv',
+      sonarrFileId: 88,
+    });
   });
 
   it('keeps the window open and says so when the write was refused', async () => {

@@ -12,6 +12,21 @@ namespace LibManagarr.Api.Tests.Services;
 /// Real symlink behaviour is deliberately absent from the file-system double, because a fake that claims
 /// to keep a link proves nothing about a file system that has to.
 /// </summary>
+internal sealed class TargetedSyncProbe : ISnapshotSyncService
+{
+    public bool Fail { get; set; }
+    public List<(string InstanceId, int SeriesId)> Requests { get; } = [];
+    public Task<SyncInstanceResult> SyncSonarrSeriesAsync(string instanceId, int seriesId, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        Requests.Add((instanceId, seriesId));
+        return Fail ? Task.FromException<SyncInstanceResult>(new HttpRequestException("Series history unavailable"))
+            : Task.FromResult(new SyncInstanceResult());
+    }
+    public Task<SyncInstanceResult> SyncAsync(SyncInstanceRequest request, CancellationToken token) =>
+        throw new InvalidOperationException("Link processing must request only the affected series.");
+}
+
 internal sealed record RecordedRequest(string Method, string Path);
 
 internal sealed class FixedSettings(AppSettings settings) : ISettingsService
@@ -28,6 +43,8 @@ internal sealed class StubArrHandler(Dictionary<string, List<string>> jsonByRout
     public List<RecordedRequest> Requests { get; } = [];
 
     /// <summary>Set to make an instance unreachable, which is a state of its own.</summary>
+    public Dictionary<string, List<string>> Routes => jsonByRoute;
+
     public Exception? Throws { get; init; }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -125,6 +142,13 @@ internal sealed class FakeLinkFileSystem : ISymlinkFileSystem
         AfterLinkCreated?.Invoke(linkPath);
     }
 
+    public void ReplaceFileSymlink(string path, string expected, string replacement)
+    {
+        if (ReadLinkTarget(path) != expected) throw new IOException("The link changed.");
+        DeleteEntry(path);
+        CreateFileSymlink(path, replacement);
+    }
+
     public void CreateDirectory(string path) => CreatedFolders.Add(path);
 
     public void DeleteEntry(string path)
@@ -210,6 +234,8 @@ internal static class SymlinkFixture
     /// <summary>The four reads a pair that has nothing in its way gets answered with.</summary>
     public static Dictionary<string, List<string>> HappyRoutes() => new()
     {
+        ["POST /api/v3/command"] = ["""{ "id": 901, "status": "queued" }"""],
+        ["GET /api/v3/command/901"] = ["""{ "id": 901, "status": "completed" }"""],
         ["GET /api/v3/movie/70"] =
         [
             $$"""{ "id": {{MovieId}}, "title": "The Battle of Unato", "hasFile": true, "movieFileId": {{RadarrFileId}} }"""
@@ -357,7 +383,8 @@ internal static class SymlinkFixture
                         {
                             Id = radarrFileId,
                             Size = size,
-                            Path = MoviesInstance($"{MovieFolder}/{SourceFileName}")
+                            Path = MoviesInstance($"{MovieFolder}/{(radarrFileId == UpgradedRadarrFileId ? UpgradedFileName : SourceFileName)}"),
+                            SourceVersion = SourceVersion(radarrFileId, size)
                         }
                     }
                 ]
@@ -367,7 +394,14 @@ internal static class SymlinkFixture
     }
 
     /// <summary>The identity the register stores for one file of one instance.</summary>
-    public static string SourceVersion(int fileId, long size) => $"radarr:{fileId}:{size}";
+    public static string SourceVersion(int fileId, long size)
+    {
+        string json = (fileId == UpgradedRadarrFileId ? UpgradeRoutes() : HappyRoutes())["GET /api/v3/moviefile"][0];
+        RadarrMovieFileResource file = JsonSerializer.Deserialize<List<RadarrMovieFileResource>>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))![0];
+        file.Id = fileId;
+        file.Size = size;
+        return SymlinkService.SourceVersionOf(file);
+    }
 
     /// <summary>The source as this process sees it, which is the spelling the register stores.</summary>
     public static string SourcePath() =>

@@ -223,6 +223,28 @@ public sealed class SymlinkCapabilityServiceTests
         Assert.False(stored.IsCurrent(6));
     }
 
+    [Fact]
+    public async Task StartupFailurePreservesActivationAndProcessingResumesAfterMountRecovery()
+    {
+        SymlinkSettings settings = Settings(revision: 5);
+        settings.Enabled = true;
+        SymlinkCapabilityService unavailable = CreateService(new FakeSymlinkFileSystem(roots: []), settings);
+
+        Assert.False(await unavailable.IsReadyAsync(settings, CancellationToken.None));
+        AppSettings afterFailure = await unavailable.CheckAndUpdateAsync(CancellationToken.None);
+        Assert.True(afterFailure.Symlinks.Enabled);
+        Assert.False(await unavailable.IsReadyAsync(settings, CancellationToken.None));
+        Assert.Equal(SymlinkCapabilityStatus.StorageUnavailable,
+            Assert.Single(await store.GetCapabilityChecksAsync(CancellationToken.None)).Status);
+
+        SymlinkCapabilityService recovered = CreateService(new FakeSymlinkFileSystem(roots: Roots()), settings);
+        AppSettings afterRecovery = await recovered.CheckAndUpdateAsync(CancellationToken.None);
+        Assert.True(afterRecovery.Symlinks.Enabled);
+        Assert.True(await recovered.IsReadyAsync(settings, CancellationToken.None));
+        settings.Revision++;
+        Assert.False(await recovered.IsReadyAsync(settings, CancellationToken.None));
+    }
+
     private SymlinkCapabilityService CreateService(ISymlinkFileSystem files, SymlinkSettings settings) =>
         new(store, new FixedSettings(new AppSettings { Symlinks = settings }), files, clock,
             NullLogger<SymlinkCapabilityService>.Instance);
@@ -263,7 +285,7 @@ public sealed class SymlinkCapabilityServiceTests
     /// whose content is resolved from the directory the link itself sits in, and a missing directory is
     /// an error rather than an empty listing.
     /// </summary>
-    private sealed class FakeSymlinkFileSystem(IEnumerable<string> roots) : ISymlinkFileSystem
+    internal sealed class FakeSymlinkFileSystem(IEnumerable<string> roots) : ISymlinkFileSystem
     {
         /// <summary>The directories that exist here; a root the settings name but this set lacks is unmounted.</summary>
         public HashSet<string> Directories { get; } = new(roots, StringComparer.OrdinalIgnoreCase);

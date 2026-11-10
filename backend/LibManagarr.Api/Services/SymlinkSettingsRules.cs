@@ -17,8 +17,25 @@ public static class SymlinkSettingsRules
     public static SymlinkSettings Normalize(SymlinkSettings? settings)
     {
         SymlinkSettings input = settings ?? new SymlinkSettings();
+        if (input.MediaRoot is not null || ((input.StorageAreas?.Count ?? 0) == 0
+            && (input.PathMappings?.Count ?? 0) == 0 && (input.ReaderViews?.Count ?? 0) == 0))
+        {
+            string root = FormatRoot(input.MediaRoot ?? (OperatingSystem.IsWindows()
+                ? Path.Combine(Path.GetPathRoot(Environment.SystemDirectory)!, "media") : "/media"));
+            return new SymlinkSettings
+            {
+                Enabled = input.Enabled,
+                MediaRoot = root,
+                Revision = Math.Max(0, input.Revision),
+                StorageAreas = [new MediaStorageArea
+                {
+                    Id = SymlinkSettings.SharedStorageAreaId, Name = root, MoviesRoot = root, SeriesRoot = root
+                }]
+            };
+        }
         return new SymlinkSettings
         {
+            Enabled = input.Enabled,
             StorageAreas = (input.StorageAreas ?? []).Select(area => new MediaStorageArea
             {
                 Id = UuidV7.IsUuidV7(area.Id) ? area.Id.Trim() : UuidV7.Create(),
@@ -57,6 +74,15 @@ public static class SymlinkSettingsRules
             return errors;
         }
 
+        if (settings.MediaRoot is not null)
+        {
+            string root = AppendRootErrors(errors, "symlinks.mediaRoot", settings.MediaRoot, "media", PathRole.LibManagarrSide);
+            if (root.Length > 0 && ArrPathRules.TryParse(root, out ParsedPath? parsed, out _)
+                && parsed!.Segments.Count == 0)
+                errors["symlinks.mediaRoot"] = ["Choose a dedicated media directory, not the filesystem root."];
+            if (settings.Revision < 0) errors["symlinks.revision"] = ["The revision must not be negative."];
+            return errors;
+        }
         AppendStorageAreaErrors(errors, settings.StorageAreas);
         AppendPathMappingErrors(errors, settings, sonarrInstances, radarrInstances);
         AppendReaderViewErrors(errors, settings.ReaderViews);
@@ -75,6 +101,7 @@ public static class SymlinkSettingsRules
     private static string PathsSignature(SymlinkSettings settings)
     {
         SymlinkSettings normalized = Normalize(settings);
+        if (normalized.MediaRoot is not null) return $"shared:{normalized.MediaRoot}";
         // Only what a path resolves to. The display name of an area and the verification state of a
         // reader view are not paths, so neither may age out a probe that still describes the shelves.
         // One flattened sequence on purpose: three arguments would bind to Join(string, params object[])

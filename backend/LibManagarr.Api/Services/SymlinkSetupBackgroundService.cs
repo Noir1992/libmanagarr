@@ -1,3 +1,4 @@
+using LibManagarr.Api.Models;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace LibManagarr.Api.Services;
@@ -24,6 +25,7 @@ public sealed class SymlinkSetupBackgroundService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        bool checkCapabilities = true;
         requests.Request();
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -33,9 +35,18 @@ public sealed class SymlinkSetupBackgroundService(
                 int waiting;
                 await using (AsyncServiceScope scope = scopeFactory.CreateAsyncScope())
                 {
-                    waiting = await scope.ServiceProvider
-                        .GetRequiredService<SymlinkSetupRunner>()
-                        .RunDueSetupsAsync(stoppingToken);
+                    SymlinkCapabilityService capability = scope.ServiceProvider.GetRequiredService<SymlinkCapabilityService>();
+                    AppSettings snapshot = await scope.ServiceProvider.GetRequiredService<ISettingsService>().GetSnapshotAsync(stoppingToken);
+                    bool ready = await capability.IsReadyAsync(snapshot.Symlinks, stoppingToken);
+                    if (checkCapabilities || (snapshot.Symlinks.Enabled && !ready))
+                    {
+                        snapshot = await capability.CheckAndUpdateAsync(stoppingToken);
+                        ready = await capability.IsReadyAsync(snapshot.Symlinks, stoppingToken);
+                        checkCapabilities = false;
+                    }
+                    // A dependency can still be starting. Keep the saved choice and retry verification.
+                    if (!ready) waiting = snapshot.Symlinks.Enabled ? 1 : 0;
+                    else waiting = await scope.ServiceProvider.GetRequiredService<SymlinkSetupRunner>().RunDueSetupsAsync(stoppingToken);
                 }
 
                 if (waiting > 0)

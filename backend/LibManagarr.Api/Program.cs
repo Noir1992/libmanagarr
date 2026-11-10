@@ -79,12 +79,15 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     builder.Services.AddSingleton<ISymlinkFileSystem, RealSymlinkFileSystem>();
     builder.Services.AddSingleton<ISymlinkStore, SqliteSymlinkStore>();
     builder.Services.AddScoped<MediaPathMappingService>();
+    builder.Services.AddScoped<SharedMediaPathService>();
+    builder.Services.AddScoped<ExistingEpisodeFileInspector>();
     builder.Services.AddScoped<SymlinkCapabilityService>();
     builder.Services.AddSingleton<SymlinkMatchingRequests>();
     builder.Services.AddSingleton<SymlinkSetupRequests>();
     builder.Services.AddScoped<SymlinkSuggestionService>();
     builder.Services.AddScoped<SymlinkService>();
     builder.Services.AddScoped<SymlinkHealthService>();
+    builder.Services.AddScoped<SymlinkLiveStateService>();
     builder.Services.AddScoped<SymlinkSetupRunner>();
     builder.Services.AddScoped<SonarrSpecialIntegrationService>();
     builder.Services.AddHostedService<SymlinkMatchingBackgroundService>();

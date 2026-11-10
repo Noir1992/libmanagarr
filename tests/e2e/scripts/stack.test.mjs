@@ -85,7 +85,7 @@ test('request mutations restore Seerr without restarting metadata', async () => 
   assert.equal(starts.has('radarr'), false);
 });
 
-test('restoring media stops both Arr readers before resetting files and only restores the changed database', async () => {
+test('restoring media stops both Arr readers and restores both databases changed by the upgrade scenario', async () => {
   const { session, calls } = fixture();
   await session.prepare(scenario('E15'));
   session.markMutations(scenario('E15'));
@@ -93,7 +93,7 @@ test('restoring media stops both Arr readers before resetting files and only res
   await session.prepare(scenario('E16'));
   assert.deepEqual(calls[0], ['compose', 'stop', 'app']);
   assert.deepEqual(calls[1], ['compose', 'stop', 'sonarr', 'radarr']);
-  assert.deepEqual(calls[2], ['helper', 'node', 'bootstrap/reset.mjs', 'app', 'sonarr', 'media']);
+  assert.deepEqual(calls[2], ['helper', 'node', 'bootstrap/reset.mjs', 'app', 'sonarr', 'radarr', 'media']);
   assert.deepEqual(calls[3], ['compose', 'up', '-d', 'sonarr', 'radarr', 'app']);
 });
 

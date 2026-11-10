@@ -5,6 +5,11 @@ namespace LibManagarr.Api.Clients;
 
 public sealed class RadarrClient(HttpClient httpClient)
 {
+    public async Task<IReadOnlyList<ArrRootFolderResource>> FetchRootFoldersAsync(
+        ArrInstanceSettings instance, CancellationToken cancellationToken) =>
+        await GetAsync<List<ArrRootFolderResource>>(instance, "/api/v3/rootfolder", cancellationToken)
+        ?? throw new HttpRequestException("Radarr returned no root-folder response.");
+
     public async Task TestConnectionAsync(
         ArrInstanceSettings instance,
         CancellationToken cancellationToken)
@@ -223,7 +228,10 @@ public sealed class RadarrClient(HttpClient httpClient)
             CreatedAt = movieFile?.DateAdded,
             RelativePath = movieFile?.RelativePath ?? movieFile?.Path,
             Id = movieFile?.Id,
-            Path = movieFile?.Path
+            Path = movieFile?.Path,
+            SourceVersion = movieFile is null ? null : Services.SymlinkService.SourceVersionOf(movieFile),
+            Quality = movieFile?.Quality?.Quality?.Name,
+            QualityRevision = movieFile?.Quality?.Revision
         };
     }
 

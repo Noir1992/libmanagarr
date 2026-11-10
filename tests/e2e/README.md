@@ -266,6 +266,22 @@ count from the seed instead.
 Also add the `E2E tests` status as a required check in the GitHub branch rules.
 Workflow files cannot enable this repository merge protection themselves.
 
+Symlink hardening on 2026-11-09 extends E15 on the same isolated stack: it explicitly enables Sonarr
+naming, confirms the offer in the browser, generates a second valid video with different resolution,
+language, release group and extension, imports it through Radarr, then requests synchronization in the
+LibManagarr UI. It verifies the new source, real Sonarr association, metadata and final rename preview,
+deletes the link in the browser and waits for Sonarr cleanup. Hash, modification time and mode checks
+protect the generated film source, and the previous version's bytes are retained for comparison. E15
+now declares Radarr among its mutated services. Use `npm run e2e -- --scenario E15` for this focused run;
+E16 remains the separate decline scenario. TrueNAS ACLs and media-server playback are additional
+deployment acceptance, not claims made by these synthetic videos.
+
+Final focused evidence on 2026-11-09: E15 passed with artifacts in
+`artifacts/lme2e-c9622965-376`, E16 passed with artifacts in
+`artifacts/lme2e-e9407d6c-39e`. Both runs built the current application and cleaned up their own stacks.
+The infrastructure suite passed 35 tests, with three platform-specific skips on Windows. All 20
+browser scenarios remain the CI gate; this local hardening verification ran E15 and E16 specifically.
+
 The version 3 baseline keeps the existing Arr identities and synthetic media while
 using only local Seerr users. No media server is configured, external media-server
 login is disabled, and the archived owner has a real local password. Readiness

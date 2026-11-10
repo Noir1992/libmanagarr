@@ -31,7 +31,7 @@ export const scenarios = [
   { id: 'E12', services: ['sonarr', 'radarr'], mutates: [], name: 'backup-restore', suite: 'core' },
   { id: 'E13', services: ['sonarr', 'radarr'], mutates: [], name: 'calendar', suite: 'full' },
   { id: 'E14', services: ['sonarr', 'radarr'], mutates: [], name: 'codec-statistics', suite: 'full' },
-  { id: 'E15', services: ['sonarr', 'radarr'], mutates: ['sonarr', 'media'], name: 'symlink-confirm', suite: 'full' },
+  { id: 'E15', services: ['sonarr', 'radarr'], mutates: ['sonarr', 'radarr', 'media'], name: 'symlink-confirm', suite: 'full' },
   { id: 'E16', services: ['sonarr', 'radarr'], mutates: ['media'], name: 'symlink-decline', suite: 'full' },
 ].map((scenario) => Object.freeze({ ...scenario, spec: `specs/${scenario.name}.spec.ts`, initialState: 'fresh-app-and-verified-seed' }));
 

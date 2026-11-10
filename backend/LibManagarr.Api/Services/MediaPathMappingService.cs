@@ -18,13 +18,18 @@ public sealed record PathMappingResult(string? Path, string? Failure, string? Ma
 /// refuses anything that would leave a configured storage area. Nothing here touches the file system:
 /// a translation is a claim about the configuration, and only a probe turns it into a fact.
 /// </summary>
-public sealed class MediaPathMappingService(ISettingsService settings)
+public sealed class MediaPathMappingService(ISettingsService settings, ISymlinkFileSystem? fileSystem = null,
+    SharedMediaPathService? sharedPaths = null)
 {
     /// <summary>Instance view to LibManagarr view, the direction every source and target path arrives in.</summary>
     public async Task<PathMappingResult> TranslateToLibManagarrPathAsync(
         string instanceId, ArrApplicationKind kind, string instancePath, CancellationToken cancellationToken)
     {
-        SymlinkSettings configuration = (await settings.GetSnapshotAsync(cancellationToken)).Symlinks;
+        AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
+        SymlinkSettings configuration = snapshot.Symlinks;
+        if (configuration.MediaRoot is not null)
+            return sharedPaths is null ? PathMappingResult.Failed("Root-folder discovery is unavailable.")
+                : await sharedPaths.ValidatePathAsync(snapshot, kind, instanceId, instancePath, cancellationToken);
         if (!ArrPathRules.TryMapPrefix(
             configuration.PathMappings, instanceId, kind, instancePath, PathRole.InstanceSide,
             mapping => mapping.InstanceRoot, mapping => mapping.LibManagarrRoot, PathRole.LibManagarrSide,
@@ -43,7 +48,11 @@ public sealed class MediaPathMappingService(ISettingsService settings)
     public async Task<PathMappingResult> TranslateToInstancePathAsync(
         string instanceId, ArrApplicationKind kind, string libManagarrPath, CancellationToken cancellationToken)
     {
-        SymlinkSettings configuration = (await settings.GetSnapshotAsync(cancellationToken)).Symlinks;
+        AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
+        SymlinkSettings configuration = snapshot.Symlinks;
+        if (configuration.MediaRoot is not null)
+            return sharedPaths is null ? PathMappingResult.Failed("Root-folder discovery is unavailable.")
+                : await sharedPaths.ValidatePathAsync(snapshot, kind, instanceId, libManagarrPath, cancellationToken);
         if (!ArrPathRules.TryMapPrefix(
             configuration.PathMappings, instanceId, kind, libManagarrPath, PathRole.LibManagarrSide,
             mapping => mapping.LibManagarrRoot, mapping => mapping.InstanceRoot, PathRole.InstanceSide,
@@ -81,6 +90,14 @@ public sealed class MediaPathMappingService(ISettingsService settings)
 
         if (roots.Any(root => ArrPathRules.IsWithinRoot(root, libManagarrPath)))
         {
+            try
+            {
+                SymlinkPathGuard.CheckParents(fileSystem ?? new RealSymlinkFileSystem(), libManagarrPath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return PathMappingResult.Failed(exception.Message);
+            }
             return new PathMappingResult(libManagarrPath, null, null);
         }
 

@@ -115,6 +115,7 @@ public sealed class SymlinkLinkEndpointTests
     {
         await SeedSuggestionAsync();
         FakeLinkFileSystem files = new();
+        files.Entries[SymlinkFixture.SourcePath()] = null;
 
         Results<Accepted<SymlinkLinkDto>, NotFound, ProblemHttpResult> result =
             await Confirm(new StubArrHandler(SymlinkFixture.HappyRoutes()), files);
@@ -314,7 +315,7 @@ public sealed class SymlinkLinkEndpointTests
     }
 
     [Fact]
-    public async Task Delete_RemovesTheLinkAsALinkAndLeavesTheSourceAndTheDeclinedPairBehind()
+    public async Task Delete_RemovesOnlyTheLinkWithoutRejectingThePair()
     {
         SymlinkLink row = await SeedRowAsync("link-1");
         FakeLinkFileSystem files = new();
@@ -326,12 +327,14 @@ public sealed class SymlinkLinkEndpointTests
 
         Assert.IsType<NoContent>(result.Result);
         Assert.Equal([row.LinkPath], files.Removed);
-        // The file Radarr owns was never touched, and the row is gone rather than marked.
+        // The source stays untouched while the row tracks the pending Sonarr cleanup.
         Assert.True(files.Entries.ContainsKey(row.SourcePath));
-        Assert.Null(await store.GetLinkAsync("link-1", CancellationToken.None));
-        // A pair removed on purpose must not return as a fresh suggestion by itself.
-        SymlinkRejection decline = Assert.Single(await store.GetRejectionsAsync(CancellationToken.None));
-        Assert.Equal(Pair, decline.Pair);
+        Assert.Equal(SymlinkOperationStatus.CleanupPending, (await StoredAsync("link-1")).OperationStatus);
+        // Deleting a link does not reject the pairing.
+        Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
+        SymlinkService cleanup = Links(new StubArrHandler(SymlinkFixture.HappyRoutes()), files);
+        Assert.Equal(SymlinkSetupOutcome.Completed, await cleanup.FinishDeletionAsync(await StoredAsync("link-1"), CancellationToken.None));
+        Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
     }
 
     [Fact]

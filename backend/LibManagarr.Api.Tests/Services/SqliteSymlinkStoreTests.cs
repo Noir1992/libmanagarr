@@ -36,7 +36,7 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT migration_id FROM schema_migrations ORDER BY migration_id";
         Assert.Equal(
-            ["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4"],
+            ["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4", "symlinks-v5", "symlinks-v6", "symlinks-v7"],
             await ReadAllAsync(command));
     }
 
@@ -45,8 +45,10 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
     {
         await CreateStore().InitializeAsync(CancellationToken.None);
         await ExecuteSqlAsync("""
-            DELETE FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3','symlinks-v4');
+            DELETE FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3','symlinks-v4','symlinks-v5','symlinks-v6','symlinks-v7');
             DROP TABLE symlink_matching_state;
+            ALTER TABLE symlink_links DROP COLUMN naming_move;
+            ALTER TABLE symlink_capability_checks DROP COLUMN process_id;
             ALTER TABLE symlink_links DROP COLUMN pending_update;
             ALTER TABLE symlink_links DROP COLUMN sonarr_rename_command_id;
             """);
@@ -58,13 +60,13 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         await connection.OpenAsync();
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT migration_id FROM schema_migrations ORDER BY migration_id";
-        Assert.Equal(["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4"], await ReadAllAsync(command));
+        Assert.Equal(["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4", "symlinks-v5", "symlinks-v6", "symlinks-v7"], await ReadAllAsync(command));
         // A step is marked once, so reopening an installed database does not replay it — which for the
         // widening step matters more than for a create, because the second ALTER would fail outright.
         await CreateStore().InitializeAsync(CancellationToken.None);
         using SqliteCommand counted = connection.CreateCommand();
-        counted.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3','symlinks-v4')";
-        Assert.Equal(3L, await counted.ExecuteScalarAsync());
+        counted.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3','symlinks-v4','symlinks-v5','symlinks-v6','symlinks-v7')";
+        Assert.Equal(6L, await counted.ExecuteScalarAsync());
         Assert.NotNull(await store.GetMatchingStateAsync("sonarr-1", CancellationToken.None));
     }
 
@@ -79,11 +81,11 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
             await connection.OpenAsync();
             using SqliteCommand schema = connection.CreateCommand();
             // Remove the new column before copying, so SELECT * has the exact legacy column order.
-            await ExecuteSqlAsync("ALTER TABLE symlink_links DROP COLUMN pending_update;");
+            await ExecuteSqlAsync("ALTER TABLE symlink_links DROP COLUMN naming_move; ALTER TABLE symlink_links DROP COLUMN pending_update; DELETE FROM schema_migrations WHERE migration_id IN ('symlinks-v6','symlinks-v7');");
             schema.CommandText = "SELECT sql FROM sqlite_master WHERE name='symlink_links'";
             string legacySchema = ((string)(await schema.ExecuteScalarAsync())!)
                 .Replace("CREATE TABLE \"symlink_links\"", "CREATE TABLE symlink_links_v3")
-                .Replace("CHECK(operation_status BETWEEN 0 AND 4)", "CHECK(operation_status BETWEEN 0 AND 3)");
+                .Replace("CHECK(operation_status BETWEEN 0 AND 5)", "CHECK(operation_status BETWEEN 0 AND 3)");
             await ExecuteSqlAsync(legacySchema + ";" + """
                 INSERT INTO symlink_links_v3 SELECT * FROM symlink_links;
                 DROP TABLE symlink_links;
@@ -174,6 +176,38 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         stored.PendingUpdate = null;
         Assert.True(await reopened.UpdateLinkAsync(stored, stored.Revision, CancellationToken.None));
         Assert.Null((await CreateStore().GetLinkAsync(link.Id, CancellationToken.None))!.PendingUpdate);
+    }
+
+    [Fact]
+    public async Task Migration_FromV6PreservesLinksAndPersistsCleanupAcrossReopening()
+    {
+        SqliteSymlinkStore initial = CreateStore();
+        SymlinkLink link = NewLink("old-managed-link");
+        await initial.InsertLinkAsync(link, CancellationToken.None);
+        await using (SqliteConnection connection = new($"Data Source={Paths.DatabasePath}"))
+        {
+            await connection.OpenAsync();
+            using SqliteCommand schema = connection.CreateCommand();
+            schema.CommandText = "SELECT sql FROM sqlite_master WHERE name='symlink_links'";
+            string oldSchema = ((string)(await schema.ExecuteScalarAsync())!)
+                .Replace("CREATE TABLE \"symlink_links\"", "CREATE TABLE symlink_links_v6")
+                .Replace("CHECK(operation_status BETWEEN 0 AND 5)", "CHECK(operation_status BETWEEN 0 AND 4)");
+            await ExecuteSqlAsync(oldSchema + ";" + """
+                INSERT INTO symlink_links_v6 SELECT * FROM symlink_links;
+                DROP TABLE symlink_links;
+                ALTER TABLE symlink_links_v6 RENAME TO symlink_links;
+                DELETE FROM schema_migrations WHERE migration_id='symlinks-v7';
+                """);
+        }
+        SqliteSymlinkStore upgraded = CreateStore();
+        SymlinkLink restored = (await upgraded.GetLinkAsync(link.Id, CancellationToken.None))!;
+        Assert.Equal(link.SourcePath, restored.SourcePath);
+        Assert.Equal(link.LinkText, restored.LinkText);
+        restored.OperationStatus = SymlinkOperationStatus.CleanupPending;
+        Assert.True(await upgraded.UpdateLinkAsync(restored, restored.Revision, CancellationToken.None));
+        Assert.Equal(SymlinkOperationStatus.CleanupPending,
+            (await CreateStore().GetLinkAsync(link.Id, CancellationToken.None))!.OperationStatus);
+        await Assert.ThrowsAsync<SqliteException>(() => upgraded.InsertLinkAsync(NewLink("duplicate"), CancellationToken.None));
     }
 
     [Fact]

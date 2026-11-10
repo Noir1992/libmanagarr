@@ -14,7 +14,8 @@ public sealed class SymlinkCapabilityService(
     ISettingsService settings,
     ISymlinkFileSystem files,
     TimeProvider clock,
-    ILogger<SymlinkCapabilityService> logger)
+    ILogger<SymlinkCapabilityService> logger,
+    SharedMediaPathService? sharedPaths = null)
 {
     private const string ProbeDirectoryPrefix = ".libmanagarr-symlink-check-";
 
@@ -30,7 +31,14 @@ public sealed class SymlinkCapabilityService(
     /// </summary>
     public async Task<SymlinkCapabilityCheck> ProbeAsync(string storageAreaId, CancellationToken cancellationToken)
     {
-        SymlinkSettings configuration = (await settings.GetSnapshotAsync(cancellationToken)).Symlinks;
+        return await ProbeAsync(storageAreaId, await settings.GetSnapshotAsync(cancellationToken), cancellationToken);
+    }
+
+    public async Task<SymlinkCapabilityCheck> ProbeAsync(string storageAreaId, AppSettings snapshot, CancellationToken cancellationToken)
+    {
+        SymlinkSettings configuration = snapshot.Symlinks;
+        if (configuration.MediaRoot is not null)
+            return await ProbeSharedMediaAsync(snapshot, cancellationToken);
         MediaStorageArea? area = configuration.StorageAreas
             .FirstOrDefault(candidate => string.Equals(candidate.Id, storageAreaId, StringComparison.OrdinalIgnoreCase));
         if (area is null)
@@ -47,12 +55,18 @@ public sealed class SymlinkCapabilityService(
                 configuration.Revision, cancellationToken);
         }
 
-        if (!files.EntryExists(area.SeriesRoot))
+        try
         {
-            return await PersistAsync(area.Id, SymlinkCapabilityStatus.StorageUnavailable,
-                $"The series root '{area.SeriesRoot}' is not reachable from this process.",
-                configuration.Revision, cancellationToken);
+            SymlinkPathGuard.CheckParents(files, Path.Combine(area.SeriesRoot, ".probe"));
+            SymlinkPathGuard.CheckParents(files, Path.Combine(area.MoviesRoot, ".probe"));
+            if (!files.EntryExists(area.SeriesRoot))
+                return await PersistAsync(area.Id, SymlinkCapabilityStatus.StorageUnavailable,
+                    $"The series root '{area.SeriesRoot}' is not reachable from this process.", configuration.Revision, cancellationToken);
         }
+        catch (UnauthorizedAccessException exception)
+        { return await PersistAsync(area.Id, SymlinkCapabilityStatus.PermissionDenied, exception.Message, configuration.Revision, cancellationToken); }
+        catch (IOException exception)
+        { return await PersistAsync(area.Id, SymlinkCapabilityStatus.Failed, exception.Message, configuration.Revision, cancellationToken); }
 
         string probeDirectory = Path.Combine(area.SeriesRoot, ProbeDirectoryPrefix + Guid.NewGuid().ToString("N")[..12]);
         ProbeResult result = RunProbe(probeDirectory, area);
@@ -78,15 +92,103 @@ public sealed class SymlinkCapabilityService(
     /// </summary>
     public async Task<SymlinkCapabilityCheck> GetStatusAsync(string storageAreaId, CancellationToken cancellationToken)
     {
+        if ((await settings.GetSnapshotAsync(cancellationToken)).Symlinks.MediaRoot is not null)
+            storageAreaId = SymlinkSettings.SharedStorageAreaId;
         SymlinkCapabilityCheck? stored = await store.GetCapabilityCheckAsync(storageAreaId, cancellationToken);
         return stored ?? new SymlinkCapabilityCheck
         {
             StorageAreaId = storageAreaId,
             Status = SymlinkCapabilityStatus.NotTested,
-            Detail = "The symlink capability test has not run for this storage area.",
+            Detail = "The symlink test has not run for the current media configuration.",
             CheckedAt = null,
             ConfigRevision = 0
         };
+    }
+
+    /// <summary>Checks the configured directory without creating it or following directory links.</summary>
+    public string? ValidateMediaRoot(string root)
+    {
+        try
+        {
+            SymlinkPathGuard.CheckParents(files, Path.Combine(root, ".media-root-check"));
+            files.ListEntries(root);
+            return null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        { return $"The media directory must exist and be accessible: {exception.Message}"; }
+    }
+
+    public async Task<bool> CheckConfigurationAsync(AppSettings snapshot, CancellationToken token)
+    {
+        bool available = snapshot.Symlinks.StorageAreas.Count > 0;
+        foreach (MediaStorageArea area in snapshot.Symlinks.StorageAreas)
+        {
+            SymlinkCapabilityCheck check = await ProbeAsync(area.Id, snapshot, token);
+            available &= check.Status == SymlinkCapabilityStatus.Available && check.IsCurrent(snapshot.Symlinks.Revision);
+        }
+        return available;
+    }
+
+    public async Task<bool> IsReadyAsync(SymlinkSettings configuration, CancellationToken token)
+    {
+        if (configuration.StorageAreas.Count == 0) return false;
+        IReadOnlyList<SymlinkCapabilityCheck> checks = await store.GetCapabilityChecksAsync(token);
+        return configuration.StorageAreas.All(area => checks.Any(check => check.StorageAreaId == area.Id
+            && check.Status == SymlinkCapabilityStatus.Available && check.IsCurrent(configuration.Revision)));
+    }
+
+    /// <summary>Updates capability evidence without changing the user's persisted activation choice.</summary>
+    public async Task<AppSettings> CheckAndUpdateAsync(CancellationToken token)
+    {
+        using IDisposable operation = await SymlinkOperationGate.EnterAsync(token);
+        AppSettings current = await settings.GetSnapshotAsync(token);
+        await CheckConfigurationAsync(current, token);
+        return current;
+    }
+
+    private async Task<SymlinkCapabilityCheck> ProbeSharedMediaAsync(AppSettings snapshot, CancellationToken token)
+    {
+        string id = SymlinkSettings.SharedStorageAreaId;
+        int revision = snapshot.Symlinks.Revision;
+        try
+        {
+            string? rootError = ValidateMediaRoot(snapshot.Symlinks.MediaRoot!);
+            if (rootError is not null)
+                return await PersistAsync(id, SymlinkCapabilityStatus.StorageUnavailable, rootError, revision, token);
+            if (sharedPaths is null) throw new HttpRequestException("Root-folder discovery is unavailable.");
+            List<string> movies = [];
+            List<string> series = [];
+            foreach (ArrInstanceSettings instance in snapshot.RadarrInstances)
+                movies.AddRange(await sharedPaths.GetRootsAsync(snapshot, ArrApplicationKind.Radarr, instance.Id, token));
+            foreach (ArrInstanceSettings instance in snapshot.SonarrInstances)
+                series.AddRange(await sharedPaths.GetRootsAsync(snapshot, ArrApplicationKind.Sonarr, instance.Id, token));
+            if (movies.Count == 0 || series.Count == 0)
+                return await PersistAsync(id, SymlinkCapabilityStatus.StorageUnavailable,
+                    "Configure at least one Radarr movie root folder and one Sonarr series root folder inside the shared media directory.", revision, token);
+
+            foreach (string root in movies.Concat(series).Distinct(StringComparer.Ordinal))
+            {
+                SymlinkPathGuard.CheckParents(files, Path.Combine(root, ".probe"));
+                files.ListEntries(root);
+            }
+            foreach (string root in series.Distinct(StringComparer.Ordinal))
+            {
+                MediaStorageArea area = new() { Id = id, Name = root, MoviesRoot = movies[0], SeriesRoot = root };
+                ProbeResult result = RunProbe(Path.Combine(root, ProbeDirectoryPrefix + Guid.NewGuid().ToString("N")[..12]), area);
+                if (result.Status != SymlinkCapabilityStatus.Available)
+                    return await PersistAsync(id, result.Status, result.Detail, revision, token);
+            }
+            return await PersistAsync(id, SymlinkCapabilityStatus.Available,
+                "The discovered movie folders are readable and the series folders support relative symlinks. "
+                + "Sonarr and the media player must mount the same media tree at the same path.", revision, token);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            token.ThrowIfCancellationRequested();
+            SymlinkCapabilityStatus status = exception is UnauthorizedAccessException
+                ? SymlinkCapabilityStatus.PermissionDenied : SymlinkCapabilityStatus.StorageUnavailable;
+            return await PersistAsync(id, status, exception.Message, revision, token);
+        }
     }
 
     private async Task<SymlinkCapabilityCheck> PersistAsync(
@@ -113,7 +215,7 @@ public sealed class SymlinkCapabilityService(
         {
             result = ProbeSteps(probeDirectory, area);
         }
-        catch (PlatformNotSupportedException exception)
+        catch (NotSupportedException exception)
         {
             result = new ProbeResult(SymlinkCapabilityStatus.Unsupported,
                 $"This runtime refuses to create file symlinks: {exception.Message}");

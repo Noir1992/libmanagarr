@@ -14,6 +14,7 @@ public sealed class SymlinkSuggestionDto
     public SymlinkSuggestionStatus Status { get; set; }
 
     public string RadarrInstanceId { get; set; } = string.Empty;
+    public string? RadarrInstanceName { get; set; }
 
     public int RadarrMovieId { get; set; }
 
@@ -25,10 +26,13 @@ public sealed class SymlinkSuggestionDto
     public string? RadarrFilePath { get; set; }
 
     public string SonarrInstanceId { get; set; } = string.Empty;
+    public string? SonarrInstanceName { get; set; }
 
     public int SonarrSeriesId { get; set; }
 
     public string? SonarrSeriesTitle { get; set; }
+
+    public string? SonarrSeriesPath { get; set; }
 
     public int SonarrEpisodeId { get; set; }
 
@@ -39,6 +43,8 @@ public sealed class SymlinkSuggestionDto
     public int EpisodeNumber { get; set; }
 
     public List<SymlinkSuggestionReason> Reasons { get; set; } = [];
+
+    public ExistingEpisodeFileCheck? ExistingFileCheck { get; set; }
 
     public List<SymlinkSuggestionAlternative> Alternatives { get; set; } = [];
 
@@ -118,4 +124,8 @@ public sealed class RejectSuggestionRequest
 public sealed class ConfirmSuggestionRequest
 {
     public int ConfigRevision { get; set; }
+    public string? SourceVersion { get; set; }
+    public ExistingLinkConfirmation? ExistingLink { get; set; }
 }
+
+public sealed record ExistingLinkConfirmation(string Path, string LinkText, int SonarrFileId);

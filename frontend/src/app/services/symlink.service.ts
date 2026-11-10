@@ -1,16 +1,28 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
-import { inject, Injectable, signal, WritableSignal } from '@angular/core';
+import { computed, inject, Injectable, signal, WritableSignal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { SymlinkCapabilityCheck, SymlinkSettings } from '../interfaces/symlinks/symlink-settings';
+import {
+  SymlinkCapabilityCheck,
+  SymlinkDirectoryListing,
+  SymlinkSettings,
+  SymlinkSettingsInput,
+} from '../interfaces/symlinks/symlink-settings';
 import { SymlinkMatchingRun, SymlinkSuggestion } from '../interfaces/symlinks/symlink-suggestion';
-import { SymlinkLink, SymlinkLinkPlan } from '../interfaces/symlinks/symlink-link';
-import { PreviewSymlinkLinkRequest, SpecialMoviePairRequest, SymlinkRejection } from '../interfaces/symlinks/symlink-decisions';
+import { ExistingLinkConfirmation, SymlinkLink, SymlinkLinkPlan } from '../interfaces/symlinks/symlink-link';
+import {
+  PreviewSymlinkLinkRequest,
+  SaveSymlinkLinkRequest,
+  SpecialMoviePairRequest,
+  SymlinkChoices,
+  SymlinkRejection,
+} from '../interfaces/symlinks/symlink-decisions';
 import { TranslationKey } from './i18n/_i18n-key';
 import { AppI18nService } from './app-i18n.service';
 
 /** One action on one row: busy while it runs, the answer afterwards. */
 export interface SymlinkActionState {
   busy?: boolean;
+  deleting?: boolean;
   error?: string | null;
   success?: boolean;
 }
@@ -29,7 +41,11 @@ export class SymlinkService {
 
   private readonly settingsState = signal<SymlinkSettings | null>(null);
   private readonly suggestionsState = signal<SymlinkSuggestion[]>([]);
+  private suggestionReadVersion = 0;
+  private capabilityReadVersion = 0;
   private readonly linksState = signal<SymlinkLink[]>([]);
+  private linkReadVersion = 0;
+  private progressRead: Promise<void> | null = null;
   private readonly rejectionsState = signal<SymlinkRejection[]>([]);
   private readonly suggestionBusy = signal<Record<string, SymlinkActionState>>({});
   private readonly linkBusy = signal<Record<string, SymlinkActionState>>({});
@@ -37,12 +53,17 @@ export class SymlinkService {
 
   readonly settings = this.settingsState.asReadonly();
   readonly suggestions = this.suggestionsState.asReadonly();
+  readonly pendingCount = computed(() =>
+    this.settings()?.enabled === false ? 0 : this.suggestions().filter((value) => value.status === 'Pending').length,
+  );
   readonly links = this.linksState.asReadonly();
   readonly rejections = this.rejectionsState.asReadonly();
   readonly suggestionStates = this.suggestionBusy.asReadonly();
   readonly linkStates = this.linkBusy.asReadonly();
   readonly capabilityStates = this.capabilityBusy.asReadonly();
 
+  readonly capabilityChecking = signal(false);
+  readonly capabilityError = signal<string | null>(null);
   readonly settingsLoading = signal(false);
   readonly settingsError = signal<string | null>(null);
   readonly saving = signal(false);
@@ -54,6 +75,11 @@ export class SymlinkService {
   readonly refreshing = signal(false);
   /** The summary of the last manual matching pass; a pass that changed nothing is a result too. */
   readonly lastRun = signal<SymlinkMatchingRun | null>(null);
+
+  browseDirectories(path: string | null): Promise<SymlinkDirectoryListing> {
+    const params = path ? new HttpParams().set('path', path) : new HttpParams();
+    return firstValueFrom(this.http.get<SymlinkDirectoryListing>(`${this.url}/directories`, { params }));
+  }
 
   async loadSettings(): Promise<void> {
     this.settingsLoading.set(true);
@@ -73,14 +99,23 @@ export class SymlinkService {
    * stored probe answers, and a refused save keeps the draft as typed: rebuilding the form from the
    * server here would throw away the edit that was meant to fix it.
    */
-  async saveSettings(settings: SymlinkSettings): Promise<SymlinkSettings> {
-    const { storageAreas, pathMappings, readerViews } = settings;
+  async saveSettings(settings: SymlinkSettingsInput): Promise<SymlinkSettings> {
+    const { mediaRoot } = settings;
+    const wasEnabled = this.settings()?.enabled !== false;
+    const enabled = settings.enabled ?? this.settings()?.enabled ?? true;
     this.saving.set(true);
     this.settingsError.set(null);
     this.fieldErrors.set({});
     try {
-      const saved = await firstValueFrom(this.http.put<SymlinkSettings>(this.url, { storageAreas, pathMappings, readerViews }));
+      const saved = await firstValueFrom(this.http.put<SymlinkSettings>(this.url, { mediaRoot, enabled }));
+      this.capabilityReadVersion++;
+      this.capabilityChecking.set(false);
+      this.capabilityError.set(null);
+      const isEnabled = saved.enabled !== false;
+      // Responses started before the switch changed must not replace the new state.
+      if (wasEnabled !== isEnabled) this.suggestionReadVersion++;
       this.settingsState.set(saved);
+      if (!wasEnabled && isEnabled) void this.refreshCount();
       return saved;
     } catch (error) {
       this.fieldErrors.set(this.fields(error));
@@ -89,6 +124,21 @@ export class SymlinkService {
       throw new Error(message, { cause: error });
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  async checkCapabilities(): Promise<void> {
+    const version = ++this.capabilityReadVersion;
+    this.capabilityChecking.set(true);
+    this.capabilityError.set(null);
+    try {
+      const checked = await firstValueFrom(this.http.post<SymlinkSettings>(`${this.url}/capability-check`, null));
+      if (version === this.capabilityReadVersion) this.settingsState.set(checked);
+    } catch (error) {
+      if (version === this.capabilityReadVersion) this.capabilityError.set(this.message(error, 'settings.symlinks.capability.checkError'));
+      throw error;
+    } finally {
+      if (version === this.capabilityReadVersion) this.capabilityChecking.set(false);
     }
   }
 
@@ -110,7 +160,7 @@ export class SymlinkService {
     this.overviewLoading.set(true);
     this.overviewError.set(null);
     try {
-      await Promise.all([this.readSuggestions(), this.readLinks(), this.readRejections()]);
+      await this.readOverview();
     } catch (error) {
       this.overviewError.set(this.message(error, 'symlinks.loadError'));
       throw error;
@@ -142,15 +192,28 @@ export class SymlinkService {
     return firstValueFrom(this.http.post<SymlinkLinkPlan>(`${this.url}/preview`, request));
   }
 
-  async confirmSuggestion(id: string, configRevision: number): Promise<SymlinkLink> {
+  async confirmSuggestion(
+    id: string,
+    configRevision: number,
+    sourceVersion?: string | null,
+    existingLink?: ExistingLinkConfirmation,
+  ): Promise<SymlinkLink> {
     const link = await this.perform(
       this.suggestionBusy,
       id,
-      () => firstValueFrom(this.http.post<SymlinkLink>(`${this.url}/suggestions/${encodeURIComponent(id)}/confirm`, { configRevision })),
+      () =>
+        firstValueFrom(
+          this.http.post<SymlinkLink>(`${this.url}/suggestions/${encodeURIComponent(id)}/confirm`, {
+            configRevision,
+            ...(sourceVersion === undefined ? {} : { sourceVersion }),
+            ...(existingLink === undefined ? {} : { existingLink }),
+          }),
+        ),
       // A refused revision is the path configuration having moved, so the form and the answers age out too,
       // and the offer list is read again rather than left there to earn the same refusal a second time.
       () => Promise.all([this.loadSettings(), this.readSuggestions()]),
     );
+    this.linkReadVersion++;
     this.linksState.update((links) => [link, ...links.filter((existing) => existing.id !== link.id)]);
     await this.reload(() => this.readSuggestions());
     return link;
@@ -208,24 +271,145 @@ export class SymlinkService {
   }
 
   async deleteLink(id: string, revision: number): Promise<void> {
-    await this.perform(
-      this.linkBusy,
-      id,
-      () =>
-        firstValueFrom(
+    if (
+      this.linkBusy()[id]?.deleting ||
+      this.links().some((link) => link.id === id && ['DeletePending', 'CleanupPending'].includes(link.operationStatus))
+    )
+      return;
+    this.updateState(this.linkBusy, id, { deleting: true });
+    try {
+      const target = this.links().find((link) => link.id === id);
+      await this.perform(this.linkBusy, id, () => this.deleteCurrentRevision(id, revision, target));
+      // Retain the locked row until both its removal and the refreshed suggestions can be published.
+      this.linkReadVersion++;
+      this.linksState.update((links) => links.map((link) => (link.id === id ? { ...link, operationStatus: 'CleanupPending' } : link)));
+      await this.reload(() => this.readOverview());
+    } catch (error) {
+      // A failed response may still have left a durable deletion queued on the server.
+      await this.reload(() => this.readOverview());
+      this.updateState(this.linkBusy, id, { deleting: false });
+      throw error;
+    }
+  }
+
+  private async deleteCurrentRevision(id: string, revision: number, target: SymlinkLink | undefined): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await firstValueFrom(
           this.http.delete<void>(`${this.url}/links/${encodeURIComponent(id)}`, {
             params: new HttpParams().set('revision', String(revision)),
           }),
+        );
+        return;
+      } catch (error) {
+        if (!(error instanceof HttpErrorResponse) || error.status !== 409 || !target || attempt === 2) throw error;
+        const rows = await firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`));
+        const current = rows.find((link) => link.id === id);
+        // A deletion completed by another pass already fulfils the request.
+        if (!current) return;
+        // Setup may advance the revision and rename the link; changing its pairing or source needs a new decision.
+        if (
+          current.radarrInstanceId !== target.radarrInstanceId ||
+          current.radarrMovieId !== target.radarrMovieId ||
+          current.sonarrInstanceId !== target.sonarrInstanceId ||
+          current.sonarrSeriesId !== target.sonarrSeriesId ||
+          current.sonarrEpisodeId !== target.sonarrEpisodeId ||
+          current.radarrFileId !== target.radarrFileId ||
+          current.sourcePath !== target.sourcePath ||
+          current.sourceVersion !== target.sourceVersion
+        )
+          throw error;
+        if (['DeletePending', 'CleanupPending'].includes(current.operationStatus)) return;
+        if (!['Pending', 'Active'].includes(current.operationStatus) || current.revision <= revision) throw error;
+        revision = current.revision;
+      }
+    }
+  }
+
+  loadChoices(): Promise<SymlinkChoices> {
+    return firstValueFrom(this.http.get<SymlinkChoices>(`${this.url}/choices`));
+  }
+
+  async saveLink(request: SaveSymlinkLinkRequest, id?: string): Promise<SymlinkLink> {
+    const link = await this.perform(
+      this.linkBusy,
+      id ?? 'new',
+      () =>
+        firstValueFrom(
+          id
+            ? this.http.put<SymlinkLink>(`${this.url}/links/${encodeURIComponent(id)}`, request)
+            : this.http.post<SymlinkLink>(`${this.url}/links`, request),
         ),
       () => this.readLinks(),
     );
-    this.linksState.update((links) => links.filter((link) => link.id !== id));
+    this.linkReadVersion++;
+    this.linksState.update((values) => [link, ...values.filter((value) => value.id !== link.id)]);
+    return link;
+  }
+
+  async retryLink(id: string, revision: number): Promise<SymlinkLink> {
+    const link = await this.perform(
+      this.linkBusy,
+      id,
+      () => firstValueFrom(this.http.post<SymlinkLink>(`${this.url}/links/${encodeURIComponent(id)}/retry`, { revision })),
+      () => this.readLinks(),
+    );
+    this.linksState.update((values) => values.map((value) => (value.id === link.id ? link : value)));
+    return link;
+  }
+
+  async refreshCount(): Promise<void> {
+    await this.reload(() => this.readSuggestions());
+  }
+
+  refreshProgress(): Promise<void> {
+    if (this.progressRead) return this.progressRead;
+    this.progressRead = this.reload(() => this.readOverview()).finally(() => {
+      this.progressRead = null;
+    });
+    return this.progressRead;
+  }
+
+  private async readOverview(): Promise<void> {
+    const linksVersion = ++this.linkReadVersion;
+    // The backend publishes the suggestion before removing the completed cleanup journal.
+    const links = await firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`));
+    if (linksVersion !== this.linkReadVersion) return;
+    const suggestionsVersion = ++this.suggestionReadVersion;
+    const [suggestions, rejections] = await Promise.all([
+      firstValueFrom(this.http.get<SymlinkSuggestion[]>(`${this.url}/suggestions`)),
+      firstValueFrom(this.http.get<SymlinkRejection[]>(`${this.url}/rejections`)),
+    ]);
+    if (linksVersion !== this.linkReadVersion) return;
+    if (suggestionsVersion !== this.suggestionReadVersion) {
+      await this.readOverview();
+      return;
+    }
+    // No awaited work between these writes: the view receives the lists in the same render.
+    this.linksState.set(links);
+    this.suggestionsState.set(suggestions);
+    this.rejectionsState.set(rejections);
+    this.overviewError.set(null);
+    this.linkBusy.update((states) =>
+      Object.fromEntries(
+        Object.entries(states).map(([id, state]) => [
+          id,
+          state.deleting && !state.busy
+            ? {
+                ...state,
+                deleting: links.some((link) => link.id === id && ['DeletePending', 'CleanupPending'].includes(link.operationStatus)),
+              }
+            : state,
+        ]),
+      ),
+    );
   }
 
   private readSuggestions(): Promise<void> {
-    return firstValueFrom(this.http.get<SymlinkSuggestion[]>(`${this.url}/suggestions`)).then((suggestions) =>
-      this.suggestionsState.set(suggestions),
-    );
+    const version = ++this.suggestionReadVersion;
+    return firstValueFrom(this.http.get<SymlinkSuggestion[]>(`${this.url}/suggestions`)).then((suggestions) => {
+      if (version === this.suggestionReadVersion) this.suggestionsState.set(suggestions);
+    });
   }
 
   private readRejections(): Promise<void> {
@@ -235,7 +419,10 @@ export class SymlinkService {
   }
 
   private readLinks(): Promise<void> {
-    return firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`)).then((links) => this.linksState.set(links));
+    const version = ++this.linkReadVersion;
+    return firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`)).then((links) => {
+      if (version === this.linkReadVersion) this.linksState.set(links);
+    });
   }
 
   /**

@@ -49,10 +49,20 @@ public sealed class SymlinkSuggestionService(
 
     public async Task<SymlinkMatchingRun> RefreshAsync(bool force, CancellationToken cancellationToken)
     {
+        using IDisposable operation = await SymlinkOperationGate.EnterAsync(cancellationToken);
+        return await RefreshCoreAsync(force, cancellationToken);
+    }
+
+    /// <summary>Called under the operation gate after Sonarr cleanup, before the deletion journal is removed.</summary>
+    public Task<SymlinkMatchingRun> RefreshAfterDeletionAsync(string linkId, CancellationToken cancellationToken) =>
+        RefreshCoreAsync(true, cancellationToken, linkId);
+
+    private async Task<SymlinkMatchingRun> RefreshCoreAsync(bool force, CancellationToken cancellationToken, string? deletedLinkId = null)
+    {
         await PassLock.WaitAsync(cancellationToken);
         try
         {
-            return await RunAsync(force, cancellationToken);
+            return await RunAsync(force, cancellationToken, deletedLinkId);
         }
         finally
         {
@@ -98,9 +108,10 @@ public sealed class SymlinkSuggestionService(
     /// signature is for. <paramref name="force"/> is the „refresh suggestions" action, which re-reads
     /// even when nothing looks different, because the user just asked for it.
     /// </summary>
-    private async Task<SymlinkMatchingRun> RunAsync(bool force, CancellationToken cancellationToken)
+    private async Task<SymlinkMatchingRun> RunAsync(bool force, CancellationToken cancellationToken, string? deletedLinkId)
     {
         AppSettings settings = await settingsService.GetSnapshotAsync(cancellationToken);
+        if (!settings.Symlinks.Enabled) return new SymlinkMatchingRun(0, 0, 0, 0, 0);
         List<InstanceSignature> signatures = CollectSignatures(settings);
         Dictionary<string, SymlinkMatchingState> storedStates = [];
         foreach (SymlinkMatchingState state in await store.GetMatchingStatesAsync(cancellationToken))
@@ -116,6 +127,7 @@ public sealed class SymlinkSuggestionService(
 
         List<Candidate> candidates = CollectCandidates(settings);
         HashSet<SpecialMoviePair> managed = (await store.GetLinksAsync(cancellationToken))
+            .Where(link => link.Id != deletedLinkId || link.OperationStatus != SymlinkOperationStatus.CleanupPending)
             .Select(link => link.Pair)
             .ToHashSet();
         Dictionary<SpecialMoviePair, List<SymlinkSuggestion>> history = [];
@@ -142,7 +154,8 @@ public sealed class SymlinkSuggestionService(
             SpecialMovieMatch match = candidate.Match;
             matched[match.Pair] = match;
             List<SymlinkSuggestion> rows = history.TryGetValue(match.Pair, out List<SymlinkSuggestion>? known) ? known : [];
-            if (managed.Contains(match.Pair) || rows.Any(row => IsOutcome(row.Status))) continue;
+            // Historic confirmations cannot reserve a pairing after its managed link was deleted.
+            if (managed.Contains(match.Pair)) continue;
             if (await store.IsRejectedAsync(match.Pair, cancellationToken))
             {
                 skippedRejected += 1;
@@ -171,7 +184,7 @@ public sealed class SymlinkSuggestionService(
             {
                 suggestion.Reasons.Add(new SymlinkSuggestionReason(
                     SpecialMovieMatchingRules.EpisodeHasFileCode,
-                    "The special already has an episode file in Sonarr, so confirming this pair needs a decision about that file."));
+                    "Sonarr reports an existing episode file. It is inspected when offers are loaded; no existing file or link is automatically adopted or overwritten."));
             }
 
             await store.UpsertSuggestionAsync(suggestion, cancellationToken);
@@ -295,15 +308,6 @@ public sealed class SymlinkSuggestionService(
 
         return marked;
     }
-
-    /// <summary>
-    /// A pair that was carried through to a link is an outcome, not an open question: finding it again
-    /// must not turn a finished or in-progress row back into something the user has to answer twice. A
-    /// decline is deliberately not in here — its durable record is the rejection archive, which the user
-    /// can withdraw, so a row that stayed an outcome would keep a reactivated pair invisible forever.
-    /// </summary>
-    private static bool IsOutcome(SymlinkSuggestionStatus status) =>
-        status is SymlinkSuggestionStatus.Creating or SymlinkSuggestionStatus.Completed;
 
     private static SymlinkSuggestion Copy(SymlinkSuggestion source) => new()
     {

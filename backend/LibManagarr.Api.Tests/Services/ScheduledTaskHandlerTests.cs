@@ -69,6 +69,9 @@ public sealed class ScheduledTaskHandlerTests
 
     private sealed class SyncStub : ISnapshotSyncService
     {
+        public Task<SyncInstanceResult> SyncSonarrSeriesAsync(string instanceId, int seriesId, CancellationToken token) =>
+            throw new NotSupportedException("A scheduled sync must refresh the whole instance.");
+
         public bool FailFirstInstance { get; init; }
         public List<SyncInstanceRequest> Requests { get; } = [];
         public Task<SyncInstanceResult> SyncAsync(SyncInstanceRequest request, CancellationToken token)

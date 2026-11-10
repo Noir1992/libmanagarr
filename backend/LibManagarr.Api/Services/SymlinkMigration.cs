@@ -191,6 +191,64 @@ internal sealed class SymlinkMigration(TimeProvider clock, ILogger logger)
             CREATE INDEX IF NOT EXISTS symlink_links_radarr_source
                 ON symlink_links (radarr_instance_id, radarr_movie_id);
             """
+        ),
+        ("symlinks-v5", "ALTER TABLE symlink_capability_checks ADD COLUMN process_id TEXT;"),
+        ("symlinks-v6", "ALTER TABLE symlink_links ADD COLUMN naming_move TEXT;"),
+        (
+            "symlinks-v7",
+            """
+            -- Admit CleanupPending (5) while retaining all journal and naming data.
+            CREATE TABLE symlink_links_v7 (
+                id TEXT NOT NULL PRIMARY KEY,
+                revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+                radarr_instance_id TEXT NOT NULL,
+                radarr_movie_id INTEGER NOT NULL,
+                radarr_file_id INTEGER NOT NULL,
+                sonarr_instance_id TEXT NOT NULL,
+                sonarr_series_id INTEGER NOT NULL,
+                sonarr_episode_id INTEGER NOT NULL,
+                season_number INTEGER NOT NULL CHECK(season_number >= 0),
+                episode_number INTEGER NOT NULL CHECK(episode_number >= 0),
+                storage_area_id TEXT NOT NULL,
+                link_path TEXT NOT NULL,
+                link_text TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                operation_status INTEGER NOT NULL CHECK(operation_status BETWEEN 0 AND 5),
+                setup_step INTEGER CHECK(setup_step BETWEEN 0 AND 6),
+                suggestion_id TEXT,
+                sonarr_file_id INTEGER,
+                sonarr_scan_command_id TEXT,
+                monitoring_original INTEGER CHECK(monitoring_original IN (0,1)),
+                monitoring_disabled INTEGER NOT NULL DEFAULT 0 CHECK(monitoring_disabled IN (0,1)),
+                auto_follow_up INTEGER NOT NULL DEFAULT 0 CHECK(auto_follow_up IN (0,1)),
+                desired_filename TEXT,
+                applied_filename TEXT,
+                naming_revision TEXT,
+                source_version TEXT,
+                update_revision INTEGER NOT NULL DEFAULT 0 CHECK(update_revision >= 0),
+                expected_metadata TEXT,
+                confirmed_metadata TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_checked_at TEXT,
+                last_successful_check_at TEXT,
+                findings TEXT,
+                sonarr_rename_command_id TEXT,
+                pending_update TEXT,
+                naming_move TEXT
+            );
+
+            INSERT INTO symlink_links_v7 SELECT * FROM symlink_links;
+            DROP TABLE symlink_links;
+            ALTER TABLE symlink_links_v7 RENAME TO symlink_links;
+
+            -- One managed link per special, unless the row only records a deletion that is still owed.
+            CREATE UNIQUE INDEX IF NOT EXISTS symlink_links_one_per_episode
+                ON symlink_links (sonarr_instance_id, sonarr_series_id, sonarr_episode_id)
+                WHERE operation_status <> 3;
+            CREATE INDEX IF NOT EXISTS symlink_links_radarr_source
+                ON symlink_links (radarr_instance_id, radarr_movie_id);
+            """
         )
     ];
 

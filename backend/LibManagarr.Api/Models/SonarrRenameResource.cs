@@ -8,6 +8,9 @@ public sealed class SonarrRenameResource
 {
     /// <summary>The episode file this proposal is about.</summary>
     public int? Id { get; set; }
+    public int? EpisodeFileId { get; set; }
+    public string? ExistingPath { get; set; }
+    public string? NewPath { get; set; }
 
     public int? SeriesId { get; set; }
 
@@ -26,6 +29,8 @@ public sealed class SonarrRenameResource
 /// </summary>
 public sealed class SonarrNamingConfigResource
 {
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement>? AdditionalData { get; set; }
     public bool? RenameEpisodes { get; set; }
 
     /// <summary>Applies to specials; the pattern is Sonarr's own, never rebuilt here.</summary>

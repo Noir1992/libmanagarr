@@ -2,9 +2,27 @@ import { SymlinkOperationStatus } from '../../enums/symlink-operation-status';
 import { SymlinkSetupStep } from '../../enums/symlink-setup-step';
 import { SymlinkSuggestionStatus } from '../../enums/symlink-suggestion-status';
 import { FeedbackState } from '../../interfaces/general/feedback-state';
+import { SymlinkSuggestionReason } from '../../interfaces/symlinks/symlink-suggestion';
 import { TranslationKey } from '../../services/i18n/_i18n-key';
 
 type Translate = (key: TranslationKey) => string;
+
+const reasonLabelKeys: Record<string, TranslationKey> = {
+  'identical-title': 'symlinks.reason.identicalTitle',
+  'alternative-title': 'symlinks.reason.alternativeTitle',
+  'generic-word-difference': 'symlinks.reason.genericWord',
+  'release-year-match': 'symlinks.reason.sameYear',
+  'release-year-differs': 'symlinks.reason.differentYear',
+  'release-date-unknown': 'symlinks.reason.dateUnknown',
+  'runtime-match': 'symlinks.reason.similarRuntime',
+  'runtime-differs': 'symlinks.reason.differentRuntime',
+  'runtime-unknown': 'symlinks.reason.runtimeUnknown',
+};
+
+export function suggestionReasonLabel(reason: SymlinkSuggestionReason, translate: Translate): string {
+  const key = reasonLabelKeys[reason.code];
+  return key ? translate(key) : reason.detail;
+}
 
 const suggestionStatusKeys: Record<SymlinkSuggestionStatus, TranslationKey> = {
   Pending: 'symlinks.suggestion.Pending',
@@ -22,6 +40,7 @@ const operationStatusKeys: Record<SymlinkOperationStatus, TranslationKey> = {
   Active: 'symlinks.operation.Active',
   Conflict: 'symlinks.operation.Conflict',
   DeletePending: 'symlinks.operation.DeletePending',
+  CleanupPending: 'symlinks.operation.DeletePending',
   Updating: 'symlinks.operation.Updating',
 };
 

@@ -17,7 +17,10 @@ public enum SymlinkOperationStatus
     /// source moved and the follow-up is queued" apart from "this entry is fine" and "this entry stopped
     /// for a person".
     /// </summary>
-    Updating
+    Updating,
+
+    /// <summary>The symlink is gone; only the targeted Sonarr cleanup remains.</summary>
+    CleanupPending
 }
 
 /// <summary>
@@ -51,8 +54,12 @@ public sealed class SymlinkFileMetadata
     public List<string> Languages { get; set; } = [];
 
     public string? Quality { get; set; }
+    public QualityRevisionResource? QualityRevision { get; set; }
 
     public long? Size { get; set; }
+    public string? VideoCodec { get; set; }
+    public string? AudioCodec { get; set; }
+    public string? Resolution { get; set; }
 }
 
 /// <summary>One structured health finding. The code stays machine readable so the UI can name an action.</summary>
@@ -138,6 +145,7 @@ public sealed class SymlinkLink
 
     /// <summary>The source swap reserved before touching disk; kept until its result is recorded.</summary>
     public SymlinkSourceUpdate? PendingUpdate { get; set; }
+    public SymlinkNameMove? NamingMove { get; set; }
 
     public long UpdateRevision { get; set; }
 
@@ -156,6 +164,8 @@ public sealed class SymlinkLink
     public List<SymlinkFinding> Findings { get; set; } = [];
 }
 
+public sealed record SymlinkNameMove(string PreviousPath, string NewPath, string LinkText, string? ScanCommandId = null);
+
 /// <summary>
 /// Durable destination of a source swap. The link row still describes the previous source until the
 /// swap succeeds, so recovery can recognise both the previous link and the intended replacement.
@@ -169,4 +179,7 @@ public sealed record SymlinkSourceUpdate(
     int SeasonNumber,
     int EpisodeNumber,
     SymlinkFileMetadata? ExpectedMetadata,
-    string? SourceVersion);
+    string? SourceVersion,
+    SpecialMoviePair? Pair = null,
+    SpecialMoviePair? PreviousPair = null,
+    int? CleanupCommandId = null);

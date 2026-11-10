@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   ElementRef,
   inject,
   OnInit,
@@ -17,6 +18,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AppI18nService } from './services/app-i18n.service';
 import { AuthService } from './services/auth.service';
+import { SymlinkService } from './services/symlink.service';
 
 const NARROW_VIEWPORT_QUERY: string = '(max-width: 820px)';
 const SCROLL_TO_TOP_THRESHOLD: number = 300;
@@ -32,6 +34,7 @@ const NAVIGATION_OPEN_STORAGE_KEY: string = 'navigation:open';
 export class App implements OnInit, OnDestroy {
   private readonly i18n: AppI18nService = inject(AppI18nService);
   private readonly authService: AuthService = inject(AuthService);
+  protected readonly symlinks = inject(SymlinkService);
   private narrowMediaQuery?: MediaQueryList;
   protected readonly navigationOpen: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly narrowViewport: WritableSignal<boolean> = signal<boolean>(false);
@@ -54,6 +57,17 @@ export class App implements OnInit, OnDestroy {
   protected readonly showShell: Signal<boolean> = computed(
     (): boolean => this.authService.state() === 'loading' || this.authService.state() === 'authenticated',
   );
+
+  constructor() {
+    effect((onCleanup) => {
+      if (this.authService.state() !== 'authenticated') return;
+      void this.symlinks.refreshCount();
+      const timer = globalThis.setInterval(() => {
+        if (!globalThis.document.hidden) void this.symlinks.refreshCount();
+      }, 60000);
+      onCleanup(() => globalThis.clearInterval(timer));
+    });
+  }
 
   ngOnInit(): void {
     if (typeof globalThis.matchMedia !== 'function') {

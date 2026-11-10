@@ -35,8 +35,7 @@ export class RejectSymlinkDialogComponent {
   }
 
   protected episodeLabel(): string {
-    return this.t('symlinks.episodeNumber', {
-      season: String(this.data.suggestion.seasonNumber),
+    return this.t('symlinks.specialNumber', {
       episode: String(this.data.suggestion.episodeNumber),
     });
   }

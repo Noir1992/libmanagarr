@@ -16,6 +16,12 @@
   }
 }
 
+.info-popover--wide {
+  box-sizing: border-box;
+  min-width: min(200px, calc(100vw - 10px));
+  max-width: min(560px, calc(100vw - 10px));
+}
+
 /* Offscreen twin used to measure the panel box before the overlay opens. */
 .info-popover-ghost {
   position: absolute;
