@@ -21,6 +21,8 @@ frontend/.angular
 backend/LibManagarr.Api/data
 
 # Misc
+*.tar
+.shared-media-*.log
 **/*.user
 karma-*.log
 build-prod.log
