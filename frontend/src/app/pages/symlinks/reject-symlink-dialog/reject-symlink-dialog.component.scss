@@ -1,0 +1,29 @@
+.dialog-title {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+
+.dialog-content {
+  display: grid;
+  gap: var(--theme-default-gap);
+  font-family: var(--app-font-family), serif;
+}
+
+.reject-pair {
+  margin: 0;
+  font-weight: 600;
+
+  .reject-episode {
+    margin-left: var(--theme-default-gap-small);
+    font-weight: 400;
+    color: var(--theme-muted);
+  }
+}
+
+.reject-info {
+  margin: 0;
+  color: var(--theme-muted);
+}

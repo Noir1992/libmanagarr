@@ -1,0 +1,92 @@
+<section class="tab-header">{{ t('settings.symlinksTab.description') }}</section>
+
+<section class="tab-content">
+  @if (generalError(); as error) {
+    <section class="feedback error">{{ error }}</section>
+  }
+
+  <form class="symlink-form" [formGroup]="form">
+    <section class="card">
+      <div class="card-content symlink-rows">
+        <div class="enabled-control">
+          <mat-slide-toggle
+            [aria-describedby]="enableHint() ? 'symlinks-enable-hint' : ''"
+            formControlName="enabled"
+            (change)="saveAsync('enabled')"
+            >{{ t('settings.symlinks.enabled') }}</mat-slide-toggle
+          >
+          <app-feedback-icon
+            [state]="feedbackField() === 'enabled' ? (isBusy() ? 'loading' : feedbackState()) : null"
+            variant="inline"
+            [tooltipText]="feedback()"
+          />
+        </div>
+        <p class="structure-hint">{{ t('settings.symlinks.enabledHint') }}</p>
+        @if (enableHint(); as hint) {
+          <p class="structure-hint enable-hint" id="symlinks-enable-hint" role="status">{{ hint }}</p>
+        }
+      </div>
+    </section>
+    <section class="card">
+      <section>
+        <div class="card-header">
+          <h2 class="card-title">{{ t('settings.symlinks.mediaRoot') }}</h2>
+        </div>
+        <div class="card-content symlink-rows">
+          <p class="structure-hint" id="symlink-structure-hint">{{ t('settings.symlinks.structureHint') }}</p>
+          <pre class="media-structure">{{ structureExample() }}</pre>
+          <div class="field">
+            <div class="field-label-row">
+              <label for="symlink-media-root">{{ t('settings.symlinks.mediaRoot') }}</label>
+            </div>
+            <div class="media-root-controls">
+              <div class="field-control-wrap">
+                <input
+                  matInput
+                  id="symlink-media-root"
+                  formControlName="mediaRoot"
+                  placeholder="/media"
+                  aria-describedby="symlink-structure-hint"
+                  [class.has-error]="fieldError() !== null"
+                  [attr.aria-invalid]="fieldError() !== null"
+                  (blur)="saveAsync()"
+                  (keydown.enter)="$event.preventDefault(); saveAsync()"
+                />
+                <app-feedback-icon
+                  [state]="feedbackField() === 'mediaRoot' ? (isBusy() ? 'loading' : feedbackState()) : null"
+                  variant="overlay"
+                  [tooltipText]="fieldError() ?? feedback()"
+                />
+              </div>
+              <button
+                type="button"
+                mat-stroked-button
+                class="secondary-button"
+                [disabled]="isBusy() || !symlinkService.settings()"
+                (pointerdown)="$event.preventDefault()"
+                (click)="browseDirectory()"
+              >
+                <mat-icon class="material-symbols-outlined">folder_open</mat-icon>{{ t('settings.symlinks.browse') }}
+              </button>
+            </div>
+            @if (fieldError(); as error) {
+              <p class="field-error" role="alert">{{ error }}</p>
+            }
+          </div>
+          <section class="permissions-hint structure-hint" aria-labelledby="symlink-permissions-title">
+            <p class="permissions-title" id="symlink-permissions-title">
+              <strong>{{ t('settings.symlinks.permissions.title') }}</strong>
+            </p>
+            <p>{{ t('settings.symlinks.permissions.intro') }}</p>
+            <ul>
+              <li>{{ t('settings.symlinks.permissions.movies') }}</li>
+              <li>{{ t('settings.symlinks.permissions.series') }}</li>
+              <li>{{ t('settings.symlinks.permissions.appData') }}</li>
+            </ul>
+            <p>{{ t('settings.symlinks.permissions.help') }}</p>
+          </section>
+        </div>
+      </section>
+    </section>
+  </form>
+</section>

@@ -92,6 +92,181 @@ LIBMANAGARR_PORT=9000
   the `data` folder below the content root, so config and cache share one directory.
 - The image itself contains **no** data/API keys (`.dockerignore` excludes `backend/LibManagarr.Api/data`).
 
+## Managed media symlinks
+
+LibManagarr adds Radarr movies as specials to Sonarr series using relative symbolic links.
+Configure **Settings → Symlinks** (`/settings?tab=symlinks`) with one **media directory**,
+which defaults to `/media` in Docker. No manual storage areas, path mappings or reader views are needed.
+The link register, suggestions and decline archive live in `libmanagarr.db`; the feature page is `/symlinks`.
+
+The **Enable symlinks** switch pauses matching, health checks and symlink actions without removing
+existing links or stored records. Re-enabling resumes pending setup work. Settings save automatically.
+The directory browser beside the media directory field lists directories visible to the LibManagarr
+server/container; files and linked directories are excluded. The directory can also be entered manually.
+
+### Required shared media tree
+
+Mount the **same complete media tree at the same container path** in Sonarr, Radarr, LibManagarr
+and your media player (for example Jellyfin). For example, every service gets the same bind mount:
+
+```yaml
+volumes:
+  - /mnt/pool/media:/media
+```
+
+The resulting layout could be:
+
+```text
+/media/
+  movies/Film/film.mkv
+  series/Show/Specials/Show - S00E01.mkv
+```
+
+- Movie and series folders are discovered automatically using each instance's `/api/v3/rootfolder` API.
+  Folder names are unrestricted; multiple roots and multiple instances are supported, provided their
+  roots stay inside the configured media directory. A different mount prefix is reported as an error.
+- Only the series folders need write permission. LibManagarr reads movie files and creates, renames
+  and removes links inside the series folders. It does not rename or change the source movie.
+- The example special points to `../../../movies/Film/film.mkv`. Link targets are relative and the
+  complete tree must retain the same structure in every reader. Mounting only the series folder in
+  Sonarr or Jellyfin leaves the movie target inaccessible.
+- The backend validates both the common media-directory boundary and the roots reported by the
+  corresponding instance. Paths outside those boundaries and paths through symlinked parent
+  directories are refused.
+- Existing manual configurations remain readable for compatibility. Saving the media directory
+  switches them to the shared-mount setup. Existing link paths are retained; changing the root is
+  refused if it would leave managed links outside the media tree.
+
+### Automatic capability checks
+
+The media directory saves automatically when the field loses focus or you press Enter. It must already
+exist, be accessible and have no linked parent directories; invalid entries leave the saved path unchanged.
+The feedback icon beside the field shows saving, success or an error.
+
+LibManagarr automatically checks symlink support when the symlink settings open, after a media-directory
+change, before enabling, after a backend restart and before planning new links in the shared media tree.
+The check discovers the current root folders, verifies their boundaries and readability, and tests creating,
+reading, renaming and replacing relative links in the series roots. Temporary files are removed afterwards;
+no writes to the movie folders or top level of the media directory are needed.
+
+Fresh installations start disabled. Enabling requires a successful capability check; otherwise the switch remains
+disabled with the reason shown beside it. Automatic checks preserve an existing activation across container restarts.
+If verification fails temporarily, processing pauses and verification retries automatically. Processing resumes when
+support is confirmed, without requiring the user to enable the feature again. Existing links and records remain intact.
+A positive check proves this backend's access; matching mounts in Sonarr and the media player remain required.
+
+| Answer | Meaning |
+| --- | --- |
+| `Available` | Movie roots are readable and symlinks work in the discovered series roots. |
+| `StorageUnavailable` | Root discovery failed, a root is outside the shared tree, or a folder is unavailable. |
+| `PermissionDenied` | The process lacks permission to read the folders or create symlinks. |
+| `Unsupported` | The runtime does not support file symlinks. |
+| `Failed` | A step of the link test failed; see the reported detail. |
+| `NotTested` | Waiting for automatic verification of this configuration. |
+
+Windows development runs also need the symlink privilege (elevated or Developer Mode). On Windows,
+the initial media-directory default is the system drive's `media` folder; Docker defaults to `/media`.
+
+### Existing episode files in offers
+
+When Sonarr already assigns a file to an offered special, loading the offers checks the current
+Sonarr episode/file assignment and the proposed Radarr movie file. The existing entry is inspected
+without changing it: relative and absolute symlinks, including link chains, are resolved and compared
+with the expected movie. A readable matching link is shown as verified. A different target, a dangling
+or cyclic link, a regular file, a missing entry or an unavailable check is reported separately.
+Details include the affected paths. Targets outside the configured media directories are never opened.
+
+These checks do not adopt existing links, change the suggestion decision, overwrite files or perform
+any Arr writes. Filesystem results are checked again on the next load even if the library snapshots
+are unchanged. Arr reads are shared within the request, with at most four inspections in parallel and
+a ten-second limit per inspection for the API reads.
+
+A matching existing symlink can be **explicitly adopted** from the confirmation dialog. The preview
+shows the actual existing path, its unchanged link text and the current source metadata. Confirmation
+is bound to the source version, Sonarr file id, path and link text shown in that preview, and verifies
+them again before registration. A changed, broken or mismatched link and a regular file remain blocked.
+Adoption records the current Sonarr assignment, metadata, naming revision and monitoring state, and
+starts with setup complete. It does not recreate, move, rename or rescan the link, alter monitoring or
+write to Sonarr. Subsequent management follows the consent shown in the dialog. Future filesystem
+changes still require the normal capability test; registering a readable existing link does not need
+permission to create a new one. Existing absolute link targets and valid link chains are retained.
+
+### The health pass waits until the tree is ready
+
+The task `symlinkHealthCheck` (**Settings → Tasks**, `/settings?tab=tasks`) walks every managed link with
+limited parallelism. It is seeded **disabled** with a daily 03:00 suggestion, and schedule, activation and
+a manual run all use the existing task editor. It reads current Arr data for the referenced movies and
+series, batching series reads within the pass; a failed API read never reuses an old healthy snapshot.
+It reports per row: a link that is gone, a regular file
+where a link belongs, a link that points somewhere else, a missing source, a read the rights refused, a
+share that is not mounted, a movie whose Radarr file moved, a missing Sonarr mapping, file metadata that
+was never confirmed or deviates, a name the instance rewrote, an episode that is monitored again. Where a
+look cannot answer, it says that with the cause instead of guessing. Switching the task off stops the
+periodic pass only: **following Radarr upgrades of an existing link belongs to the feature** and keeps
+running, and a single row can be looked at by hand from **`/symlinks`** through the same logic.
+
+### Creating, editing and recovering links
+
+**Create manually** selects a movie file and an existing Sonarr special from the synchronized libraries.
+Search by title or instance, then request a live preview before saving. The preview shows source,
+provisional link path, link text and expected file metadata. Confirmation authorizes subsequent Radarr
+file upgrades for this pair; following upgrades can be disabled per link. Editing uses the same preview
+and preserves an interrupted change in the register. **Retry setup** resumes the recorded operation;
+it never authorizes overwriting a foreign entry. Filters cover title, status and instance, and the
+navigation shows the number of pending offers.
+
+The source signature includes its path, file identity, size, date and available metadata. A replacement
+uses a distinct provisional filename so Sonarr imports and analyzes it even when the source file ID,
+path or size stayed the same. Quality and languages are mapped by name to the target Sonarr instance;
+unsupported mappings and unconfirmed MediaInfo keep setup incomplete. Radarr custom-format IDs and
+scores are not copied into Sonarr.
+
+The final path comes from Sonarr's rename preview (`episodeFileId`, `existingPath`, `newPath`).
+LibManagarr creates the relative link at that path, verifies it and removes its previous own link,
+then rescans and verifies the association and metadata again. It does not use Sonarr's file mover for
+new renames, which avoids source timestamp/permission changes and stale relative link text on folder
+changes. Naming moves and source swaps have persistent checkpoints and can be resumed after a crash.
+
+After Sonarr has finished setting up a new link and confirmed its final name, LibManagarr refreshes
+only the affected series through the targeted snapshot sync. Library details, change history, archive
+and filter counts are updated before setup is marked complete. A failed refresh keeps setup open for
+automatic retry. Explicit adoption of an existing symlink also refreshes that series before registering
+the completed link. Import and subsequent rename events account for the file size only once.
+
+Deleting removes the owned symlink and retains its managed entry until the operation is fully complete.
+The row controls stay disabled and the delete button shows loading feedback throughout. A durable
+`CleanupPending` journal remains while Sonarr's matching episode-file record is removed
+through its targeted API; no series or library rescan is needed for deletion. The file ID and mapped
+path are verified before this API call. Before the cleanup journal is removed, LibManagarr refreshes the affected series from Sonarr through
+its snapshot sync pipeline: the persisted library, snapshot archive, change history and filter counts
+are updated together with the normal sync processing. Suggestions are then recalculated automatically.
+The targeted sync reads that series' episodes, files and history, plus the small profile/tag lists; it
+neither scans Sonarr's disk nor fetches unrelated series. Without an existing library baseline, the first
+sync initializes the instance normally. A partial sync keeps the full-sync history watermark and tracks
+its own series history window, so later full syncs neither skip other series nor duplicate these events.
+A failed targeted sync leaves the cleanup journal for automatic retry. A broken own link
+can be removed, but a regular file or changed link at the registered path is a conflict. Storage areas
+and mappings used by registered links cannot be removed first. Live health checks queue unambiguous
+monitoring, naming and metadata repairs; inaccessible infrastructure makes the job fail visibly.
+
+All existing linked parent directories, including junctions, are refused. Use actual mount points for
+media roots, rather than symlinked directory aliases. LibManagarr serializes its own filesystem and
+Sonarr operations and rechecks entries before changes. This is not an OS transaction with other tools:
+do not let unrelated processes replace directory entries concurrently during an operation. Mount film
+data read-only in LibManagarr and Sonarr wherever the deployment permits it. TrueNAS dataset ACLs,
+container path views and playback in the intended media server still require on-site acceptance.
+
+### After a restore
+
+An archive carries `libmanagarr.db`, so the register, the suggested pairs and the decline archive come
+with it; the links themselves live on the shares and are never part of an archive. Mount the datasets the
+same way on the target host, then run a check pass. Rows whose tree or source is missing report it and
+stay as they are: a missing source never deletes a film or a stored pair, and removing a managed link
+deletes the link entry only, never the film. Deletion does not reject the pair; it can be suggested again
+automatically after the targeted Sonarr cleanup. The page retains the locked managed row until the
+refreshed lists are available, then removes it and displays the suggestion in the same update. Failed
+reads retain the pending row and are retried automatically. See **Backup export and import** below.
+
 ## Authentication & two-factor
 
 LibManagarr is a single-user tool and protects every API except the auth endpoints with a

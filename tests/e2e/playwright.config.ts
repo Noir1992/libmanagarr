@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { artifactPath } from './fixtures/app.js';
 
 export default defineConfig({
   testDir: './specs',
@@ -8,8 +9,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   timeout: 90_000,
   expect: { timeout: 15_000 },
-  outputDir: '/artifacts/test-results',
-  reporter: [['list'], ['html', { outputFolder: '/artifacts/report', open: 'never' }], ['junit', { outputFile: '/artifacts/junit.xml' }]],
+  outputDir: artifactPath('test-results'),
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: artifactPath('report'), open: 'never' }],
+    ['junit', { outputFile: artifactPath('junit.xml') }],
+  ],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://app:8080',
     locale: 'en-US',

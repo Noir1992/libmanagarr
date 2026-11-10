@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace LibManagarr.Api.Models;
 
 public sealed class RadarrMovieResource
@@ -10,6 +12,9 @@ public sealed class RadarrMovieResource
 
     public int? QualityProfileId { get; set; }
 
+    // A movie without a file is answered with 0 rather than with nothing, so the number is read as the
+    // absence it means.
+    [JsonConverter(typeof(ZeroIsMissingInt32Converter))]
     public int? MovieFileId { get; set; }
 
     public bool? HasFile { get; set; }
@@ -28,6 +33,8 @@ public sealed class RadarrMovieResource
 
     public IReadOnlyList<RadarrMovieImage>? Images { get; init; }
 
+    public IReadOnlyList<RadarrAlternativeTitleResource>? AlternativeTitles { get; init; }
+
     public IReadOnlyList<string>? Genres { get; init; }
     public IReadOnlyList<int>? Tags { get; init; }
 
@@ -42,4 +49,12 @@ public sealed class RadarrMovieImage
     public string? CoverType { get; init; }
 
     public string? RemoteUrl { get; init; }
+}
+
+public sealed class RadarrAlternativeTitleResource
+{
+    public string? Title { get; init; }
+
+    /// <summary>Radarr's own label for the variant, for example an official or localized title.</summary>
+    public string? Type { get; init; }
 }

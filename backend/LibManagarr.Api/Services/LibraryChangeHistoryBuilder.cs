@@ -16,12 +16,20 @@ public sealed class LibraryChangeHistoryBuilder
             ? new Dictionary<int, long>()
             : BuildCurrentSonarrEpisodeSizeMap(previousSnapshot);
 
-        return historyResources
-            .Where((history) => history.Date.HasValue)
-            .Select((history) => BuildSonarrEntry(instance, currentEpisodes, currentSeriesTitles, previousSizes, history))
-            .Where((entry) => entry is not null)
-            .Select((entry) => entry!)
-            .ToArray();
+        List<LibraryChangeHistoryEntry> entries = [];
+        foreach (SonarrHistoryResource history in historyResources.Where(history => history.Date.HasValue)
+                     .OrderBy(history => history.Date).ThenBy(history => history.Id))
+        {
+            LibraryChangeHistoryEntry? entry = BuildSonarrEntry(instance, currentEpisodes, currentSeriesTitles, previousSizes, history);
+            if (entry is null) continue;
+            entries.Add(entry);
+            if (history.EpisodeId is not > 0) continue;
+            int episodeId = history.EpisodeId.Value;
+            // A later rename in this batch must see the size already accounted for by its import.
+            if (entry.ChangeType == LibraryChangeType.Deleted) previousSizes.Remove(episodeId);
+            else if (entry.SizeBytes is long size) previousSizes[episodeId] = size;
+        }
+        return entries;
     }
 
     public static IReadOnlyList<LibraryChangeHistoryEntry> BuildRadarrEntries(

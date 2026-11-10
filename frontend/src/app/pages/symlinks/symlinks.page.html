@@ -1,0 +1,358 @@
+<main class="page-shell">
+  <section class="page-header">
+    <div class="page-title-row">
+      <h1 class="page-title">{{ title() }}</h1>
+    </div>
+    <p class="page-description">{{ description() }}</p>
+  </section>
+
+  <section class="page-content">
+    @if (!featureEnabled()) {
+      <section class="configuration-hint" role="status">
+        <span>{{ t('symlinks.disabled') }}</span>
+        <a mat-stroked-button class="secondary-button" routerLink="/settings" [queryParams]="{ tab: 'symlinks' }">{{
+          t('settings.title')
+        }}</a>
+      </section>
+    } @else {
+      <div class="list-controls">
+        <button
+          type="button"
+          mat-stroked-button
+          class="secondary-button"
+          (click)="edit()"
+          [disabled]="!featureEnabled() || needsConfiguration()"
+        >
+          {{ t('symlinks.create') }}
+        </button>
+        <div class="symlink-search">
+          <span class="material-symbols-outlined" aria-hidden="true">search</span>
+          <input
+            matInput
+            type="search"
+            [placeholder]="t('symlinks.filterTitle')"
+            [attr.aria-label]="t('symlinks.filterTitle')"
+            [formField]="searchFields.title"
+          />
+        </div>
+        <app-page-filter [filters]="filters()" storagePrefix="symlinks" [bubblesBelow]="true" (activeFilterCountChange)="syncFilters()" />
+      </div>
+      @if (loadError(); as error) {
+        <app-loading-error-section [error]="error" />
+      }
+
+      @if (settingsFailed(); as error) {
+        <app-loading-error-section [error]="error" />
+      }
+
+      @if (needsConfiguration()) {
+        <p class="configuration-hint">
+          {{ t('symlinks.needsConfiguration') }}
+          <a mat-stroked-button class="secondary-button" routerLink="/settings" [queryParams]="{ tab: 'symlinks' }">{{
+            configureLabel()
+          }}</a>
+        </p>
+      }
+
+      <section class="card">
+        <header class="card-header">
+          <h2 class="card-title">{{ suggestionsTitle() }}</h2>
+          <div class="card-header-actions">
+            <button
+              type="button"
+              mat-stroked-button
+              class="secondary-button"
+              [disabled]="!featureEnabled() || refreshing() || loading()"
+              (click)="refreshAsync()"
+            >
+              {{ refreshing() ? t('common.loading') : refreshLabel() }}
+            </button>
+          </div>
+        </header>
+
+        <div class="card-content">
+          @if (loading()) {
+            <app-loading-section />
+          } @else if (offeredSuggestions().length === 0) {
+            <p class="rows-empty">{{ suggestionsEmpty() }}</p>
+          } @else {
+            <ul class="items">
+              @for (suggestion of offeredSuggestions(); track suggestion.id) {
+                <li class="item">
+                  <div class="item-head">
+                    <div class="item-title offer-identity offer-movie">
+                      <span>{{ t('common.column.movie') }}: {{ suggestion.radarrMovieTitle ?? t('common.na') }}</span>
+                      @if (suggestion.radarrFilePath; as path) {
+                        <app-info-icon [messageText]="t('symlinks.pathInfo', { path })" />
+                      }
+                    </div>
+                    @if (suggestion.status !== 'Pending') {
+                      <span [class]="suggestionStatusClass(suggestion)">{{ suggestionStatus(suggestion) }}</span>
+                    }
+                  </div>
+
+                  <div class="item-series offer-identity offer-series">
+                    <span>{{ t('common.seriesCountOne') }}: {{ suggestion.sonarrSeriesTitle ?? t('common.na') }}</span>
+                    <app-info-icon
+                      [messageText]="t('symlinks.pathInfo', { path: suggestion.sonarrSeriesPath || t('symlinks.seriesPathUnavailable') })"
+                    />
+                    <span class="item-episode">{{ specialLabel(suggestion.episodeNumber) }}</span>
+                  </div>
+
+                  <div class="offer-explanation">
+                    @let reasons = matchingReasons(suggestion);
+                    @if (reasons.length > 0) {
+                      <div class="offer-reasons">
+                        <span class="reason-heading">{{ t('symlinks.suggestions.why') }}:</span>
+                        @for (reason of reasons; track $index) {
+                          <span class="reason-label">{{ reasonLabel(reason) }}</span>
+                        }
+                        <ng-template #reasonsTable>
+                          <div class="reason-table-wrap" tabindex="0" role="region" [attr.aria-label]="t('symlinks.suggestions.why')">
+                            <table class="reason-details-table">
+                              <caption>
+                                {{
+                                  t('symlinks.suggestions.why')
+                                }}
+                              </caption>
+                              <thead>
+                                <tr>
+                                  <th scope="col">{{ t('symlinks.reasonCriterion') }}</th>
+                                  <th scope="col">{{ t('symlinks.reasonDetails') }}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                @for (reason of reasons; track $index) {
+                                  <tr>
+                                    <th scope="row">{{ reasonLabel(reason) }}</th>
+                                    <td>{{ reason.detail }}</td>
+                                  </tr>
+                                }
+                              </tbody>
+                            </table>
+                          </div>
+                        </ng-template>
+                        <app-info-icon [messageText]="reasonDetails(reasons)" [contentTemplate]="reasonsTable" [wide]="true" />
+                      </div>
+                    }
+                    @if (suggestion.existingFileCheck; as check) {
+                      <div
+                        class="offer-file-note"
+                        [class.is-success]="check.status === 'Matches'"
+                        [class.is-warning]="check.status !== 'Matches' && check.status !== 'NoFile'"
+                      >
+                        <span>{{ existingFileLabel(check) }}</span>
+                        @if (check.status !== 'Matches') {
+                          <app-info-icon [messageText]="check.detail" />
+                        }
+                      </div>
+                    } @else if (hasExistingEpisodeFile(suggestion)) {
+                      <div class="offer-file-note">
+                        <span>{{ t('symlinks.suggestions.existingFile') }}</span>
+                        <app-info-icon [messageText]="t('symlinks.suggestions.existingFileInfo')" />
+                      </div>
+                    }
+                  </div>
+
+                  @if (suggestion.alternatives.length > 0) {
+                    <p class="item-alternatives">
+                      {{ t('symlinks.suggestions.alternatives') }}
+                      @for (alternative of suggestion.alternatives; track $index) {
+                        <span class="alternative">{{ alternativeLabel(alternative) }}</span>
+                      }
+                    </p>
+                  }
+
+                  @if (suggestion.detail) {
+                    <p class="item-detail">{{ suggestion.detail }}</p>
+                  }
+
+                  @if (suggestion.stale) {
+                    <p class="item-warning">{{ t('symlinks.suggestions.stale') }}</p>
+                  }
+
+                  @if (suggestionState(suggestion.id).error; as actionError) {
+                    <p class="feedback error" role="alert">{{ actionError }}</p>
+                  }
+
+                  <div class="item-actions">
+                    <button
+                      type="button"
+                      mat-stroked-button
+                      class="secondary-button"
+                      [disabled]="!featureEnabled() || suggestionState(suggestion.id).busy || revision() === null"
+                      (click)="confirmAsync(suggestion)"
+                    >
+                      {{ t('symlinks.suggestions.confirm') }}
+                    </button>
+                    <button
+                      type="button"
+                      mat-stroked-button
+                      class="secondary-button"
+                      [disabled]="!featureEnabled() || suggestionState(suggestion.id).busy"
+                      (click)="rejectAsync(suggestion)"
+                    >
+                      {{ t('symlinks.suggestions.reject') }}
+                    </button>
+                  </div>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      </section>
+
+      <section class="card">
+        <header class="card-header">
+          <h2 class="card-title">{{ linksTitle() }}</h2>
+        </header>
+
+        <div class="card-content">
+          @if (loading()) {
+            <app-loading-section />
+          } @else if (links().length === 0) {
+            <p class="rows-empty">{{ linksEmpty() }}</p>
+          } @else {
+            <ul class="items">
+              @for (link of links(); track link.id) {
+                <li class="item" [attr.aria-busy]="isDeleting(link)">
+                  <div class="item-head">
+                    <p class="item-title">
+                      {{ link.radarrMovieTitle ?? t('common.na') }}
+                      <span class="item-episode">{{ specialLabel(link.episodeNumber) }}</span>
+                    </p>
+                    <span [class]="operationStatusClass(link)">{{ operationStatus(link) }}</span>
+                  </div>
+
+                  <div class="follow-up-control">
+                    <mat-slide-toggle
+                      [checked]="link.autoFollowUp"
+                      [disabled]="linkLocked(link)"
+                      (toggleChange)="setFollowUpAsync(link, !link.autoFollowUp)"
+                      >{{ t('symlinks.links.followUp.enable') }}</mat-slide-toggle
+                    >
+                    <app-info-icon [messageText]="t('symlinks.links.followUp.info')" [wide]="true" [disabled]="isDeleting(link)" />
+                  </div>
+
+                  <dl class="item-facts">
+                    <dt>{{ t('symlinks.linkPath') }}</dt>
+                    <dd class="item-path">{{ link.linkPath }}</dd>
+                    <dt>{{ t('symlinks.sourcePath') }}</dt>
+                    <dd class="item-path">{{ link.sourcePath }}</dd>
+                    <dt>{{ t('symlinks.linkText') }}</dt>
+                    <dd class="item-path">{{ link.linkText }}</dd>
+                  </dl>
+
+                  @for (finding of link.findings; track finding.code + $index) {
+                    @if (finding.code !== 'renaming-disabled') {
+                      <p class="item-warning">
+                        <span class="finding-code">{{ finding.code }}</span>
+                        {{ finding.detail ?? t('common.na') }}
+                      </p>
+                    }
+                  }
+
+                  @if (linkState(link.id).error; as actionError) {
+                    <p class="feedback error" role="alert">{{ actionError }}</p>
+                  }
+
+                  <div class="item-actions managed-actions">
+                    <div class="check-actions">
+                      <button
+                        type="button"
+                        mat-stroked-button
+                        class="secondary-button"
+                        [disabled]="linkLocked(link)"
+                        (click)="checkAsync(link)"
+                      >
+                        {{ t('symlinks.links.check') }}
+                      </button>
+                      @if (link.lastCheckedAt) {
+                        <p class="item-meta">
+                          {{ t('symlinks.links.checkedAt', { date: (link.lastCheckedAt | appDate: 'medium') }) }}
+                          @if (link.lastSuccessfulCheckAt && link.lastSuccessfulCheckAt !== link.lastCheckedAt) {
+                            <span class="item-episode">{{
+                              t('symlinks.links.cleanSince', { date: (link.lastSuccessfulCheckAt | appDate: 'medium') })
+                            }}</span>
+                          }
+                        </p>
+                      }
+                    </div>
+                    <div class="edit-actions">
+                      <button
+                        type="button"
+                        mat-stroked-button
+                        class="secondary-button"
+                        [disabled]="linkLocked(link) || link.operationStatus !== 'Active' || link.setupStep !== 'Completed'"
+                        (click)="edit(link)"
+                      >
+                        {{ t('symlinks.edit') }}
+                      </button>
+
+                      <button
+                        type="button"
+                        mat-flat-button
+                        class="danger-button"
+                        [disabled]="linkLocked(link)"
+                        (click)="deleteAsync(link)"
+                        [attr.aria-busy]="isDeleting(link)"
+                      >
+                        <span class="button-content">
+                          <span>{{ t('symlinks.links.delete') }}</span>
+                          <app-feedback-icon [state]="isDeleting(link) ? 'loading' : null" variant="inline" />
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      </section>
+
+      <section class="card">
+        <header class="card-header">
+          <h2 class="card-title">{{ rejectionsTitle() }}</h2>
+        </header>
+
+        <div class="card-content">
+          @if (loading()) {
+            <app-loading-section />
+          } @else if (rejections().length === 0) {
+            <p class="rows-empty">{{ rejectionsEmpty() }}</p>
+          } @else {
+            <ul class="items">
+              @for (rejection of rejections(); track rejectionKey(rejection)) {
+                <li class="item">
+                  <div class="item-head">
+                    <p class="item-title">
+                      {{ rejection.radarrMovieTitle ?? t('common.na') }}
+                    </p>
+                  </div>
+
+                  @if (rejection.detail?.trim(); as reason) {
+                    <p class="item-detail">{{ reason }}</p>
+                  }
+
+                  <div class="item-actions rejection-actions">
+                    <p class="item-meta">{{ t('symlinks.rejections.declinedAt', { date: (rejection.createdAt | appDate: 'medium') }) }}</p>
+                    <button
+                      type="button"
+                      mat-stroked-button
+                      class="secondary-button"
+                      [disabled]="!featureEnabled()"
+                      (click)="reactivateAsync(rejection)"
+                    >
+                      {{ t('symlinks.rejections.reactivate') }}
+                    </button>
+                  </div>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      </section>
+    }
+  </section>
+</main>

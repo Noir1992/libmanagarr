@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { credentials, login } from '../fixtures/app.js';
+import { artifactPath, credentials, login } from '../fixtures/app.js';
 
 test('setup, validation, logout and login protect the library', async ({ page, browser }) => {
   await page.goto('/library');
@@ -31,8 +31,8 @@ test('setup, validation, logout and login protect the library', async ({ page, b
   await expect(page).toHaveURL(/\/login$/);
   await page.goto('/settings');
   await expect(page).toHaveURL(/\/login/);
-  await page.screenshot({ path: '/artifacts/password-icon.png' });
-  await test.info().attach('Password icon in the offline stack', { path: '/artifacts/password-icon.png', contentType: 'image/png' });
+  await page.screenshot({ path: artifactPath('password-icon.png') });
+  await test.info().attach('Password icon in the offline stack', { path: artifactPath('password-icon.png'), contentType: 'image/png' });
   await login(page);
   await page.reload();
   await expect(page.getByRole('heading', { name: /Library/ })).toBeVisible();

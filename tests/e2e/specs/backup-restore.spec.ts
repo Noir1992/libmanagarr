@@ -8,7 +8,8 @@ test('E12: applying a backup restarts the real host and restores settings and li
   request,
   page,
 }) => {
-  test.setTimeout(150_000);
+  // Two readiness waits of their own follow the restore: the API answering again and the screen coming back.
+  test.setTimeout(240_000);
   await prepareAccount(request);
   await configureLibrary(request);
   await login(page);
@@ -56,9 +57,22 @@ test('E12: applying a backup restarts the real host and restores settings and li
       { timeout: 60_000 },
     )
     .toBe('E2E Sonarr');
-  await page.reload();
-  await instanceSettings(page);
-  await expect(section.getByLabel('Name*', { exact: true })).toHaveValue('E2E Sonarr');
+  // The host restarts to apply the restored state and that shutdown is asynchronous, so one navigation can
+  // land inside the restart window and come back aborted. The claim is about the screen showing the restored
+  // name, so the way to it is repeated until the screen answers.
+  await expect
+    .poll(
+      async () => {
+        try {
+          await instanceSettings(page);
+          return await section.getByLabel('Name*', { exact: true }).inputValue({ timeout: 5_000 });
+        } catch {
+          return '';
+        }
+      },
+      { timeout: 60_000 },
+    )
+    .toBe('E2E Sonarr');
   await page.goto('/library');
   await expect(page.getByRole('link', { name: expected.movies[0].title, exact: true })).toBeVisible();
   await assertTitles(page, expected.titles);

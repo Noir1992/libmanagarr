@@ -1,0 +1,62 @@
+<h2 mat-dialog-title>{{ t('settings.symlinks.browse') }}</h2>
+<mat-dialog-content [attr.aria-busy]="loading()">
+  <p class="hint">{{ t('settings.symlinks.browser.hint') }}</p>
+  <nav class="browser-nav">
+    <button
+      type="button"
+      mat-stroked-button
+      class="secondary-button navigation-icon-button"
+      [attr.aria-label]="t('settings.symlinks.browser.home')"
+      [title]="t('settings.symlinks.browser.home')"
+      [disabled]="loading()"
+      (click)="load(null)"
+    >
+      <mat-icon class="material-symbols-outlined">home</mat-icon>
+    </button>
+    <button
+      type="button"
+      mat-stroked-button
+      class="secondary-button navigation-icon-button"
+      [attr.aria-label]="t('settings.symlinks.browser.up')"
+      [title]="t('settings.symlinks.browser.up')"
+      [disabled]="loading() || !listing()?.parentPath"
+      (click)="load(listing()?.parentPath ?? null)"
+    >
+      <mat-icon class="material-symbols-outlined">arrow_upward</mat-icon>
+    </button>
+  </nav>
+  <p class="current-path">{{ listing()?.path ?? t('settings.symlinks.browser.locations') }}</p>
+  @if (error(); as message) {
+    <p role="alert">{{ message }}</p>
+  }
+  @if (loading()) {
+    <p role="status">{{ t('settings.symlinks.browser.loading') }}</p>
+  }
+  <div class="directories">
+    @for (directory of listing()?.directories ?? []; track directory.path) {
+      <button type="button" mat-button [disabled]="loading()" (click)="load(directory.path)">
+        <mat-icon class="material-symbols-outlined">folder</mat-icon><span>{{ directory.name }}</span>
+      </button>
+    }
+  </div>
+  @if (!loading() && listing()?.directories?.length === 0) {
+    <p>{{ t('settings.symlinks.browser.empty') }}</p>
+  }
+  @if (listing()?.truncated) {
+    <p>{{ t('settings.symlinks.browser.truncated') }}</p>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button type="button" mat-stroked-button class="secondary-button" [mat-dialog-close]="undefined">
+    {{ t('settings.symlinks.browser.cancel') }}
+  </button>
+  <button
+    type="button"
+    mat-stroked-button
+    class="secondary-button"
+    [disabled]="loading() || !!error() || !listing()?.canSelect"
+    [mat-dialog-close]="listing()?.path"
+  >
+    {{ t('settings.symlinks.browser.select') }}
+  </button>
+</mat-dialog-actions>

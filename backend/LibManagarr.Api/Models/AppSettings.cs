@@ -23,4 +23,6 @@ public sealed class AppSettings
     public LoggingSettings Logging { get; set; } = new();
 
     public AuthProtectionSettings AuthProtection { get; set; } = new();
+
+    public SymlinkSettings Symlinks { get; set; } = new();
 }

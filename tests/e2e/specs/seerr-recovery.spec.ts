@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { access, writeFile } from 'node:fs/promises';
-import { prepareAccount, login, seerrKey } from '../fixtures/app.js';
+import { artifactPath, prepareAccount, login, seerrKey } from '../fixtures/app.js';
 import { configureSeerr } from '../fixtures/library.js';
 
 test('E09: request loading reports Seerr failure and recovers after restart', async ({ request, page }) => {
@@ -11,11 +11,11 @@ test('E09: request loading reports Seerr failure and recovers after restart', as
   await page.goto('/requests');
   await expect(page.getByText('Inception', { exact: true })).toBeVisible();
   const original = (await (await page.request.get('/api/settings/seerr')).json()) as unknown;
-  await writeFile('/artifacts/stop-seerr', 'ready');
+  await writeFile(artifactPath('stop-seerr'), 'ready');
   await expect
     .poll(
       () =>
-        access('/artifacts/seerr-stopped').then(
+        access(artifactPath('seerr-stopped')).then(
           () => true,
           () => false,
         ),
@@ -26,7 +26,7 @@ test('E09: request loading reports Seerr failure and recovers after restart', as
   await expect(page.getByText(/Error loading data:/)).toBeVisible({ timeout: 50_000 });
   await expect(page.getByText('The configured Seerr instance did not answer the requests query.', { exact: true })).toBeVisible();
   await expect(page.getByText('Inception', { exact: true })).toBeHidden();
-  await writeFile('/artifacts/restart-seerr', 'ready');
+  await writeFile(artifactPath('restart-seerr'), 'ready');
   await expect
     .poll(
       async () => {

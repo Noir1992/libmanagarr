@@ -1,10 +1,22 @@
-import { ChangeDetectionStrategy, Component, computed, input, InputSignal, signal, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  ElementRef,
+  input,
+  InputSignal,
+  signal,
+  TemplateRef,
+  viewChild,
+} from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { CdkOverlayOrigin, ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
 import { MatButtonModule } from '@angular/material/button';
 
 const POPOVER_VIEWPORT_MARGIN = 5;
 const POPOVER_GAP = 12;
 const POPOVER_MAX_WIDTH = 280;
+const POPOVER_WIDE_MAX_WIDTH = 560;
 const POPOVER_FALLBACK_HEIGHT = 60;
 const POPOVER_ARROW_INSET = 14;
 
@@ -19,20 +31,23 @@ interface PopoverLayout {
 
 @Component({
   selector: 'app-info-icon',
-  imports: [MatButtonModule, OverlayModule],
+  imports: [MatButtonModule, OverlayModule, NgTemplateOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './info-icon.widget.html',
   styleUrl: './info-icon.widget.scss',
 })
 export class InfoIconWidget {
   readonly messageText: InputSignal<string> = input.required<string>();
+  readonly contentTemplate = input<TemplateRef<unknown> | null>(null);
+  readonly wide = input(false);
+  readonly disabled = input(false);
   readonly size: InputSignal<'small' | 'big'> = input<'small' | 'big'>('small');
   protected readonly isOpen = signal(false);
   protected readonly placement = signal<InfoIconPlacement>('right');
   protected readonly arrowOffset = signal(POPOVER_ARROW_INSET);
   private readonly panelOffset = signal({ x: 0, y: 0 });
   private readonly origin = viewChild.required<CdkOverlayOrigin>('origin');
-  private readonly measurePanel = viewChild.required<HTMLElement>('measurePanel');
+  private readonly measurePanel = viewChild.required<ElementRef<HTMLElement>>('measurePanel');
 
   protected readonly positions = computed<ConnectedPosition[]>(() => [
     {
@@ -82,8 +97,9 @@ export class InfoIconWidget {
 
   /* The offscreen twin of the panel reports its real box size before the overlay opens. */
   private measurePanelSize(): { width: number; height: number } {
-    const element = this.measurePanel();
-    const width = element.offsetWidth || Math.min(POPOVER_MAX_WIDTH, window.innerWidth - 2 * POPOVER_VIEWPORT_MARGIN);
+    const element = this.measurePanel().nativeElement;
+    const maxWidth = this.wide() ? POPOVER_WIDE_MAX_WIDTH : POPOVER_MAX_WIDTH;
+    const width = element.offsetWidth || Math.min(maxWidth, window.innerWidth - 2 * POPOVER_VIEWPORT_MARGIN);
     const height = element.offsetHeight || POPOVER_FALLBACK_HEIGHT;
     return { width, height };
   }

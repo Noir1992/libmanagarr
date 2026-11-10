@@ -1,11 +1,13 @@
 {
   "titles": [
     "Death Note",
+    "Death Note Relight 1: Visions of a God",
     "Kabaneri of the Iron Fortress",
     "My Neighbor Totoro",
     "Spirited Away"
   ],
   "presentTitles": [
+    "Death Note Relight 1: Visions of a God",
     "Kabaneri of the Iron Fortress",
     "Spirited Away"
   ],
@@ -17,6 +19,7 @@
     "Kabaneri of the Iron Fortress"
   ],
   "resolution1080Titles": [
+    "Death Note Relight 1: Visions of a God",
     "Kabaneri of the Iron Fortress",
     "Spirited Away"
   ],
@@ -44,6 +47,21 @@
       ],
       "hasFile": false,
       "monitored": true
+    },
+    {
+      "id": 3,
+      "tmdbId": 51482,
+      "title": "Death Note Relight 1: Visions of a God",
+      "genres": [
+        "TV Movie",
+        "Crime",
+        "Drama",
+        "Fantasy",
+        "Thriller",
+        "Animation"
+      ],
+      "hasFile": true,
+      "monitored": false
     }
   ],
   "series": [
@@ -78,7 +96,7 @@
     }
   ],
   "files": {
-    "total": 3,
+    "total": 4,
     "sonarr": 2,
     "radarr": 1,
     "videoCodec": "x264",
@@ -90,6 +108,15 @@
     "season": 0,
     "number": 1,
     "hasFile": true
+  },
+  "symlinkPair": {
+    "episodeId": 20,
+    "seriesId": 2,
+    "season": 0,
+    "number": 1,
+    "movieId": 3,
+    "tmdbId": 51482,
+    "title": "Death Note Relight 1: Visions of a God"
   },
   "regularEpisode": {
     "id": 8,

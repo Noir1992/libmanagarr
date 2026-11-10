@@ -1,5 +1,8 @@
 import { expect, type Page, type APIRequestContext } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+export const artifactPath = (name: string) => join(process.env.E2E_ARTIFACT_DIR ?? '/artifacts', name);
 
 const accounts: { administrator: { username: string; password: string } } = JSON.parse(
   readFileSync(new URL('./accounts.json', import.meta.url), 'utf8'),

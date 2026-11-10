@@ -1,12 +1,11 @@
 {
   "versions": {
     "schemaVersion": 1,
-    "seedVersion": 2,
+    "seedVersion": 3,
     "images": {
       "sonarr": "lscr.io/linuxserver/sonarr@sha256:386c962ee6e260e3a5656b25df2ed056bcc9b6410e197d075f9547fd14c23bca",
       "radarr": "lscr.io/linuxserver/radarr@sha256:ade5937813c6ae415b29db729386e53fea3ecf067a019849bafbe2d2a6ec02ba",
       "seerr": "ghcr.io/seerr-team/seerr:v3.0.1@sha256:1b5fc1ea825631d9d165364472663b817a4c58ef6aa1013f58d82c1570d7c866",
-      "jellyfin": "jellyfin/jellyfin:10.11.6@sha256:333b647716631443a43c7fabac4b0c46b4e2f036bad19547e00958f10f721b85",
       "runner": "mcr.microsoft.com/playwright:v1.58.2-noble@sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d"
     },
     "media": {
@@ -24,7 +23,6 @@
       "email": "admin@example.test",
       "services": [
         "libmanagarr",
-        "jellyfin",
         "seerr"
       ]
     },
@@ -40,9 +38,9 @@
   },
   "files": {
     "baseline.json": "e7f7ab138fbcb7b53a8d51a95a9a4e97d085bd156fd97ce3d47b3102d14de3c0",
-    "seerr-key.json": "9c8193aafd160041fabbdbcf1208276b12e4043655621b523988cbd464fd4b35",
-    "expected-library.json": "050f85637dd841e2ba47daea28bb5c894a3f98159fd84680e09166593cf4174a"
+    "seerr-key.json": "a120ed1e33c2969cd01f81b2e5fb4d3dc3889a94941154c308ebf5630bb9e61f",
+    "expected-library.json": "7a40e11444bb3c2dd890015e1b04e79a600b36d803f82019e9bb73da44bbec73"
   },
-  "sha256": "40fc0d92b1cc74f0d83982a37c272c694f657bf12ee24d782d6a70b6dfa33b04",
-  "generatedAt": "2026-11-06T08:00:23.029Z"
+  "sha256": "c06ca58decffd7b7937f413db2c9ff47d883b12e246a56d258c53b58df8d5f7a",
+  "generatedAt": "2026-11-07T20:59:40.179Z"
 }

@@ -1,0 +1,22 @@
+<h2 mat-dialog-title class="dialog-title">{{ t('symlinks.reject.title') }}</h2>
+
+<mat-dialog-content class="dialog-content">
+  <p class="reject-pair">
+    {{ data.suggestion.radarrMovieTitle ?? t('common.na') }}
+    <span class="reject-episode">{{ episodeLabel() }}</span>
+  </p>
+
+  <p class="reject-info">{{ t('symlinks.reject.info') }}</p>
+
+  <div class="field" [formGroup]="form">
+    <label for="symlink-reject-detail">{{ t('symlinks.reject.detail') }}</label>
+    <div class="field-control-wrap">
+      <textarea matInput id="symlink-reject-detail" rows="3" formControlName="detail"></textarea>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" mat-stroked-button class="secondary-button" (click)="cancel()">{{ t('common.cancel') }}</button>
+  <button type="button" mat-stroked-button class="secondary-button" (click)="reject()">{{ t('symlinks.reject.run') }}</button>
+</mat-dialog-actions>

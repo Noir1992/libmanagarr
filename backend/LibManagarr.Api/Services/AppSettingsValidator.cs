@@ -26,6 +26,12 @@ public static class AppSettingsValidator
         AppendInstanceErrors(errors, "radarrInstances", settings.RadarrInstances);
         AppendSeerrErrors(errors, settings.Seerr);
 
+        foreach (var error in SymlinkSettingsRules.Validate(
+                     settings.Symlinks, settings.SonarrInstances, settings.RadarrInstances))
+        {
+            errors[error.Key] = error.Value;
+        }
+
         return errors;
     }
 

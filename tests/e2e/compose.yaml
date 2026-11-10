@@ -25,13 +25,10 @@ services:
       NODE_EXTRA_CA_CERTS: /certs/metadata.crt
     volumes: ['seerr-config:/app/config', 'certs:/certs:ro']
     networks: [test]
-  jellyfin:
-    image: ${E2E_JELLYFIN_IMAGE:?Pinned image required}
-    volumes: ['jellyfin-config:/config', 'jellyfin-cache:/cache']
-    networks: [test]
   runner:
     image: ${E2E_RUNNER_IMAGE:?Built runner required}
     init: true
+    command: ['sleep', 'infinity']
     working_dir: /work
     environment:
       E2E_BASE_URL: http://app:8080
@@ -40,10 +37,11 @@ services:
       [
         '${E2E_ARTIFACTS:?Artifact path required}:/artifacts',
         'media:/media',
+        'app-config:/app-state/config',
+        'app-data:/app-state/data',
         'sonarr-config:/state/sonarr',
         'radarr-config:/state/radarr',
         'seerr-config:/state/seerr',
-        'jellyfin-config:/state/jellyfin',
         'certs:/certs',
       ]
     networks: [test]
@@ -61,8 +59,6 @@ volumes:
   sonarr-config:
   radarr-config:
   seerr-config:
-  jellyfin-config:
-  jellyfin-cache:
   certs:
   media:
 networks:

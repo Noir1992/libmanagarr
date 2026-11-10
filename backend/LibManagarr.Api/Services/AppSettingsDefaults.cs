@@ -14,6 +14,7 @@ public static class AppSettingsDefaults
             RadarrInstances = [],
             SonarrSnapshots = [],
             RadarrSnapshots = [],
+            Symlinks = SymlinkSettingsRules.Normalize(new SymlinkSettings { Enabled = false }),
             Logging = new LoggingSettings
             {
                 Path = "./logs",

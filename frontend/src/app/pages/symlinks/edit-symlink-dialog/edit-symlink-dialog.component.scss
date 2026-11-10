@@ -1,0 +1,124 @@
+.dialog-title {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--theme-text);
+}
+
+.dialog-content {
+  display: grid;
+  gap: var(--theme-default-gap);
+  min-width: 0;
+  font-family: var(--app-font-family), sans-serif;
+}
+
+.selection {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--theme-default-gap);
+}
+
+.selection-group {
+  display: grid;
+  align-content: start;
+  gap: var(--theme-default-gap);
+  min-width: 0;
+}
+
+.field,
+.field-control-wrap,
+mat-select,
+input {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+mat-select {
+  width: 100%;
+}
+
+.selection-instance,
+.choice-detail {
+  color: var(--theme-muted);
+}
+
+.choice-title,
+.choice-detail {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.choice-title {
+  font-weight: 600;
+}
+.choice-detail {
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  gap: var(--theme-default-gap-small) var(--theme-default-gap);
+  margin: 0;
+  dt {
+    font-weight: 600;
+  }
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+p {
+  margin: 0;
+}
+.plan-finding {
+  color: var(--theme-warning-color);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .selection {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .plan-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+mat-optgroup {
+  --mat-optgroup-label-text-font: var(--app-font-family);
+  --mat-optgroup-label-text-color: var(--theme-text);
+}
+
+.search-control input {
+  padding-right: 36px;
+  &::-webkit-search-cancel-button {
+    display: none;
+    appearance: none;
+  }
+}
+
+.clear-search {
+  position: absolute;
+  inset-block: 0;
+  right: 2px;
+  margin-block: auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--theme-muted);
+  --mat-icon-button-icon-size: 18px;
+  --mat-icon-button-state-layer-size: 28px;
+  --mat-icon-button-touch-target-size: 28px;
+  .material-symbols-outlined {
+    font-size: 18px;
+  }
+  &:hover {
+    color: var(--theme-accent);
+  }
+}

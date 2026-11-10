@@ -65,6 +65,13 @@
           <mat-icon class="material-symbols-outlined">calendar_month</mat-icon>
           <span>{{ calendarLabel() }}</span>
         </a>
+        <a routerLink="/symlinks" routerLinkActive="is-active" class="navigation-item" (click)="closeNavigation()">
+          <mat-icon class="material-symbols-outlined">link</mat-icon>
+          <span>{{ symlinksLabel() }}</span>
+          @if (symlinks.pendingCount() > 0) {
+            <span class="navigation-count">{{ symlinks.pendingCount() }}</span>
+          }
+        </a>
         <a routerLink="/logs" routerLinkActive="is-active" class="navigation-item" (click)="closeNavigation()">
           <mat-icon class="material-symbols-outlined">text_snippet</mat-icon>
           <span>{{ logsLabel() }}</span>

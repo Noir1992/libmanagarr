@@ -8,6 +8,7 @@ type TranslateFn = (key: TranslationKey, params?: Record<string, string>) => str
 const TASK_NAME_KEYS: Readonly<Record<string, TranslationKey>> = {
   arrDataSync: 'settings.tasks.dataSync.title',
   cleanup: 'settings.tasks.cleanup.title',
+  symlinkHealthCheck: 'settings.tasks.healthCheck.title',
 };
 
 export function buildTaskRows(scheduledTasks: ScheduledTasks, translate: TranslateFn): ScheduledTaskRow[] {

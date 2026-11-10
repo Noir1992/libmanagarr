@@ -164,7 +164,7 @@ public sealed class SqliteHistoryStoreTests : IDisposable
             InstanceId = "sonarr-main",
             InstanceName = "Sonarr Main",
             SyncedAt = new DateTimeOffset(2026, 5, 1, 10, 0, 0, TimeSpan.FromHours(2)),
-            Series = [new() { SeriesId = 7, Title = "Andor", Seasons = [new() { SeasonNumber = 1, Episodes = [new() { EpisodeId = 1, Title = "Kassa", HasFile = true, File = new() { Size = 100 } }] }] }]
+            Series = [new() { SeriesId = 7, Title = "Andor", Path = "/media/series/Andor", Seasons = [new() { SeasonNumber = 1, Episodes = [new() { EpisodeId = 1, Title = "Kassa", HasFile = true, File = new() { Size = 100 } }] }] }]
         };
         sonarr.PosterUrls[7] = "/posters/7.jpg";
         RadarrInstanceSnapshot radarr = new()
@@ -183,6 +183,7 @@ public sealed class SqliteHistoryStoreTests : IDisposable
         Assert.Equal(sonarr.SyncedAt, reloaded.SyncedAt);
         SonarrSeriesSnapshot series = Assert.Single(reloaded.Series);
         Assert.Equal("Andor", series.Title);
+        Assert.Equal("/media/series/Andor", series.Path);
         Assert.Equal("/posters/7.jpg", reloaded.PosterUrls[7]);
         Assert.Equal(100, series.Seasons[0].Episodes[0].File.Size);
 

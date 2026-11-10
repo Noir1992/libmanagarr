@@ -193,7 +193,7 @@ describe('SettingsPage', () => {
     fixture.detectChanges();
     httpTestingController.expectOne('/api/settings/tasks').flush(createScheduledTasksResponse());
 
-    expect(fixture.componentInstance['selectedTabIndex']()).toBe(2);
+    expect(fixture.componentInstance['selectedTabIndex']()).toBe(3);
   });
 
   it('should update the tab query param when the active tab changes', async () => {
@@ -243,7 +243,7 @@ describe('SettingsPage', () => {
     fixture.detectChanges();
     httpTestingController.expectOne('/api/settings/tasks').flush(createScheduledTasksResponse());
 
-    expect(fixture.componentInstance['selectedTabIndex']()).toBe(2);
+    expect(fixture.componentInstance['selectedTabIndex']()).toBe(3);
   });
 
   it('should block browser tab changes when the active tab has unsaved changes', async () => {
