@@ -13,6 +13,79 @@ public sealed class SymlinkCapabilityServiceTests
     private readonly InMemorySymlinkStore store = new();
 
     [Fact]
+    public async Task FailedCheckIsRetainedUntilRestartWhenTheConfiguredPathsAreUnchanged()
+    {
+        SymlinkSettings configuration = Settings(revision: 5);
+        FakeSymlinkFileSystem files = new(roots: []);
+        using SymlinkCapabilityService service = CreateService(files, configuration);
+        SymlinkCapabilityCheck initial = await service.ProbeAsync(AreaId, CancellationToken.None);
+        Assert.Equal(SymlinkCapabilityStatus.StorageUnavailable, initial.Status);
+
+        files.Directories.UnionWith(Roots());
+        SymlinkCapabilityCheck[] repeated = await Task.WhenAll(Enumerable.Range(0, 10)
+            .Select(_ => service.ProbeAsync(AreaId, CancellationToken.None)));
+
+        Assert.All(repeated, check => Assert.Same(initial, check));
+        Assert.Empty(files.Created);
+        Assert.False(await service.IsReadyAsync(configuration, CancellationToken.None));
+
+        using SymlinkCapabilityService restarted = CreateService(files, configuration);
+        SymlinkCapabilityCheck afterRestart = await restarted.ProbeAsync(AreaId, CancellationToken.None);
+        Assert.Equal(SymlinkCapabilityStatus.Available, afterRestart.Status);
+        Assert.Equal(5, afterRestart.ConfigRevision);
+        Assert.NotEmpty(files.Created);
+        Assert.True(await restarted.IsReadyAsync(configuration, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ChangedMediaRootIsProbedOnceAndItsResultIsRetained(bool newRootExists)
+    {
+        string originalRoot = LibManagarr("missing");
+        string changedRoot = LibManagarr("changed");
+        SymlinkSettings configuration = SymlinkSettingsRules.Normalize(new SymlinkSettings
+        {
+            MediaRoot = originalRoot,
+            Revision = 5
+        });
+        FakeSymlinkFileSystem files = new(roots: newRootExists ? [changedRoot] : []);
+        using SymlinkCapabilityService service = CreateService(files, configuration);
+        SymlinkCapabilityCheck initial = await service.ProbeAsync(SymlinkSettings.SharedStorageAreaId, CancellationToken.None);
+        Assert.Equal(SymlinkCapabilityStatus.StorageUnavailable, initial.Status);
+
+        configuration.MediaRoot = changedRoot;
+        configuration.Revision++;
+        SymlinkCapabilityCheck[] repeated = await Task.WhenAll(Enumerable.Range(0, 10)
+            .Select(_ => service.ProbeAsync(SymlinkSettings.SharedStorageAreaId, CancellationToken.None)));
+
+        SymlinkCapabilityCheck changed = repeated[0];
+        Assert.NotSame(initial, changed);
+        Assert.Equal(6, changed.ConfigRevision);
+        Assert.Equal(newRootExists ? SymlinkCapabilityStatus.Available : SymlinkCapabilityStatus.StorageUnavailable,
+            changed.Status);
+        Assert.All(repeated, check => Assert.Same(changed, check));
+        if (newRootExists) Assert.Single(files.Created, path => path.EndsWith("probe-source-v1.bin", StringComparison.Ordinal));
+        else Assert.Empty(files.Created);
+    }
+
+    [Fact]
+    public async Task SuccessfulCheckIsAlsoRetainedWithoutWritingMoreProbeFiles()
+    {
+        SymlinkSettings configuration = Settings(revision: 5);
+        FakeSymlinkFileSystem files = new(roots: Roots());
+        using SymlinkCapabilityService service = CreateService(files, configuration);
+        SymlinkCapabilityCheck initial = await service.ProbeAsync(AreaId, CancellationToken.None);
+        int created = files.Created.Count;
+
+        await service.CheckAndUpdateAsync(CancellationToken.None);
+
+        Assert.Equal(SymlinkCapabilityStatus.Available, initial.Status);
+        Assert.Same(initial, await service.ProbeAsync(AreaId, CancellationToken.None));
+        Assert.Equal(created, files.Created.Count);
+    }
+
+    [Fact]
     public async Task Probe_ProvesTheLinkInTheSeriesRootAndRecordsTheCurrentRevision()
     {
         FakeSymlinkFileSystem files = new(roots: Roots());
@@ -224,7 +297,7 @@ public sealed class SymlinkCapabilityServiceTests
     }
 
     [Fact]
-    public async Task StartupFailurePreservesActivationAndProcessingResumesAfterMountRecovery()
+    public async Task StartupFailureDisablesSymlinksAndRecoveryDoesNotEnableWithoutConsent()
     {
         SymlinkSettings settings = Settings(revision: 5);
         settings.Enabled = true;
@@ -232,14 +305,14 @@ public sealed class SymlinkCapabilityServiceTests
 
         Assert.False(await unavailable.IsReadyAsync(settings, CancellationToken.None));
         AppSettings afterFailure = await unavailable.CheckAndUpdateAsync(CancellationToken.None);
-        Assert.True(afterFailure.Symlinks.Enabled);
+        Assert.False(afterFailure.Symlinks.Enabled);
         Assert.False(await unavailable.IsReadyAsync(settings, CancellationToken.None));
         Assert.Equal(SymlinkCapabilityStatus.StorageUnavailable,
             Assert.Single(await store.GetCapabilityChecksAsync(CancellationToken.None)).Status);
 
         SymlinkCapabilityService recovered = CreateService(new FakeSymlinkFileSystem(roots: Roots()), settings);
         AppSettings afterRecovery = await recovered.CheckAndUpdateAsync(CancellationToken.None);
-        Assert.True(afterRecovery.Symlinks.Enabled);
+        Assert.False(afterRecovery.Symlinks.Enabled);
         Assert.True(await recovered.IsReadyAsync(settings, CancellationToken.None));
         settings.Revision++;
         Assert.False(await recovered.IsReadyAsync(settings, CancellationToken.None));
