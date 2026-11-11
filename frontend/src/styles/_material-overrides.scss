@@ -13,6 +13,9 @@
 /* ------------------------------------------------------------------ */
 
 :root {
+  /* Buttons */
+  --mat-button-text-container-height: 30px;
+
   /* Dialog */
   --mat-dialog-container-color: var(--theme-panel-bg);
   --mat-dialog-subhead-color: var(--theme-text);
@@ -401,7 +404,8 @@ textarea.mat-mdc-input-element {
 /*  Buttons – MDC overrides (no --mat-outlined-button-* in AM 21.x)   */
 /* ------------------------------------------------------------------ */
 
-button.secondary-button.mat-mdc-outlined-button {
+button.secondary-button.mat-mdc-outlined-button,
+a.secondary-button.mat-mdc-outlined-button {
   --mat-outlined-button-container-shape: var(--theme-default-gap-small);
   --mdc-outlined-button-container-shape: var(--theme-default-gap-small);
   --mdc-outlined-button-container-height: 30px;
@@ -412,7 +416,9 @@ button.secondary-button.mat-mdc-outlined-button {
 }
 
 button.secondary-button.mat-mdc-outlined-button .mat-mdc-button-persistent-ripple,
-button.secondary-button.mat-mdc-outlined-button .mdc-button__ripple {
+button.secondary-button.mat-mdc-outlined-button .mdc-button__ripple,
+a.secondary-button.mat-mdc-outlined-button .mat-mdc-button-persistent-ripple,
+a.secondary-button.mat-mdc-outlined-button .mdc-button__ripple {
   border-radius: inherit;
 }
 

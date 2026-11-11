@@ -8,6 +8,8 @@ public sealed class SonarrSeriesSnapshot
 
     public string TitleSlug { get; init; } = string.Empty;
 
+    public string? Path { get; init; }
+
     public string? PosterRemoteUrl { get; init; }
 
     public MediaProfileSnapshot Profile { get; init; } = new();

@@ -103,4 +103,68 @@ describe('ScheduledTaskService', () => {
     expect(service.states()['arrDataSync'].running).toBeFalse();
     expect(service.tasks()).toBe(before);
   });
+
+  describe('success feedback expiry', () => {
+    beforeEach(() => jasmine.clock().install());
+    afterEach(() => jasmine.clock().uninstall());
+
+    for (const operation of ['save', 'run'] as const) {
+      it(`clears success feedback 2.2 seconds after ${operation}`, async () => {
+        const pending = operation === 'save' ? service.save(task()) : service.run('arrDataSync');
+        http.expectOne(`/api/settings/tasks/arrDataSync${operation === 'run' ? '/run' : ''}`).flush(task());
+        await pending;
+
+        expect(service.states()['arrDataSync'].success).toBeTrue();
+        jasmine.clock().tick(2199);
+        expect(service.states()['arrDataSync'].success).toBeTrue();
+        jasmine.clock().tick(1);
+        expect(service.states()['arrDataSync'].success).toBeFalse();
+      });
+    }
+
+    it('expires feedback independently for each task', async () => {
+      const first = service.run('arrDataSync');
+      http.expectOne('/api/settings/tasks/arrDataSync/run').flush(task());
+      await first;
+      jasmine.clock().tick(1000);
+      const second = service.run('cleanup');
+      http.expectOne('/api/settings/tasks/cleanup/run').flush(task('cleanup'));
+      await second;
+
+      jasmine.clock().tick(1200);
+      expect(service.states()['arrDataSync'].success).toBeFalse();
+      expect(service.states()['cleanup'].success).toBeTrue();
+      jasmine.clock().tick(1000);
+      expect(service.states()['cleanup'].success).toBeFalse();
+    });
+
+    it('gives a subsequent success its full feedback duration', async () => {
+      const first = service.run('arrDataSync');
+      http.expectOne('/api/settings/tasks/arrDataSync/run').flush(task());
+      await first;
+      jasmine.clock().tick(1000);
+      const second = service.save(task());
+      http.expectOne('/api/settings/tasks/arrDataSync').flush(task());
+      await second;
+
+      jasmine.clock().tick(1200);
+      expect(service.states()['arrDataSync'].success).toBeTrue();
+      jasmine.clock().tick(1000);
+      expect(service.states()['arrDataSync'].success).toBeFalse();
+    });
+
+    it('preserves a subsequent error after the previous success expires', async () => {
+      const first = service.run('arrDataSync');
+      http.expectOne('/api/settings/tasks/arrDataSync/run').flush(task());
+      await first;
+      jasmine.clock().tick(1000);
+      const second = service.run('arrDataSync').catch((error) => error as Error);
+      http.expectOne('/api/settings/tasks/arrDataSync/run').flush({ title: 'Task failed' }, { status: 500, statusText: 'Error' });
+      await second;
+
+      jasmine.clock().tick(2200);
+      expect(service.states()['arrDataSync'].success).toBeFalse();
+      expect(service.states()['arrDataSync'].error).toBe('Task failed');
+    });
+  });
 });

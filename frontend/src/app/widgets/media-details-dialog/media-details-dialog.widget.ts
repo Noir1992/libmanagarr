@@ -43,38 +43,50 @@ export class MediaDetailsDialogWidget {
     const target = d.upgradeUntilCustomFormatScore;
     const upgrade =
       score == null || target == null ? na : this.i18n.t(score < target ? 'filter.upgradeTargetBelow' : 'filter.upgradeTargetReached');
+    let upgradeTone: MediaGridDetailTone | undefined;
+    if (score != null && target != null) {
+      upgradeTone = score < target ? 'danger' : 'success';
+    }
+    const duration = row(
+      'library.details.duration',
+      file?.durationSeconds == null
+        ? na
+        : `${Math.floor(file.durationSeconds / 3600)}:${String(Math.floor(file.durationSeconds / 60) % 60).padStart(2, '0')}:${String(Math.floor(file.durationSeconds) % 60).padStart(2, '0')}`,
+    );
+    const libraryStatus = row('filter.fileStatus', flag(d.hasFile, 'filter.filePresent', 'filter.fileMissing'), fileStatusTone(d.hasFile));
     const rows = [];
     if (d.episodeNumber != null) {
+      let airedTone: MediaGridDetailTone | undefined;
+      if (d.hasAired !== undefined) {
+        airedTone = d.hasAired ? 'success' : 'warning';
+      }
       rows.push(
-        row('common.column.season', value(d.seasonNumber)),
         row('common.column.episode', value(d.episodeNumber)),
+        row('common.column.season', value(d.seasonNumber)),
         row('filter.episodeType', this.i18n.t(d.seasonNumber === 0 ? 'filter.episodeSpecial' : 'filter.episodeRegular')),
+        duration,
+        row('common.column.airDate', date(d.airDateUtc)),
+        row('filter.airStatus', flag(d.hasAired, 'filter.airedYes', 'filter.airedNo'), airedTone),
+        libraryStatus,
+        row('filter.episodeMonitored', flag(d.monitored, 'library.details.yes', 'library.details.no')),
       );
     } else {
       rows.push(
-        row('common.column.instance', value(d.instanceName)),
+        row('common.column.airDate', date(d.airDateUtc)),
         row('filter.airStatus', airStatusLabel(d.status, this.i18n), airStatusTone(d.status)),
+        libraryStatus,
+        duration,
+        row('filter.genres', list(d.genres)),
+        row('common.column.instance', value(d.instanceName)),
+        row('filter.monitored', flag(d.monitored, 'library.details.yes', 'library.details.no')),
         row('filter.addedRange', date(d.addedAt)),
         row('common.column.profile', value(d.qualityProfileName)),
-        row('filter.genres', list(d.genres)),
-        row('filter.tags', list(d.tags)),
       );
     }
     rows.push(
-      row(
-        d.episodeNumber == null ? 'filter.monitored' : 'filter.episodeMonitored',
-        flag(d.monitored, 'library.details.yes', 'library.details.no'),
-      ),
-      row('filter.fileStatus', flag(d.hasFile, 'filter.filePresent', 'filter.fileMissing'), fileStatusTone(d.hasFile)),
-      row(
-        'library.details.size',
-        size == null ? na : `${(size / 1024 ** 3).toLocaleString(this.settings.localeId(), { maximumFractionDigits: 2 })} GiB`,
-      ),
-      row('filter.aired', flag(d.hasAired, 'filter.airedYes', 'filter.airedNo')),
-      row('common.column.airDate', date(d.airDateUtc)),
       row('common.column.targetScore', value(target)),
       row('common.column.score', value(score)),
-      row('filter.upgradeTarget', upgrade),
+      row('filter.upgradeTarget', upgrade, upgradeTone),
       row('filter.resolution', value(file?.resolution)),
       row('library.details.originalResolution', value(file?.originalResolution)),
       row('filter.videoCodec', value(file?.videoCodec)),
@@ -87,16 +99,17 @@ export class MediaDetailsDialogWidget {
       ),
       row('filter.audioLanguages', list(file?.audioLanguages)),
       row('filter.subtitleLanguages', list(file?.subtitleLanguages)),
-      row(
-        'library.details.duration',
-        file?.durationSeconds == null
-          ? na
-          : `${Math.floor(file.durationSeconds / 3600)}:${String(Math.floor(file.durationSeconds / 60) % 60).padStart(2, '0')}:${String(Math.floor(file.durationSeconds) % 60).padStart(2, '0')}`,
-      ),
       row('library.details.releaseGroup', value(file?.releaseGroup)),
       row('library.details.filePath', value(file?.relativePath)),
       row('library.details.createdAt', date(file?.createdAt)),
+      row(
+        'library.details.size',
+        size == null ? na : `${(size / 1024 ** 3).toLocaleString(this.settings.localeId(), { maximumFractionDigits: 2 })} GiB`,
+      ),
     );
+    if (d.episodeNumber == null) {
+      rows.push(row('filter.tags', list(d.tags)));
+    }
     return rows;
   });
 

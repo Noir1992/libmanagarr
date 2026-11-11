@@ -10,6 +10,7 @@ import { RequestsPage } from './pages/requests/requests.page';
 import { ReleasesPage } from './pages/releases/releases.page';
 import { SettingsPage } from './pages/settings/settings.page';
 import { SetupPage } from './pages/setup/setup.page';
+import { SymlinksPage } from './pages/symlinks/symlinks.page';
 import { pendingChangesGuard } from './guards/pending-changes.guard';
 
 export const appRoutes: Routes = [
@@ -67,6 +68,11 @@ export const appRoutes: Routes = [
   {
     path: 'releases',
     component: ReleasesPage,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'symlinks',
+    component: SymlinksPage,
     canActivate: [authGuard],
   },
 ];

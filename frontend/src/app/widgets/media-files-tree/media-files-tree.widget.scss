@@ -32,7 +32,8 @@
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
 
-      .tree-toggle {
+      .tree-toggle,
+      button.file-row {
         cursor: pointer;
       }
 

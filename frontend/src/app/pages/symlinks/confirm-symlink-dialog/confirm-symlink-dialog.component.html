@@ -1,0 +1,74 @@
+<h2 mat-dialog-title class="dialog-title">{{ t(plan()?.adoptsExisting ? 'symlinks.confirm.adoptTitle' : 'symlinks.confirm.title') }}</h2>
+
+<mat-dialog-content class="dialog-content">
+  @if (loading()) {
+    <p>{{ t('common.loading') }}</p>
+  }
+
+  @if (error(); as message) {
+    <p class="feedback error" role="alert">{{ message }}</p>
+  }
+
+  @if (plan(); as proposed) {
+    <p class="plan-pair">
+      {{ data.suggestion.radarrMovieTitle ?? t('common.na') }}
+      <span class="plan-episode">{{ episodeLabel() }}</span>
+    </p>
+
+    <dl class="plan-grid">
+      <dt>{{ t('symlinks.radarrInstance') }}</dt>
+      <dd class="plan-radarr-instance">
+        {{ proposed.draft.radarrInstanceName || data.suggestion.radarrInstanceName || data.suggestion.radarrInstanceId }}
+      </dd>
+      <dt>{{ t('symlinks.sonarrInstance') }}</dt>
+      <dd class="plan-sonarr-instance">
+        {{ proposed.draft.sonarrInstanceName || data.suggestion.sonarrInstanceName || data.suggestion.sonarrInstanceId }}
+      </dd>
+      <dt>{{ t('symlinks.sourcePath') }}</dt>
+      <dd class="plan-path">{{ proposed.draft.sourcePath || t('common.na') }}</dd>
+      <dt>{{ t('symlinks.linkText') }}</dt>
+      <dd class="plan-path">{{ proposed.draft.linkText || t('common.na') }}</dd>
+      <dt>{{ t('symlinks.releaseGroup') }}</dt>
+      <dd>{{ proposed.draft.expectedMetadata?.releaseGroup ?? t('common.na') }}</dd>
+      <dt>{{ t('symlinks.languages') }}</dt>
+      <dd>{{ proposed.draft.expectedMetadata?.languages?.join(', ') || t('common.na') }}</dd>
+      <dt>{{ t('symlinks.quality') }}</dt>
+      <dd>{{ proposed.draft.expectedMetadata?.quality ?? t('common.na') }}</dd>
+    </dl>
+    @if (proposed.adoptsExisting) {
+      <p>{{ t('symlinks.confirm.adoptExplanation') }}</p>
+    }
+    <p>{{ t('symlinks.followUpConsent') }}</p>
+
+    @if (findings(proposed).length > 0) {
+      <ul class="plan-findings">
+        @for (finding of findings(proposed); track finding.code + finding.detail) {
+          <li>
+            <mat-icon class="material-symbols-outlined">{{ proposed.blockers.includes(finding) ? 'block' : 'warning' }}</mat-icon>
+            <span class="finding-detail">{{ finding.detail || finding.code }}</span>
+            @if (finding.detail) {
+              <span class="finding-code">{{ finding.code }}</span>
+            }
+          </li>
+        }
+      </ul>
+    }
+
+    @if (!proposed.runnable) {
+      <p class="plan-refused">{{ t('symlinks.confirm.notRunnable') }}</p>
+    }
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" mat-stroked-button class="secondary-button" (click)="close()">{{ t('common.cancel') }}</button>
+  <button
+    type="button"
+    mat-stroked-button
+    class="secondary-button"
+    [disabled]="loading() || busy() || plan()?.runnable !== true"
+    (click)="confirmAsync()"
+  >
+    {{ busy() ? t('common.loading') : t(plan()?.adoptsExisting ? 'symlinks.confirm.adoptRun' : 'symlinks.confirm.run') }}
+  </button>
+</mat-dialog-actions>

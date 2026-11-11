@@ -1,0 +1,136 @@
+{
+  "titles": [
+    "Death Note",
+    "Death Note Relight 1: Visions of a God",
+    "Kabaneri of the Iron Fortress",
+    "My Neighbor Totoro",
+    "Spirited Away"
+  ],
+  "presentTitles": [
+    "Death Note Relight 1: Visions of a God",
+    "Kabaneri of the Iron Fortress",
+    "Spirited Away"
+  ],
+  "missingTitles": [
+    "Death Note",
+    "My Neighbor Totoro"
+  ],
+  "resolution720Titles": [
+    "Kabaneri of the Iron Fortress"
+  ],
+  "resolution1080Titles": [
+    "Death Note Relight 1: Visions of a God",
+    "Kabaneri of the Iron Fortress",
+    "Spirited Away"
+  ],
+  "movies": [
+    {
+      "id": 1,
+      "tmdbId": 129,
+      "title": "Spirited Away",
+      "genres": [
+        "Animation",
+        "Family",
+        "Fantasy"
+      ],
+      "hasFile": true,
+      "monitored": false
+    },
+    {
+      "id": 2,
+      "tmdbId": 8392,
+      "title": "My Neighbor Totoro",
+      "genres": [
+        "Fantasy",
+        "Animation",
+        "Family"
+      ],
+      "hasFile": false,
+      "monitored": true
+    },
+    {
+      "id": 3,
+      "tmdbId": 51482,
+      "title": "Death Note Relight 1: Visions of a God",
+      "genres": [
+        "TV Movie",
+        "Crime",
+        "Drama",
+        "Fantasy",
+        "Thriller",
+        "Animation"
+      ],
+      "hasFile": true,
+      "monitored": false
+    }
+  ],
+  "series": [
+    {
+      "id": 1,
+      "tvdbId": 305082,
+      "title": "Kabaneri of the Iron Fortress",
+      "genres": [
+        "Action",
+        "Adventure",
+        "Animation",
+        "Anime",
+        "Drama",
+        "Fantasy",
+        "Horror"
+      ],
+      "monitored": false
+    },
+    {
+      "id": 2,
+      "tvdbId": 79481,
+      "title": "Death Note",
+      "genres": [
+        "Anime",
+        "Crime",
+        "Fantasy",
+        "Horror",
+        "Suspense",
+        "Thriller"
+      ],
+      "monitored": true
+    }
+  ],
+  "files": {
+    "total": 4,
+    "sonarr": 2,
+    "radarr": 1,
+    "videoCodec": "x264",
+    "audioCodec": "AAC",
+    "audioLanguage": "Japanese"
+  },
+  "specialEpisode": {
+    "id": 1,
+    "season": 0,
+    "number": 1,
+    "hasFile": true
+  },
+  "symlinkPair": {
+    "episodeId": 20,
+    "seriesId": 2,
+    "season": 0,
+    "number": 1,
+    "movieId": 3,
+    "tmdbId": 51482,
+    "title": "Death Note Relight 1: Visions of a God"
+  },
+  "regularEpisode": {
+    "id": 8,
+    "title": "Frightened Corpse",
+    "season": 1,
+    "number": 1,
+    "airDateUtc": "2016-04-07T15:00:00Z",
+    "hasFile": true
+  },
+  "missingEpisode": {
+    "id": 9,
+    "title": "Never-Ending Night",
+    "season": 1,
+    "number": 2,
+    "hasFile": false
+  }
+}

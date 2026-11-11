@@ -21,6 +21,7 @@ import { SettingsAccountTabWidget } from './settings-account-tab/settings-accoun
 import { SettingsBackupTabWidget } from './settings-backup-tab/settings-backup-tab.widget';
 import { SettingsGeneralTabWidget } from './settings-general-tab/settings-general-tab.widget';
 import { SettingsArrInstancesTabWidget } from './settings-arr-instances-tab/settings-arr-instances-tab.widget';
+import { SettingsSymlinksTabWidget } from './settings-symlinks-tab/settings-symlinks-tab.widget';
 import { SettingsTasksTabWidget } from './settings-tasks-tab/settings-tasks-tab.widget';
 
 @Component({
@@ -29,6 +30,7 @@ import { SettingsTasksTabWidget } from './settings-tasks-tab/settings-tasks-tab.
     MatTabsModule,
     SettingsGeneralTabWidget,
     SettingsArrInstancesTabWidget,
+    SettingsSymlinksTabWidget,
     SettingsTasksTabWidget,
     SettingsBackupTabWidget,
     SettingsAccountTabWidget,
@@ -46,7 +48,7 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
 
   /* Constants */
   private static readonly tabQueryParamName: string = 'tab';
-  private static readonly tabQueryParamValues: readonly string[] = ['general', 'arr-instances', 'tasks', 'backup', 'account'];
+  private static readonly tabQueryParamValues: readonly string[] = ['general', 'arr-instances', 'symlinks', 'tasks', 'backup', 'account'];
 
   /* View Queries */
   @ViewChild(MatTabGroup)
@@ -61,6 +63,9 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
   @ViewChild(SettingsTasksTabWidget)
   private readonly settingsTasksTabWidget?: SettingsTasksTabWidget;
 
+  @ViewChild(SettingsSymlinksTabWidget)
+  private readonly settingsSymlinksTabWidget?: SettingsSymlinksTabWidget;
+
   @ViewChild(SettingsBackupTabWidget)
   private readonly settingsBackupTabWidget?: SettingsBackupTabWidget;
 
@@ -72,6 +77,7 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
   protected readonly pageDescription: Signal<string> = computed((): string => this.i18n.t('settings.description'));
   protected readonly generalTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.general'));
   protected readonly instancesTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.instancesTab'));
+  protected readonly symlinksTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.symlinksTab'));
   protected readonly tasksTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.tasksTab'));
   protected readonly backupTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.backupTab'));
   protected readonly accountTabLabel: Signal<string> = computed((): string => this.i18n.t('settings.accountTab'));
@@ -177,6 +183,7 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
   private getActiveSettingsTab():
     | SettingsGeneralTabWidget
     | SettingsArrInstancesTabWidget
+    | SettingsSymlinksTabWidget
     | SettingsTasksTabWidget
     | SettingsBackupTabWidget
     | SettingsAccountTabWidget
@@ -187,10 +194,12 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
       case 1:
         return this.settingsInstancesTabWidget ?? null;
       case 2:
-        return this.settingsTasksTabWidget ?? null;
+        return this.settingsSymlinksTabWidget ?? null;
       case 3:
-        return this.settingsBackupTabWidget ?? null;
+        return this.settingsTasksTabWidget ?? null;
       case 4:
+        return this.settingsBackupTabWidget ?? null;
+      case 5:
         return this.settingsAccountTabWidget ?? null;
       default:
         return null;
@@ -207,12 +216,14 @@ export class SettingsPage implements OnInit, OnDestroy, CanDeactivateWithPending
     switch (normalizedTabName) {
       case 'arr-instances':
         return 1;
-      case 'tasks':
+      case 'symlinks':
         return 2;
-      case 'backup':
+      case 'tasks':
         return 3;
-      case 'account':
+      case 'backup':
         return 4;
+      case 'account':
+        return 5;
       default:
         return 0;
     }

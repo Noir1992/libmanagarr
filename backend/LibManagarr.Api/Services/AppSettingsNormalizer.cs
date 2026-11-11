@@ -19,7 +19,8 @@ public static class AppSettingsNormalizer
             RadarrSnapshots = settings.RadarrSnapshots ?? [],
             LibraryFilterValues = settings.LibraryFilterValues ?? [],
             Logging = NormalizeLogging(settings.Logging),
-            AuthProtection = NormalizeAuthProtection(settings.AuthProtection)
+            AuthProtection = NormalizeAuthProtection(settings.AuthProtection),
+            Symlinks = SymlinkSettingsRules.Normalize(settings.Symlinks)
         };
     }
 

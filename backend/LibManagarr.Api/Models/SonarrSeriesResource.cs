@@ -14,6 +14,15 @@ public sealed class SonarrSeriesResource
 
     public string? Status { get; init; }
 
+    /// <summary>
+    /// Where the series lives on that instance's own file system, so in that instance's path syntax. A
+    /// managed link has to be placed inside this folder, which is the one thing the snapshot cannot
+    /// answer because it keeps titles and ids only.
+    /// </summary>
+    public string? Path { get; init; }
+
+    public string? RootFolderPath { get; init; }
+
     public bool? Monitored { get; init; }
 
     public string? MonitorNewItems { get; init; }

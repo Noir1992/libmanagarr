@@ -150,15 +150,19 @@ export class SettingsBackupTabWidget extends SettingsUnsavedChangesBase implemen
   protected readonly passwordLengthMessage: Signal<string> = computed((): string => this.i18n.t('auth.passwordLength'));
   protected readonly passwordMismatchMessage: Signal<string> = computed((): string => this.i18n.t('settings.backup.passwordMismatch'));
   protected readonly previewTitleLabel: Signal<string> = computed((): string => this.i18n.t('settings.backup.previewTitle'));
+  protected readonly previewCurrentVersionLabel: Signal<string> = computed((): string =>
+    this.i18n.t('settings.backup.preview.currentApplicationVersion'),
+  );
   protected readonly previewVersionLabel: Signal<string> = computed((): string => this.i18n.t('settings.backup.preview.version'));
   protected readonly previewCreatedLabel: Signal<string> = computed((): string => this.i18n.t('settings.backup.preview.created'));
   protected readonly previewExpiresLabel: Signal<string> = computed((): string => this.i18n.t('settings.backup.preview.expires'));
+  protected readonly previewCurrentLibrarySchemaLabel: Signal<string> = computed((): string =>
+    this.i18n.t('settings.backup.preview.currentLibrarySchema'),
+  );
   protected readonly previewLibrarySchemaLabel: Signal<string> = computed((): string =>
     this.i18n.t('settings.backup.preview.librarySchema'),
   );
   protected readonly previewInstancesLabel: Signal<string> = computed((): string => this.i18n.t('settings.backup.preview.instances'));
-  protected readonly previewSettingsLabel: Signal<string> = computed((): string => this.i18n.t('settings.backup.preview.settings'));
-  protected readonly previewContentLabel: Signal<string> = computed((): string => this.i18n.t('settings.backup.preview.content'));
   protected readonly previewSizeLabel: Signal<string> = computed((): string => this.i18n.t('settings.backup.preview.size'));
   protected readonly versionDiffersLabel: Signal<string> = computed((): string => this.i18n.t('settings.backup.preview.versionDiffers'));
   protected readonly applyLabel: Signal<string> = computed((): string => this.i18n.t('settings.backup.apply'));
@@ -444,13 +448,16 @@ export class SettingsBackupTabWidget extends SettingsUnsavedChangesBase implemen
     await Promise.all([this.loadAccountAsync(), this.loadStatusAsync()]);
   }
 
+  /** Seerr is configured at most once per installation, so it is named beside the counted instances. */
   protected instancesLabelOf(preview: BackupImportPreview): string {
-    return this.i18n.tCount(
+    const counts: string = this.i18n.tCount(
       preview.sonarrInstanceCount + preview.radarrInstanceCount,
       'settings.backup.preview.instanceOne',
       'settings.backup.preview.instanceMany',
       { sonarr: preview.sonarrInstanceCount.toString(), radarr: preview.radarrInstanceCount.toString() },
     );
+
+    return preview.hasSeerrInstance ? `${counts}${this.i18n.t('settings.backup.preview.instanceSeerr')}` : counts;
   }
 
   protected sizeLabelOf(preview: BackupImportPreview): string {

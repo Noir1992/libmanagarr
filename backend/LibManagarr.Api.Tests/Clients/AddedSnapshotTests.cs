@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using LibManagarr.Api.Clients;
 using LibManagarr.Api.Models;
 
@@ -7,6 +8,17 @@ namespace LibManagarr.Api.Tests.Clients;
 
 public sealed class AddedSnapshotTests
 {
+    [Theory]
+    [InlineData("/media/series/Example Show")]
+    [InlineData(null)]
+    public async Task FetchSonarrSnapshot_KeepsTheReportedSeriesDirectory(string? path)
+    {
+        using HttpClient http = new(new ArrHandler(null, path));
+        ArrInstanceSettings instance = new() { Id = "test", BaseUrl = "http://arr.test", ApiKey = "test" };
+        SonarrInstanceSnapshot snapshot = await new SonarrClient(http).FetchSnapshotAsync(instance, CancellationToken.None);
+        Assert.Equal(path, Assert.Single(snapshot.Series).Path);
+    }
+
     [Theory]
     [InlineData(false, "2026-01-10T15:30:00Z")]
     [InlineData(true, "2026-01-10T15:30:00Z")]
@@ -34,15 +46,17 @@ public sealed class AddedSnapshotTests
         Assert.Equal(added is null ? (DateTimeOffset?)null : DateTimeOffset.Parse(added), actual);
     }
 
-    private sealed class ArrHandler(string? added) : HttpMessageHandler
+    private sealed class ArrHandler(string? added, string? seriesPath = null) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             string addedProperty = added is null ? "" : $",\"added\":\"{added}\"";
+            string pathProperty = request.RequestUri!.AbsolutePath == "/api/v3/series" && seriesPath is not null
+                ? ",\"path\":" + JsonSerializer.Serialize(seriesPath) : "";
             string body = request.RequestUri!.AbsolutePath switch
             {
                 "/api/v3/qualityprofile" or "/api/v3/tag" or "/api/v3/episodefile" => "[]",
-                "/api/v3/movie" or "/api/v3/series" => "[{\"id\":1,\"hasFile\":false,\"title\":\"Media\"" + addedProperty + "}]",
+                "/api/v3/movie" or "/api/v3/series" => "[{\"id\":1,\"hasFile\":false,\"title\":\"Media\"" + addedProperty + pathProperty + "}]",
                 "/api/v3/episode" => """[{"id":1,"hasFile":false,"seasonNumber":1,"episodeNumber":1}]""",
                 _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
             };

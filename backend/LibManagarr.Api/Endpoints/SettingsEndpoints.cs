@@ -18,6 +18,7 @@ public static class SettingsEndpoints
         group.MapGet("/instances", GetInstancesSettingsAsync);
         group.MapGet("/logging", GetLoggingSettingsAsync);
         group.MapScheduledTaskEndpoints();
+        group.MapSymlinkEndpoints();
         group.MapPut("/", SaveSettingsAsync);
         group.MapPut("/general", SaveGeneralSettingsAsync);
         group.MapPut("/title-sorting", SaveTitleSortingAsync);

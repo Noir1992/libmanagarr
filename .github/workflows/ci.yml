@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -41,16 +42,28 @@ jobs:
       - run: npx prettier --check .
       - run: npm run test:ci
 
+  e2e:
+    uses: ./.github/workflows/e2e.yml
+    with:
+      # Edge builds carry no semantic version, so they report the commit they were built
+      # from. The hyphen keeps the value intact when the backend strips a `+revision` suffix.
+      image-version: edge-${{ substring(github.sha, 0, 7) }}
+
   docker:
-    name: Build & push image
-    needs: [backend-tests, frontend-tests]
+    name: Publish tested image
+    needs: [backend-tests, frontend-tests, e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: tested-image
+          path: /tmp/tested-image
+      - name: Load tested image
+        run: docker load -i /tmp/tested-image/tested-image.tar
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -66,15 +79,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build (push on main)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: ${{ github.event_name == 'push' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Edge builds carry no semantic version, so they report the commit they were built
-          # from. The hyphen keeps the value intact when the backend strips a `+revision` suffix.
-          build-args: LIBMANAGARR_VERSION=edge-${{ steps.meta.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Publish tested image
+        if: github.event_name == 'push'
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            docker tag libmanagarr:e2e "$tag"
+            docker push "$tag"
+          done <<< "$IMAGE_TAGS"

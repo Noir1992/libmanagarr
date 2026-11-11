@@ -412,6 +412,7 @@ export class CodecStatisticsPage implements OnInit, OnDestroy {
             source: file.source,
             instanceName: file.instanceName,
             url,
+            ...(isFile ? { file } : {}),
           };
           current.children.push(child);
           nodes.set(nodeKey, child);

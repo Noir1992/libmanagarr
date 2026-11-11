@@ -58,7 +58,15 @@ public sealed class CodecStatisticsService
                             TitleSlug = series.TitleSlug,
                             SizeBytes = episode.File.Size,
                             RelativePath = episode.File.RelativePath,
-                            RootTitle = series.Title
+                            RootTitle = series.Title,
+                            SeasonNumber = season.SeasonNumber,
+                            EpisodeNumber = episode.EpisodeNumber,
+                            Monitored = episode.Monitored,
+                            AirDateUtc = episode.AirDateUtc,
+                            QualityProfileName = series.Profile.Name,
+                            UpgradeUntilCustomFormatScore = series.Profile.UpgradeUntilCustomFormatScore,
+                            CustomFormatScore = episode.File.CustomFormatScore,
+                            MediaDetails = LibraryMediaDetailsResponse.From(episode.File, true)
                         }, snapshot.InstanceId, true)))))
             .ToList();
 
@@ -73,7 +81,18 @@ public sealed class CodecStatisticsService
                     TitleSlug = movie.TitleSlug,
                     SizeBytes = movie.File.Size,
                     RelativePath = movie.File.RelativePath,
-                    RootTitle = movie.Title
+                    RootTitle = movie.Title,
+                    Monitored = movie.Monitored,
+                    AirDateUtc = movie.AirDateUtc,
+                    Status = movie.Status,
+                    AddedAt = movie.AddedAt,
+                    QualityProfileName = movie.Profile.Name,
+                    UpgradeUntilCustomFormatScore = movie.Profile.UpgradeUntilCustomFormatScore,
+                    PosterUrl = movie.PosterRemoteUrl,
+                    Genres = movie.Genres,
+                    Tags = movie.Tags,
+                    CustomFormatScore = movie.File.CustomFormatScore,
+                    MediaDetails = LibraryMediaDetailsResponse.From(movie.File, true)
                 }, snapshot.InstanceId, false)))
             .ToList();
 

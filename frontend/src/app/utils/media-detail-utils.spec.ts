@@ -1,6 +1,7 @@
 import { SonarrLibraryEpisodeTable } from '../interfaces/library/sonarr-library-episode-table';
 import { SonarrLibrarySeriesTable } from '../interfaces/library/sonarr-library-series-table';
-import { episodeDetailData, isDetailRowActivation, specialsLast } from './media-detail-utils';
+import { CodecMediaFile } from '../interfaces/codec-statistic/codec-media-file';
+import { codecFileDetailData, episodeDetailData, isDetailRowActivation, specialsLast } from './media-detail-utils';
 
 describe('media detail helpers', () => {
   it('maps episode fields while taking only the required context from its series', () => {
@@ -41,6 +42,75 @@ describe('media detail helpers', () => {
     expect(details.qualityProfileName).toBeUndefined();
     expect(details.status).toBeUndefined();
     expect(episode).not.toEqual(jasmine.objectContaining({ seriesTitle: 'Series' }));
+  });
+
+  it('maps codec statistics files onto dialog data and falls back to an empty url when unknown', () => {
+    const episodeFile: CodecMediaFile = {
+      title: 'Series - S02E03 - Episode',
+      source: 'Sonarr (Sonarr Main)',
+      instanceName: 'Sonarr Main',
+      titleSlug: 'series-1',
+      sizeBytes: 300,
+      relativePath: 'series/season 2/series s02e03.mkv',
+      rootTitle: 'Series',
+      seasonNumber: 2,
+      episodeNumber: 3,
+      monitored: true,
+      airDateUtc: '2026-01-05T20:00:00Z',
+      qualityProfileName: 'HD',
+      upgradeUntilCustomFormatScore: 1500,
+      customFormatScore: 800,
+      mediaDetails: { videoCodec: 'HEVC', resolution: '1080p', durationSeconds: 1500 },
+    };
+    const movieFile: CodecMediaFile = {
+      title: 'Movie',
+      source: 'Radarr (Radarr Main)',
+      instanceName: 'Radarr Main',
+      titleSlug: 'movie-1',
+      sizeBytes: 500,
+      relativePath: 'movie/movie.mkv',
+      rootTitle: 'Movie',
+      status: 'released',
+      posterUrl: 'https://poster.example/movie.jpg',
+      genres: ['Drama'],
+      tags: ['oc'],
+    };
+
+    const episodeDetails = codecFileDetailData(episodeFile, 'http://sonarr/series/series-1');
+    const movieDetails = codecFileDetailData(movieFile, null);
+
+    expect(episodeDetails).toEqual(
+      jasmine.objectContaining({
+        title: 'Series - S02E03 - Episode',
+        url: 'http://sonarr/series/series-1',
+        instanceName: 'Sonarr Main',
+        seasonNumber: 2,
+        episodeNumber: 3,
+        monitored: true,
+        airDateUtc: '2026-01-05T20:00:00Z',
+        hasFile: true,
+        qualityProfileName: 'HD',
+        upgradeUntilCustomFormatScore: 1500,
+        customFormatScore: 800,
+        size: 300,
+        mediaDetails: episodeFile.mediaDetails,
+      }),
+    );
+    expect(episodeDetails.status).toBeUndefined();
+    expect(episodeDetails.posterUrl).toBeNull();
+    expect(movieDetails).toEqual(
+      jasmine.objectContaining({
+        title: 'Movie',
+        url: '',
+        posterUrl: 'https://poster.example/movie.jpg',
+        status: 'released',
+        genres: ['Drama'],
+        tags: ['oc'],
+        hasFile: true,
+      }),
+    );
+    expect(movieDetails.episodeNumber).toBeUndefined();
+    expect(movieDetails.mediaDetails).toBeNull();
   });
 
   for (const tag of ['a', 'button', 'input', 'select', 'textarea']) {

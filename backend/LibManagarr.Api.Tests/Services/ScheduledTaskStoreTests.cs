@@ -48,13 +48,23 @@ public sealed class ScheduledTaskStoreTests : IDisposable
         SqliteScheduledTaskStore store = CreateStore();
         ScheduledTaskService service = new(store, CreateCatalog(), clock);
         IReadOnlyList<ScheduledTask> tasks = await service.GetAllAsync(CancellationToken.None);
-        Assert.Equal(2, tasks.Count);
+        Assert.Equal(3, tasks.Count);
         ScheduledTask sync = tasks.Single(task => task.TaskKey == "arrDataSync");
         ScheduledTask cleanup = tasks.Single(task => task.TaskKey == "cleanup");
-        Assert.False(sync.Enabled);
+        ScheduledTask health = tasks.Single(task => task.TaskKey == "symlinkHealthCheck");
+        Assert.True(sync.Enabled);
         Assert.False(sync.ReadOnly);
         Assert.True(sync.CanRunManually);
-        Assert.Null(sync.NextRunAt);
+        Assert.Equal(ScheduleMode.Interval, sync.ScheduleMode);
+        Assert.Equal(ScheduleIntervalUnit.Hour, sync.IntervalUnit);
+        Assert.Equal(1, sync.IntervalValue);
+        Assert.Equal(clock.GetUtcNow().AddHours(1), sync.NextRunAt);
+        Assert.True(health.Enabled);
+        Assert.False(health.ReadOnly);
+        Assert.True(health.CanRunManually);
+        Assert.Equal(ScheduleMode.DailyAtTime, health.ScheduleMode);
+        Assert.Equal(3, health.TimeHour);
+        Assert.True(health.NextRunAt > clock.GetUtcNow());
         Assert.True(cleanup.Enabled);
         Assert.True(cleanup.ReadOnly);
         Assert.True(cleanup.CanRunManually);
@@ -64,7 +74,50 @@ public sealed class ScheduledTaskStoreTests : IDisposable
         clock.Advance(TimeSpan.FromDays(3));
         ScheduledTask restarted = (await CreateStore().GetAsync("cleanup", CancellationToken.None))!;
         Assert.Equal(cleanup.NextRunAt, restarted.NextRunAt);
+        Assert.Equal(health.NextRunAt, (await CreateStore().GetAsync("symlinkHealthCheck", CancellationToken.None))!.NextRunAt);
         Assert.False(File.Exists(SettingsFile));
+    }
+
+    [Fact]
+    public async Task ExistingDisabledTasks_SurviveRestarts_EvenThoughTheDefaultsNowSayEnabled()
+    {
+        await CreateStore().InitializeAsync(CancellationToken.None);
+        // An earlier installation switched both tasks off, on purpose or from the old defaults. No
+        // provenance is stored, so a stored row is a user decision from here on and no restart may undo it.
+        await ExecuteSqlAsync("""
+            UPDATE scheduled_tasks SET enabled=0, next_run_at=NULL WHERE task_key IN ('arrDataSync','symlinkHealthCheck');
+            UPDATE scheduled_tasks SET interval_value=6, time_hour=5 WHERE task_key IN ('arrDataSync','symlinkHealthCheck');
+            """);
+        SqliteScheduledTaskStore restarted = CreateStore();
+        ScheduledTask sync = (await restarted.GetAsync("arrDataSync", CancellationToken.None))!;
+        ScheduledTask health = (await restarted.GetAsync("symlinkHealthCheck", CancellationToken.None))!;
+        Assert.False(sync.Enabled);
+        Assert.Null(sync.NextRunAt);
+        Assert.Equal(6, sync.IntervalValue);
+        Assert.Equal(0, sync.Revision);
+        Assert.False(health.Enabled);
+        Assert.Null(health.NextRunAt);
+        Assert.Equal(5, health.TimeHour);
+    }
+
+    [Fact]
+    public async Task LegacyImport_KeepsExplicitlyDisabledTask_AndOnlyMissingTasksGetTheNewDefaults()
+    {
+        await WriteSettingsAsync("""
+            {"scheduledTasks":{"symlinkHealthCheck":{"enabled":false,"scheduleMode":"DailyAtTime","timeHour":5,"timeMinute":30}}}
+            """);
+        SqliteScheduledTaskStore store = CreateStore();
+        ScheduledTask health = (await store.GetAsync("symlinkHealthCheck", CancellationToken.None))!;
+        Assert.False(health.Enabled);
+        Assert.Equal(5, health.TimeHour);
+        Assert.Equal(30, health.TimeMinute);
+        Assert.Null(health.NextRunAt);
+        ScheduledTask sync = (await store.GetAsync("arrDataSync", CancellationToken.None))!;
+        Assert.True(sync.Enabled);
+        Assert.Equal(ScheduleMode.Interval, sync.ScheduleMode);
+        Assert.Equal(ScheduleIntervalUnit.Hour, sync.IntervalUnit);
+        Assert.Equal(1, sync.IntervalValue);
+        Assert.NotNull(sync.NextRunAt);
     }
 
     [Fact]
@@ -207,8 +260,8 @@ public sealed class ScheduledTaskStoreTests : IDisposable
         ScheduledTaskCatalog catalog = CreateCatalog(new ScheduledTaskDefinition("thirdTask", false, true, () => new() { IntervalValue = 5 }));
         SqliteScheduledTaskStore upgraded = CreateStore(catalog);
         ScheduledTaskService service = new(upgraded, catalog, clock);
-        Assert.Equal(3, (await service.GetAllAsync(CancellationToken.None)).Count);
-        Assert.Equal(4, (await upgraded.GetAllAsync(CancellationToken.None)).Count);
+        Assert.Equal(4, (await service.GetAllAsync(CancellationToken.None)).Count);
+        Assert.Equal(5, (await upgraded.GetAllAsync(CancellationToken.None)).Count);
         ScheduledTask third = (await upgraded.GetAsync("thirdTask", CancellationToken.None))!;
         third.IntervalValue = 9;
         Assert.True(await upgraded.UpdateConfigurationAsync(third, 0, CancellationToken.None));

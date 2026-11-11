@@ -201,6 +201,9 @@ public sealed class ScheduledTaskExecutionTests : IDisposable
     [Fact]
     public async Task ManualRunWorksWhenDisabled_WithoutSchedulingAnAutomaticRun()
     {
+        // The task arrives enabled from the catalog defaults, so the disabled state has to be switched off first.
+        ScheduledTask disabled = await tasks.GetAsync("arrDataSync", default);
+        await tasks.UpdateAsync("arrDataSync", ScheduledTaskStoreTests.Request(disabled, false), default);
         ScheduledTask task = (await execution.RunAsync("arrDataSync", true, default))!;
         Assert.False(task.Enabled);
         Assert.NotNull(task.LastRunAt);

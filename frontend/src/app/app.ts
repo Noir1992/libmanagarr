@@ -19,6 +19,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AppI18nService } from './services/app-i18n.service';
 import { AuthService } from './services/auth.service';
 import { ReleasesService } from './services/releases.service';
+import { SymlinkService } from './services/symlink.service';
 
 const NARROW_VIEWPORT_QUERY: string = '(max-width: 820px)';
 const SCROLL_TO_TOP_THRESHOLD: number = 300;
@@ -35,6 +36,7 @@ export class App implements OnInit, OnDestroy {
   private readonly i18n: AppI18nService = inject(AppI18nService);
   private readonly authService: AuthService = inject(AuthService);
   private readonly releasesService: ReleasesService = inject(ReleasesService);
+  protected readonly symlinks = inject(SymlinkService);
   private narrowMediaQuery?: MediaQueryList;
   protected readonly navigationOpen: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly narrowViewport: WritableSignal<boolean> = signal<boolean>(false);
@@ -46,6 +48,7 @@ export class App implements OnInit, OnDestroy {
   protected readonly libraryTrendLabel: Signal<string> = computed((): string => this.i18n.t('navigation.libraryTrend'));
   protected readonly requestsLabel: Signal<string> = computed((): string => this.i18n.t('navigation.requests'));
   protected readonly calendarLabel: Signal<string> = computed((): string => this.i18n.t('navigation.calendar'));
+  protected readonly symlinksLabel: Signal<string> = computed((): string => this.i18n.t('navigation.symlinks'));
   protected readonly logsLabel: Signal<string> = computed((): string => this.i18n.t('navigation.logs'));
   protected readonly releasesLabel: Signal<string> = computed((): string => this.i18n.t('navigation.releases'));
   protected readonly versionLabel: Signal<string> = computed((): string => this.i18n.t('navigation.version'));
@@ -69,6 +72,17 @@ export class App implements OnInit, OnDestroy {
       void this.releasesService.loadOnceAsync();
     }
   });
+
+  constructor() {
+    effect((onCleanup) => {
+      if (this.authService.state() !== 'authenticated') return;
+      void this.symlinks.refreshCount();
+      const timer = globalThis.setInterval(() => {
+        if (!globalThis.document.hidden) void this.symlinks.refreshCount();
+      }, 60000);
+      onCleanup(() => globalThis.clearInterval(timer));
+    });
+  }
 
   ngOnInit(): void {
     if (typeof globalThis.matchMedia !== 'function') {

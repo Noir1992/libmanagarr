@@ -1,4 +1,9 @@
-<h2 mat-dialog-title class="dialog-title calendar-day-dialog-title" [title]="data.title">{{ data.title }}</h2>
+<div class="detail-header">
+  <h2 mat-dialog-title class="dialog-title calendar-day-dialog-title" [title]="data.title">{{ data.title }}</h2>
+  <button type="button" mat-icon-button (click)="close()" [attr.aria-label]="closeLabel()">
+    <span class="material-symbols-outlined" aria-hidden="true">close</span>
+  </button>
+</div>
 
 <mat-dialog-content class="dialog-content calendar-day-dialog-content">
   <ul class="calendar-day-dialog-list">
@@ -16,7 +21,3 @@
     }
   </ul>
 </mat-dialog-content>
-
-<mat-dialog-actions align="end">
-  <button type="button" mat-button (click)="close()">{{ closeLabel() }}</button>
-</mat-dialog-actions>

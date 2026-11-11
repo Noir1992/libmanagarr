@@ -1,0 +1,4 @@
+node_modules/
+artifacts/
+# Generated seeds are validated by their exact bytes; regenerate instead of formatting.
+seeds/

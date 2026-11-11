@@ -32,6 +32,8 @@ describe('SettingsBackupTabWidget', () => {
     archiveBytes: 3 * 1024 * 1024,
     uncompressedBytes: 9 * 1024 * 1024,
     sameApplicationVersion: true,
+    currentApplicationVersion: '1.4.0',
+    currentLibrarySchemaVersion: 7,
   };
 
   const proof: BackupProofRequest = { currentPassword: 'account-secret', code: undefined, useRecoveryCode: false };
@@ -46,6 +48,10 @@ describe('SettingsBackupTabWidget', () => {
 
   function valueOf(id: string): string {
     return element().querySelector<HTMLInputElement>(`#${id}`)?.value ?? '<missing>';
+  }
+
+  function textOf(id: string): string {
+    return element().querySelector<HTMLElement>(`#${id}`)?.textContent?.trim() ?? '<missing>';
   }
 
   function setValue(id: string, value: string): void {
@@ -507,13 +513,24 @@ describe('SettingsBackupTabWidget', () => {
     await clickButton('settings.backup.validate');
 
     expect(backup.validateImportAsync).toHaveBeenCalledOnceWith(file, 'archive-passphrase');
-    expect(valueOf('backup-preview-version')).toBe('1.4.0');
+    expect(textOf('backup-preview-version')).toBe('1.4.0');
+    expect(textOf('backup-preview-current-version')).toBe('1.4.0');
+    expect(textOf('backup-preview-current-library-schema')).toBe('7');
     expect(element().querySelector('#backup-preview-two-factor')).toBeNull();
     expect(element().querySelector('#backup-preview-auth-schema')).toBeNull();
-    expect(valueOf('backup-preview-instances')).toContain('settings.backup.preview.instanceMany');
-    expect(valueOf('backup-preview-instances')).toContain('3');
-    expect(valueOf('backup-preview-content')).toBe('settings.backup.preview.settings');
+    expect(textOf('backup-preview-instances')).toContain('settings.backup.preview.instanceMany');
+    expect(textOf('backup-preview-instances')).toContain('3');
+    expect(textOf('backup-preview-instances')).not.toContain('settings.backup.preview.instanceSeerr');
+    expect(element().querySelector('#backup-preview-content')).toBeNull();
     expect(element().querySelector('.backup-warning')).toBeNull();
+  });
+
+  it('names the Seerr configuration among the instances when the archive carries one', async () => {
+    await create();
+    fixture.componentInstance['preview'].set({ ...checkedArchive, hasSeerrInstance: true });
+    fixture.detectChanges();
+
+    expect(textOf('backup-preview-instances')).toContain('settings.backup.preview.instanceSeerr');
   });
 
   it('keeps a corrupt archive in the import card with its password still typed', async () => {

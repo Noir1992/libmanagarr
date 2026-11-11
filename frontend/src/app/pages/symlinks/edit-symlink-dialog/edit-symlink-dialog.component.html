@@ -1,0 +1,148 @@
+<h2 mat-dialog-title class="dialog-title">{{ t(existing ? 'symlinks.edit' : 'symlinks.create') }}</h2>
+<mat-dialog-content class="dialog-content" [attr.aria-busy]="previewLoading()">
+  <div class="selection">
+    <section class="selection-group">
+      <div class="field">
+        <div class="field-label-row">
+          <label for="symlink-movie-search">{{ t('symlinks.searchMovie') }}</label>
+        </div>
+        <div class="field-control-wrap search-control">
+          <input matInput #movieSearch id="symlink-movie-search" type="search" [formField]="searchFields.movie" />
+          @if (searchModel().movie) {
+            <button
+              mat-icon-button
+              type="button"
+              class="clear-search"
+              [attr.aria-label]="t('symlinks.clearMovieSearch')"
+              [title]="t('symlinks.clearMovieSearch')"
+              (click)="clearSearch('movie'); movieSearch.focus()"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          }
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label-row">
+          <label id="symlink-movie-label" for="symlink-movie">{{ t('symlinks.movie') }}</label>
+        </div>
+        <div class="field-control-wrap">
+          <mat-select
+            id="symlink-movie"
+            aria-labelledby="symlink-movie-label"
+            [hideSingleSelectionIndicator]="true"
+            [formField]="fields.movie"
+            (selectionChange)="onSelectionChanged()"
+          >
+            <mat-select-trigger>
+              @if (selectedMovie(); as movie) {
+                {{ movie.title }} <span class="selection-instance">({{ movie.instanceName }})</span>
+              }
+            </mat-select-trigger>
+            @for (group of movieGroups(); track group.instanceId) {
+              <mat-optgroup [label]="group.instanceName">
+                @for (movie of group.choices; track movie.movieId) {
+                  <mat-option [value]="movie.instanceId + ':' + movie.movieId">
+                    <span class="choice-title">{{ movie.title }}</span>
+                  </mat-option>
+                }
+              </mat-optgroup>
+            }
+          </mat-select>
+        </div>
+      </div>
+    </section>
+    <section class="selection-group">
+      <div class="field">
+        <div class="field-label-row">
+          <label for="symlink-special-search">{{ t('symlinks.searchSpecial') }}</label>
+        </div>
+        <div class="field-control-wrap search-control">
+          <input matInput #specialSearch id="symlink-special-search" type="search" [formField]="searchFields.special" />
+          @if (searchModel().special) {
+            <button
+              mat-icon-button
+              type="button"
+              class="clear-search"
+              [attr.aria-label]="t('symlinks.clearSpecialSearch')"
+              [title]="t('symlinks.clearSpecialSearch')"
+              (click)="clearSearch('special'); specialSearch.focus()"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          }
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label-row">
+          <label id="symlink-special-label" for="symlink-special">{{ t('symlinks.special') }}</label>
+        </div>
+        <div class="field-control-wrap">
+          <mat-select
+            id="symlink-special"
+            aria-labelledby="symlink-special-label"
+            [hideSingleSelectionIndicator]="true"
+            [formField]="fields.special"
+            (selectionChange)="onSelectionChanged()"
+          >
+            <mat-select-trigger>
+              @if (selectedSpecial(); as special) {
+                {{ special.seriesTitle }} · {{ t('symlinks.specialNumber', { episode: special.episodeNumber.toString() }) }}
+                <span class="selection-instance">({{ special.instanceName }})</span>
+              }
+            </mat-select-trigger>
+            @for (group of specialGroups(); track group.instanceId) {
+              <mat-optgroup [label]="group.instanceName">
+                @for (special of group.choices; track special.episodeId) {
+                  <mat-option [value]="special.instanceId + ':' + special.episodeId">
+                    <span class="choice-title"
+                      >{{ special.seriesTitle }} · {{ t('symlinks.specialNumber', { episode: special.episodeNumber.toString() }) }}</span
+                    >
+                    <span class="choice-detail">{{ special.title }}</span>
+                  </mat-option>
+                }
+              </mat-optgroup>
+            }
+          </mat-select>
+        </div>
+      </div>
+    </section>
+  </div>
+  @if (error()) {
+    <p class="field-error" role="alert">{{ error() }}</p>
+  }
+  @if (previewLoading()) {
+    <p role="status">{{ t('common.loading') }}</p>
+  }
+  @if (plan(); as preview) {
+    @if (preview.adoptsExisting) {
+      <p>{{ t('symlinks.confirm.adoptExplanation') }}</p>
+    }
+    <dl class="plan-grid">
+      <dt>{{ t('symlinks.radarrInstance') }}</dt>
+      <dd>{{ preview.draft.radarrInstanceName || selectedMovie()?.instanceName || preview.draft.radarrInstanceId }}</dd>
+      <dt>{{ t('symlinks.sonarrInstance') }}</dt>
+      <dd>{{ preview.draft.sonarrInstanceName || selectedSpecial()?.instanceName || preview.draft.sonarrInstanceId }}</dd>
+      <dt>{{ t('symlinks.sourcePath') }}</dt>
+      <dd>{{ preview.draft.sourcePath }}</dd>
+      <dt>{{ t('symlinks.linkText') }}</dt>
+      <dd>{{ preview.draft.linkText }}</dd>
+      <dt>{{ t('symlinks.releaseGroup') }}</dt>
+      <dd>{{ preview.draft.expectedMetadata?.releaseGroup ?? t('common.na') }}</dd>
+      <dt>{{ t('symlinks.languages') }}</dt>
+      <dd>{{ preview.draft.expectedMetadata?.languages?.join(', ') || t('common.na') }}</dd>
+      <dt>{{ t('symlinks.quality') }}</dt>
+      <dd>{{ preview.draft.expectedMetadata?.quality ?? t('common.na') }}</dd>
+    </dl>
+    <p>{{ t('symlinks.followUpConsent') }}</p>
+    @for (finding of preview.blockers.concat(preview.warnings); track $index) {
+      <p class="plan-finding">{{ finding.detail }}</p>
+    }
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button type="button" mat-stroked-button class="secondary-button" mat-dialog-close [disabled]="saving()">{{ t('common.cancel') }}</button>
+  <button type="button" mat-stroked-button class="secondary-button" (click)="save()" [disabled]="busy() || plan()?.runnable !== true">
+    {{ t(plan()?.adoptsExisting ? 'symlinks.confirm.adoptRun' : 'symlinks.save') }}
+  </button>
+</mat-dialog-actions>
