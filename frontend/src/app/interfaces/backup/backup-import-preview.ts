@@ -11,4 +11,6 @@ export interface BackupImportPreview {
   readonly archiveBytes: number;
   readonly uncompressedBytes: number;
   readonly sameApplicationVersion: boolean;
+  readonly currentApplicationVersion: string;
+  readonly currentLibrarySchemaVersion: number;
 }

@@ -305,9 +305,10 @@ public sealed class BackupImportService(
         return journal;
     }
 
-    private static BackupImportPreview BuildPreview(BackupImportRegistry.ImportEntry entry, BackupManifest manifest)
+    private BackupImportPreview BuildPreview(BackupImportRegistry.ImportEntry entry, BackupManifest manifest)
     {
         string currentVersion = typeof(BackupImportService).Assembly.GetName().Version?.ToString() ?? "0.0.0";
+        int currentLibrarySchemaVersion = File.Exists(paths.DatabasePath) ? BackupStateVerifier.ReadSchemaVersion(paths.DatabasePath) : 0;
         return new BackupImportPreview(
             entry.ImportId,
             entry.ExpiresAt,
@@ -319,7 +320,9 @@ public sealed class BackupImportService(
             manifest.HasSeerrInstance,
             entry.ArchiveBytes,
             entry.Manifest.Entries.Sum((item) => item.SizeBytes),
-            string.Equals(manifest.ApplicationVersion, currentVersion, StringComparison.Ordinal));
+            string.Equals(manifest.ApplicationVersion, currentVersion, StringComparison.Ordinal),
+            currentVersion,
+            currentLibrarySchemaVersion);
     }
 
     private static async Task<long> ExtractSafelyAsync(string payloadPath, string stateRoot, CancellationToken cancellationToken)
@@ -484,4 +487,6 @@ public sealed record BackupImportPreview(
     bool HasSeerrInstance,
     long ArchiveBytes,
     long UncompressedBytes,
-    bool SameApplicationVersion);
+    bool SameApplicationVersion,
+    string CurrentApplicationVersion,
+    int CurrentLibrarySchemaVersion);

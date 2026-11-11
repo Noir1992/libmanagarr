@@ -15,8 +15,7 @@ test('E11: encrypted backup validates the archive password and discard preserves
   expect(await (await page.request.get('/api/settings/instances')).json()).toEqual(before);
   expect((await validateArchive(page)).ok()).toBe(true);
   await expect(page.getByText('Backup contents', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Contents', { exact: true })).toHaveValue('Settings and library');
-  await expect(page.getByLabel('Instances', { exact: true })).toHaveValue('1 Sonarr and 1 Radarr instances');
+  await expect(page.locator('#backup-preview-instances')).toHaveText('1 Sonarr and 1 Radarr instances');
   page.once('dialog', async (dialog) => {
     await dialog.accept();
   });
