@@ -254,69 +254,49 @@
   @if (preview(); as entry) {
     <section class="card">
       <div class="card-header">{{ previewTitleLabel() }}</div>
-      <div class="card-content backup-grid">
-        <div class="field">
-          <div class="field-label-row">
-            <label for="backup-preview-version">{{ previewVersionLabel() }}</label>
+      <div class="card-content backup-stack">
+        <!-- Left-column entries first, right-column entries last: the wide list fills column by column, the narrow one reads left column, then right column. -->
+        <dl class="preview-list">
+          <div class="preview-row">
+            <dt>{{ previewCreatedLabel() }}</dt>
+            <dd id="backup-preview-created">{{ entry.createdAt | appDate: 'medium' }}</dd>
           </div>
-          <div class="field-control-wrap">
-            <input matInput id="backup-preview-version" type="text" disabled [value]="entry.applicationVersion" />
-          </div>
-        </div>
 
-        <div class="field">
-          <div class="field-label-row">
-            <label for="backup-preview-created">{{ previewCreatedLabel() }}</label>
+          <div class="preview-row">
+            <dt>{{ previewExpiresLabel() }}</dt>
+            <dd id="backup-preview-expires">{{ entry.expiresAt | appDate: 'short' }}</dd>
           </div>
-          <div class="field-control-wrap">
-            <input matInput id="backup-preview-created" type="text" disabled [value]="entry.createdAt | appDate: 'medium'" />
-          </div>
-        </div>
 
-        <div class="field">
-          <div class="field-label-row">
-            <label for="backup-preview-expires">{{ previewExpiresLabel() }}</label>
+          <div class="preview-row">
+            <dt>{{ previewSizeLabel() }}</dt>
+            <dd id="backup-preview-size">{{ sizeLabelOf(entry) }}</dd>
           </div>
-          <div class="field-control-wrap">
-            <input matInput id="backup-preview-expires" type="text" disabled [value]="entry.expiresAt | appDate: 'short'" />
-          </div>
-        </div>
 
-        <div class="field">
-          <div class="field-label-row">
-            <label for="backup-preview-library-schema">{{ previewLibrarySchemaLabel() }}</label>
+          <div class="preview-row">
+            <dt>{{ previewInstancesLabel() }}</dt>
+            <dd id="backup-preview-instances">{{ instancesLabelOf(entry) }}</dd>
           </div>
-          <div class="field-control-wrap">
-            <input matInput id="backup-preview-library-schema" type="text" disabled [value]="entry.librarySchemaVersion" />
-          </div>
-        </div>
 
-        <div class="field">
-          <div class="field-label-row">
-            <label for="backup-preview-instances">{{ previewInstancesLabel() }}</label>
+          <div class="preview-row">
+            <dt>{{ previewCurrentVersionLabel() }}</dt>
+            <dd id="backup-preview-current-version">{{ entry.currentApplicationVersion }}</dd>
           </div>
-          <div class="field-control-wrap">
-            <input matInput id="backup-preview-instances" type="text" disabled [value]="instancesLabelOf(entry)" />
-          </div>
-        </div>
 
-        <div class="field">
-          <div class="field-label-row">
-            <label for="backup-preview-content">{{ previewContentLabel() }}</label>
+          <div class="preview-row">
+            <dt>{{ previewVersionLabel() }}</dt>
+            <dd id="backup-preview-version">{{ entry.applicationVersion }}</dd>
           </div>
-          <div class="field-control-wrap">
-            <input matInput id="backup-preview-content" type="text" disabled [value]="previewSettingsLabel()" />
-          </div>
-        </div>
 
-        <div class="field">
-          <div class="field-label-row">
-            <label for="backup-preview-size">{{ previewSizeLabel() }}</label>
+          <div class="preview-row">
+            <dt>{{ previewCurrentLibrarySchemaLabel() }}</dt>
+            <dd id="backup-preview-current-library-schema">{{ entry.currentLibrarySchemaVersion }}</dd>
           </div>
-          <div class="field-control-wrap">
-            <input matInput id="backup-preview-size" type="text" disabled [value]="sizeLabelOf(entry)" />
+
+          <div class="preview-row">
+            <dt>{{ previewLibrarySchemaLabel() }}</dt>
+            <dd id="backup-preview-library-schema">{{ entry.librarySchemaVersion }}</dd>
           </div>
-        </div>
+        </dl>
 
         @if (!entry.sameApplicationVersion) {
           <p class="backup-notice backup-warning">{{ versionDiffersLabel() }}</p>
@@ -328,7 +308,7 @@
 
         <p class="backup-summary">{{ applySummary() }}</p>
 
-        <form [formGroup]="applyForm" (ngSubmit)="applyAsync()" class="apply-proof">
+        <form [formGroup]="applyForm" (ngSubmit)="applyAsync()">
           <div class="field">
             <div class="field-label-row">
               <label for="apply-current-password">{{ currentPasswordLabel() }}*</label>

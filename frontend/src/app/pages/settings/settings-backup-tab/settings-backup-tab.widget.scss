@@ -23,25 +23,40 @@ form {
 }
 
 .backup-summary {
-  grid-column: 1 / -1;
   margin: 0;
   color: var(--theme-muted);
   font-size: 0.9rem;
   line-height: 1.4;
 }
 
-.apply-proof {
-  grid-column: 1 / -1;
-}
-
-.backup-grid > .feedback {
-  grid-column: 1 / -1;
-}
-
-.backup-grid {
+.preview-list {
   display: grid;
-  gap: var(--theme-default-gap);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Four paired rows; DOM is left column then right column, so fill column by column. */
+  grid-template-rows: repeat(4, auto);
+  grid-auto-flow: column;
+  column-gap: var(--theme-default-gap);
+  margin: 0;
+}
+
+.preview-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 2fr) minmax(0, 3fr);
+  align-items: baseline;
+  gap: var(--theme-default-gap-small);
+  padding: 5px 0;
+  border-bottom: 1px solid var(--theme-table-rule);
+  font-size: 0.85rem;
+
+  dt {
+    color: var(--theme-muted);
+    font-weight: 600;
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
 }
 
 .backup-row {
@@ -55,7 +70,6 @@ form {
   display: flex;
   flex-wrap: wrap;
   gap: var(--theme-default-gap-small);
-  grid-column: 1 / -1;
 }
 
 .file-input {
@@ -85,7 +99,9 @@ form {
 }
 
 @media (max-width: 900px) {
-  .backup-grid {
+  .preview-list {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-auto-flow: row;
   }
 }
