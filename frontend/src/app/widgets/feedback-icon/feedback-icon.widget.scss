@@ -1,3 +1,9 @@
+:host {
+  // Keep the host out of the parent's flex/grid layout so an empty widget
+  // (state = null) leaves no gap behind; the inner span becomes the item.
+  display: contents;
+}
+
 .feedback-icon-slot {
   position: relative;
   display: inline-block;
