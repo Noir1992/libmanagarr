@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { inject, Injectable, signal } from '@angular/core';
+import { inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ScheduledTaskSettings } from '../interfaces/settings/scheduled-task-settings';
 import { AppI18nService } from './app-i18n.service';
@@ -12,16 +12,24 @@ export interface ScheduledTaskState {
 }
 
 @Injectable({ providedIn: 'root' })
-export class ScheduledTaskService {
+export class ScheduledTaskService implements OnDestroy {
   private readonly http = inject(HttpClient);
   private readonly i18n = inject(AppI18nService);
   private readonly tasksState = signal<ScheduledTaskSettings[]>([]);
   private readonly state = signal<Record<string, ScheduledTaskState>>({});
+  private readonly successTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
   readonly tasks = this.tasksState.asReadonly();
   readonly states = this.state.asReadonly();
   readonly loading = signal(false);
   readonly loadError = signal<string | null>(null);
   private readonly url = '/api/settings/tasks';
+
+  ngOnDestroy(): void {
+    for (const timeout of this.successTimeouts.values()) {
+      clearTimeout(timeout);
+    }
+    this.successTimeouts.clear();
+  }
 
   async load(): Promise<void> {
     this.loading.set(true);
@@ -61,11 +69,20 @@ export class ScheduledTaskService {
   }
 
   private async perform(taskKey: string, operation: 'saving' | 'running', request: () => Promise<ScheduledTaskSettings>): Promise<void> {
+    clearTimeout(this.successTimeouts.get(taskKey));
+    this.successTimeouts.delete(taskKey);
     this.updateState(taskKey, { [operation]: true, error: null, success: false });
     try {
       const updated = this.mapTask(await request());
       this.tasksState.update((tasks) => tasks.map((task) => (task.taskKey === taskKey ? updated : task)));
       this.updateState(taskKey, { success: true });
+      this.successTimeouts.set(
+        taskKey,
+        setTimeout(() => {
+          this.updateState(taskKey, { success: false });
+          this.successTimeouts.delete(taskKey);
+        }, 2200),
+      );
     } catch (error) {
       const message = this.message(error);
       if (error instanceof HttpErrorResponse && error.status === 409) {
