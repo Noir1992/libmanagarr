@@ -28,6 +28,32 @@ public sealed class SymlinkSuggestionEndpointTests
     private static readonly DateTimeOffset Start = new(2026, 11, 6, 9, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task MissingMediaRootDisablesSymlinksAndHidesStoredSuggestionsFromTheMenu()
+    {
+        AppSettings settings = Settings();
+        settings.Symlinks = SymlinkSettingsRules.Normalize(new SymlinkSettings
+        {
+            Enabled = true,
+            MediaRoot = Path.Combine(Path.GetTempPath(), "missing-symlink-media")
+        });
+        InMemorySymlinkStore store = await Store(suggestion());
+        Assert.Single(await GetSuggestions(settings, store));
+        StubSettingsService settingsService = new(settings);
+        using SymlinkCapabilityService capability = new(store, settingsService,
+            new SymlinkCapabilityServiceTests.FakeSymlinkFileSystem([]), TimeProvider.System,
+            NullLogger<SymlinkCapabilityService>.Instance);
+
+        AppSettings checkedSettings = await capability.CheckAndUpdateAsync(CancellationToken.None);
+
+        Assert.False(checkedSettings.Symlinks.Enabled);
+        Assert.Equal(SymlinkCapabilityStatus.StorageUnavailable,
+            Assert.Single(await store.GetCapabilityChecksAsync(CancellationToken.None)).Status);
+        Assert.Empty(await GetSuggestions(checkedSettings, store));
+        Assert.False((await Matching(checkedSettings, store).RefreshAsync(true, CancellationToken.None)).DidWork);
+        Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Suggestions_IncludeTheLiveFileCheckWithoutAdoptingOrChangingStoredRows()
     {
         AppSettings settings = ExistingEpisodeFileInspectorTests.Settings();

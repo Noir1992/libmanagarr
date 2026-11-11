@@ -105,35 +105,31 @@ public sealed class SharedMediaPathServiceTests
     }
 
     [Fact]
-    public async Task CapabilityTestUsesDiscoveredSeriesFoldersAndNeverWritesToTheMediaRoot()
+    public async Task CapabilityTestUsesTheConfiguredMediaRootWithoutDependingOnArrInstances()
     {
         AppSettings settings = Settings();
         ProbeFiles files = new([Root, Below("movies"), Below("series"), Below("anime")]);
-        SharedMediaPathService discovery = Discovery(Handler(Below("movies")), Handler(Below("series"), Below("anime")));
         InMemorySymlinkStore store = new();
         SymlinkCapabilityService capability = new(store, new FixedSettings(settings), files, TimeProvider.System,
-            NullLogger<SymlinkCapabilityService>.Instance, discovery);
+            NullLogger<SymlinkCapabilityService>.Instance);
 
         SymlinkCapabilityCheck check = await capability.ProbeAsync(SymlinkSettings.SharedStorageAreaId, CancellationToken.None);
 
         Assert.Equal(SymlinkCapabilityStatus.Available, check.Status);
         Assert.Equal(3, check.ConfigRevision);
-        Assert.Equal(2, files.ProbedDirectories.Count);
-        Assert.Contains(files.ProbedDirectories, path => Path.GetDirectoryName(path) == Below("series"));
-        Assert.Contains(files.ProbedDirectories, path => Path.GetDirectoryName(path) == Below("anime"));
-        Assert.DoesNotContain(files.ProbedDirectories, path => Path.GetDirectoryName(path) == Root);
+        Assert.Single(files.ProbedDirectories);
+        Assert.Equal(Root, Path.GetDirectoryName(files.ProbedDirectories[0]));
         Assert.Empty(files.Bytes);
         Assert.Empty(files.Links);
         Assert.Same(check, await capability.GetStatusAsync("legacy-area-id", CancellationToken.None));
     }
 
     [Fact]
-    public async Task CapabilityRefusesAnInconsistentMountBeforeWritingAnyProbeFiles()
+    public async Task CapabilityRefusesAMissingMediaRootBeforeWritingAnyProbeFiles()
     {
         ProbeFiles files = new([]);
         SymlinkCapabilityService capability = new(new InMemorySymlinkStore(), new FixedSettings(Settings()), files,
-            TimeProvider.System, NullLogger<SymlinkCapabilityService>.Instance,
-            Discovery(Handler(Root + "-wrong/movies"), Handler(Below("series"))));
+            TimeProvider.System, NullLogger<SymlinkCapabilityService>.Instance);
         SymlinkCapabilityCheck check = await capability.ProbeAsync(SymlinkSettings.SharedStorageAreaId, CancellationToken.None);
         Assert.Equal(SymlinkCapabilityStatus.StorageUnavailable, check.Status);
         Assert.Empty(files.ProbedDirectories);
