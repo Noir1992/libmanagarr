@@ -38,14 +38,14 @@ public sealed class SymlinkSetupBackgroundService(
                     SymlinkCapabilityService capability = scope.ServiceProvider.GetRequiredService<SymlinkCapabilityService>();
                     AppSettings snapshot = await scope.ServiceProvider.GetRequiredService<ISettingsService>().GetSnapshotAsync(stoppingToken);
                     bool ready = await capability.IsReadyAsync(snapshot.Symlinks, stoppingToken);
-                    if (checkCapabilities || (snapshot.Symlinks.Enabled && !ready))
+                    if (checkCapabilities)
                     {
                         snapshot = await capability.CheckAndUpdateAsync(stoppingToken);
                         ready = await capability.IsReadyAsync(snapshot.Symlinks, stoppingToken);
                         checkCapabilities = false;
                     }
-                    // A dependency can still be starting. Keep the saved choice and retry verification.
-                    if (!ready) waiting = snapshot.Symlinks.Enabled ? 1 : 0;
+                    // Startup checks capability regardless of activation; saving changed paths checks the new revision.
+                    if (!snapshot.Symlinks.Enabled || !ready) waiting = 0;
                     else waiting = await scope.ServiceProvider.GetRequiredService<SymlinkSetupRunner>().RunDueSetupsAsync(stoppingToken);
                 }
 

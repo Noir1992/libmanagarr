@@ -404,8 +404,7 @@ public static class SymlinkEndpoints
             : current.Symlinks.Revision;
         bool wasEnabled = current.Symlinks.Enabled;
         current.Symlinks = normalized;
-        if ((pathsChanged || normalized.Enabled) && !await capability.CheckConfigurationAsync(current, cancellationToken)
-            && !wasEnabled)
+        if ((pathsChanged || normalized.Enabled) && !await capability.CheckConfigurationAsync(current, cancellationToken))
             normalized.Enabled = false;
         bool resuming = !wasEnabled && normalized.Enabled;
         AppSettings saved = await settingsService.SaveAsync(current, cancellationToken);

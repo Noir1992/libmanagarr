@@ -15,6 +15,10 @@
   line-height: 1.5;
 }
 
+.enable-hint {
+  color: var(--theme-danger-color);
+}
+
 .permissions-hint {
   display: grid;
   gap: var(--theme-default-gap-small);

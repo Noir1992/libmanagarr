@@ -14,10 +14,11 @@ public sealed class SymlinkCapabilityService(
     ISettingsService settings,
     ISymlinkFileSystem files,
     TimeProvider clock,
-    ILogger<SymlinkCapabilityService> logger,
-    SharedMediaPathService? sharedPaths = null)
+    ILogger<SymlinkCapabilityService> logger) : IDisposable
 {
     private const string ProbeDirectoryPrefix = ".libmanagarr-symlink-check-";
+    private readonly SemaphoreSlim probeGate = new(1, 1);
+    private readonly Dictionary<string, SymlinkCapabilityCheck> capabilityChecks = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Win32 ERROR_PRIVILEGE_NOT_HELD, the way Windows reports a missing symlink privilege.</summary>
     private const int PrivilegeNotHeldHResult = unchecked((int)0x80070522);
@@ -26,8 +27,8 @@ public sealed class SymlinkCapabilityService(
     private static readonly byte[] SourceV2 = "libmanagarr-symlink-probe-v2"u8.ToArray();
 
     /// <summary>
-    /// Runs the probe and stores the outcome under the configuration revision it ran on. Every step
-    /// reports where it stopped, so the operator sees the affected root instead of "symlinks unsupported".
+    /// Probes each storage area once per configuration revision and process, including failures.
+    /// Path changes advance the revision; unchanged settings reuse the result until restart.
     /// </summary>
     public async Task<SymlinkCapabilityCheck> ProbeAsync(string storageAreaId, CancellationToken cancellationToken)
     {
@@ -35,6 +36,26 @@ public sealed class SymlinkCapabilityService(
     }
 
     public async Task<SymlinkCapabilityCheck> ProbeAsync(string storageAreaId, AppSettings snapshot, CancellationToken cancellationToken)
+    {
+        string id = snapshot.Symlinks.MediaRoot is not null ? SymlinkSettings.SharedStorageAreaId : storageAreaId;
+        await probeGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (capabilityChecks.TryGetValue(id, out SymlinkCapabilityCheck? cached)
+                && cached.ConfigRevision == snapshot.Symlinks.Revision) return cached;
+            SymlinkCapabilityCheck check = await ProbeCoreAsync(id, snapshot, cancellationToken);
+            capabilityChecks[id] = check;
+            return check;
+        }
+        finally
+        {
+            probeGate.Release();
+        }
+    }
+
+    public void Dispose() => probeGate.Dispose();
+
+    private async Task<SymlinkCapabilityCheck> ProbeCoreAsync(string storageAreaId, AppSettings snapshot, CancellationToken cancellationToken)
     {
         SymlinkSettings configuration = snapshot.Symlinks;
         if (configuration.MediaRoot is not null)
@@ -137,12 +158,14 @@ public sealed class SymlinkCapabilityService(
             && check.Status == SymlinkCapabilityStatus.Available && check.IsCurrent(configuration.Revision)));
     }
 
-    /// <summary>Updates capability evidence without changing the user's persisted activation choice.</summary>
+    /// <summary>Checks capability for the current revision and disables the feature when the environment cannot support it.</summary>
     public async Task<AppSettings> CheckAndUpdateAsync(CancellationToken token)
     {
         using IDisposable operation = await SymlinkOperationGate.EnterAsync(token);
         AppSettings current = await settings.GetSnapshotAsync(token);
-        await CheckConfigurationAsync(current, token);
+        bool available = await CheckConfigurationAsync(current, token);
+        if (!available && current.Symlinks.Enabled)
+            return await settings.UpdateAsync(value => value.Symlinks.Enabled = false, token);
         return current;
     }
 
@@ -155,34 +178,12 @@ public sealed class SymlinkCapabilityService(
             string? rootError = ValidateMediaRoot(snapshot.Symlinks.MediaRoot!);
             if (rootError is not null)
                 return await PersistAsync(id, SymlinkCapabilityStatus.StorageUnavailable, rootError, revision, token);
-            if (sharedPaths is null) throw new HttpRequestException("Root-folder discovery is unavailable.");
-            List<string> movies = [];
-            List<string> series = [];
-            foreach (ArrInstanceSettings instance in snapshot.RadarrInstances)
-                movies.AddRange(await sharedPaths.GetRootsAsync(snapshot, ArrApplicationKind.Radarr, instance.Id, token));
-            foreach (ArrInstanceSettings instance in snapshot.SonarrInstances)
-                series.AddRange(await sharedPaths.GetRootsAsync(snapshot, ArrApplicationKind.Sonarr, instance.Id, token));
-            if (movies.Count == 0 || series.Count == 0)
-                return await PersistAsync(id, SymlinkCapabilityStatus.StorageUnavailable,
-                    "Configure at least one Radarr movie root folder and one Sonarr series root folder inside the shared media directory.", revision, token);
-
-            foreach (string root in movies.Concat(series).Distinct(StringComparer.Ordinal))
-            {
-                SymlinkPathGuard.CheckParents(files, Path.Combine(root, ".probe"));
-                files.ListEntries(root);
-            }
-            foreach (string root in series.Distinct(StringComparer.Ordinal))
-            {
-                MediaStorageArea area = new() { Id = id, Name = root, MoviesRoot = movies[0], SeriesRoot = root };
-                ProbeResult result = RunProbe(Path.Combine(root, ProbeDirectoryPrefix + Guid.NewGuid().ToString("N")[..12]), area);
-                if (result.Status != SymlinkCapabilityStatus.Available)
-                    return await PersistAsync(id, result.Status, result.Detail, revision, token);
-            }
-            return await PersistAsync(id, SymlinkCapabilityStatus.Available,
-                "The discovered movie folders are readable and the series folders support relative symlinks. "
-                + "Sonarr and the media player must mount the same media tree at the same path.", revision, token);
+            string root = snapshot.Symlinks.MediaRoot!;
+            MediaStorageArea area = new() { Id = id, Name = root, MoviesRoot = root, SeriesRoot = root };
+            ProbeResult result = RunProbe(Path.Combine(root, ProbeDirectoryPrefix + Guid.NewGuid().ToString("N")[..12]), area);
+            return await PersistAsync(id, result.Status, result.Detail, revision, token);
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             token.ThrowIfCancellationRequested();
             SymlinkCapabilityStatus status = exception is UnauthorizedAccessException

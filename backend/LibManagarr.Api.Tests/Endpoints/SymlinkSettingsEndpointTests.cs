@@ -23,6 +23,32 @@ public sealed class SymlinkSettingsEndpointTests
     private static readonly ArrInstanceSettings Radarr = new() { Id = "radarr-1", Name = "Radarr", BaseUrl = "http://localhost:7878", ApiKey = "k" };
 
     [Fact]
+    public async Task Save_ChangedMediaRootRechecksCapabilityAndAllowsActivationWithoutRestart()
+    {
+        string changedRoot = LibManagarr("available");
+        StubSettingsService settings = new(new AppSettings
+        {
+            Symlinks = SymlinkSettingsRules.Normalize(new SymlinkSettings { MediaRoot = LibManagarr("missing") })
+        });
+        InMemorySymlinkStore store = new();
+        SymlinkCapabilityServiceTests.FakeSymlinkFileSystem files = new([changedRoot]);
+        using SymlinkCapabilityService capability = new(store, settings, files, TimeProvider.System,
+            NullLogger<SymlinkCapabilityService>.Instance);
+        Assert.False((await capability.CheckAndUpdateAsync(CancellationToken.None)).Symlinks.Enabled);
+        string body = JsonSerializer.Serialize(new { mediaRoot = changedRoot, enabled = true });
+
+        SymlinkSettingsDto saved = await UnwrapOk(SaveResult(settings, store, body, capability));
+
+        Assert.True(saved.Enabled);
+        Assert.Equal(1, saved.Revision);
+        Assert.Equal(SymlinkCapabilityStatus.Available, Assert.Single(saved.CapabilityChecks).Status);
+        Assert.False(saved.CapabilityChecks[0].Stale);
+        int created = files.Created.Count;
+        Assert.True((await UnwrapOk(SaveResult(settings, store, body, capability))).Enabled);
+        Assert.Equal(created, files.Created.Count);
+    }
+
+    [Fact]
     public async Task Save_RejectsMissingDirectoryWithoutCreatingItOrReplacingSavedSettings()
     {
         StubSettingsService settings = new(Settings(4));
@@ -61,14 +87,14 @@ public sealed class SymlinkSettingsEndpointTests
     }
 
     [Fact]
-    public async Task AutomaticCheckPreservesActivationButPausesProcessingWhenPrivilegesAreMissing()
+    public async Task AutomaticCheckDisablesSymlinksWhenPrivilegesAreMissing()
     {
         StubSettingsService settings = new(new AppSettings { Symlinks = SymlinkSettingsRules.Normalize(new SymlinkSettings { MediaRoot = LibManagarr("library"), Enabled = true }) });
         InMemorySymlinkStore store = new();
         SymlinkCapabilityService capability = SaveCapability(settings, store, Body(settings.Settings.Symlinks), new UnauthorizedAccessException("Privilege denied."));
         AppSettings checkedSettings = await capability.CheckAndUpdateAsync(CancellationToken.None);
-        Assert.True(checkedSettings.Symlinks.Enabled);
-        Assert.Equal(0, settings.Saves);
+        Assert.False(checkedSettings.Symlinks.Enabled);
+        Assert.Equal(1, settings.Saves);
         Assert.False(await capability.IsReadyAsync(checkedSettings.Symlinks, CancellationToken.None));
         Assert.Equal(SymlinkCapabilityStatus.PermissionDenied, Assert.Single(await store.GetCapabilityChecksAsync(CancellationToken.None)).Status);
     }
@@ -403,11 +429,8 @@ public sealed class SymlinkSettingsEndpointTests
             if (settings.Settings.RadarrInstances.Count == 0) settings.Settings.RadarrInstances.Add(new() { Id = "radarr-ready", Name = "Movies", BaseUrl = "http://radarr", ApiKey = "key" });
             if (settings.Settings.SonarrInstances.Count == 0) settings.Settings.SonarrInstances.Add(new() { Id = "sonarr-ready", Name = "Series", BaseUrl = "http://sonarr", ApiKey = "key" });
         }
-        StubArrHandler radarr = new(new() { ["GET /api/v3/rootfolder"] = [JsonSerializer.Serialize(new[] { new { path = movies } })] });
-        StubArrHandler sonarr = new(new() { ["GET /api/v3/rootfolder"] = [JsonSerializer.Serialize(new[] { new { path = series } })] });
-        SharedMediaPathService discovery = new(new RadarrClient(new HttpClient(radarr)), new SonarrClient(new HttpClient(sonarr)));
         return new(store, settings, files, new FakeTimeProvider(new DateTimeOffset(2026, 11, 5, 8, 0, 0, TimeSpan.Zero)),
-            NullLogger<SymlinkCapabilityService>.Instance, discovery);
+            NullLogger<SymlinkCapabilityService>.Instance);
     }
 
     private static SymlinkCapabilityService Capability(StubSettingsService settings, InMemorySymlinkStore store) =>
