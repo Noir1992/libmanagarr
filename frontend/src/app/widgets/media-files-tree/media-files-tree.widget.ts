@@ -1,10 +1,13 @@
 import { Component, computed, EventEmitter, HostListener, inject, Input, Output, Signal, ChangeDetectionStrategy } from '@angular/core';
 import { MatIconButton } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MediaTreeNode } from '../../interfaces/media-tree/media-tree-node';
 import { FormatBytesPipe } from '../../pipes/format-bytes.pipe';
 import { AppI18nService } from '../../services/app-i18n.service';
+import { codecFileDetailData } from '../../utils/media-detail-utils';
 import { openErrorToast, openSuccessToast } from '../../utils/feedback-toast-utils';
+import { MediaDetailsDialogWidget } from '../media-details-dialog/media-details-dialog.widget';
 
 type DisplayTreeNode = {
   node: MediaTreeNode;
@@ -22,6 +25,7 @@ type DisplayTreeNode = {
 export class MediaFilesTreeWidget {
   private readonly i18n: AppI18nService = inject(AppI18nService);
   private readonly snackBar: MatSnackBar = inject(MatSnackBar);
+  private readonly dialog: MatDialog = inject(MatDialog);
 
   protected readonly optionsLabel: Signal<string> = computed((): string => this.i18n.t('common.options'));
   protected readonly copyNameLabel: Signal<string> = computed((): string => this.i18n.t('codecStats.copyName'));
@@ -74,6 +78,19 @@ export class MediaFilesTreeWidget {
 
     this.closeContextMenuAndNotify();
     globalThis.open(node.url, '_blank', 'noopener,noreferrer');
+  }
+
+  protected openFileDetails(node: MediaTreeNode): void {
+    if (!node.file) {
+      return;
+    }
+
+    this.interaction.emit();
+    this.dialog.open(MediaDetailsDialogWidget, {
+      data: codecFileDetailData(node.file, node.url ?? null),
+      width: '700px',
+      maxWidth: '95vw',
+    });
   }
 
   protected visibleTreeNodes(roots: readonly MediaTreeNode[]): DisplayTreeNode[] {

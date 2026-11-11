@@ -380,6 +380,96 @@ public sealed class CodecStatisticsServiceTests
     }
 
     [Fact]
+    public void Build_ShouldCarryDetailPopupFieldsOnEveryFileItem()
+    {
+        AppSettings settings = new()
+        {
+            SonarrSnapshots = [new() { InstanceId = "s", InstanceName = "Sonarr", Series = [new()
+            {
+                Title = "Series",
+                TitleSlug = "series-1",
+                Profile = new MediaProfileSnapshot { Name = "HD", UpgradeUntilCustomFormatScore = 1500 },
+                Seasons = [new() { SeasonNumber = 2, Episodes = [
+                    new()
+                    {
+                        EpisodeNumber = 3,
+                        Title = "Episode",
+                        Monitored = true,
+                        AirDateUtc = new DateTimeOffset(2026, 1, 5, 20, 0, 0, TimeSpan.Zero),
+                        File = new MediaFileSnapshot
+                        {
+                            Resolution = "1920x1080",
+                            VideoCodec = "HEVC",
+                            AudioCodec = "AAC",
+                            Container = "mkv",
+                            VideoFormat = "SDR",
+                            Duration = TimeSpan.FromSeconds(1500),
+                            CustomFormatScore = 800,
+                            Size = 300,
+                            RelativePath = "series/season 2/series s02e03.mkv"
+                        }
+                    }
+                ] }]
+            }] }],
+            RadarrSnapshots = [new() { InstanceId = "r", InstanceName = "Radarr", Movies = [
+                new()
+                {
+                    Title = "Movie",
+                    TitleSlug = "movie-1",
+                    Status = "released",
+                    Monitored = false,
+                    AddedAt = new DateTimeOffset(2025, 6, 1, 8, 0, 0, TimeSpan.Zero),
+                    AirDateUtc = new DateTimeOffset(2024, 11, 8, 0, 0, 0, TimeSpan.Zero),
+                    PosterRemoteUrl = "https://poster.example/movie.jpg",
+                    Profile = new MediaProfileSnapshot { Name = "UHD", UpgradeUntilCustomFormatScore = 1000 },
+                    Genres = ["Drama"],
+                    Tags = ["oc"],
+                    File = new MediaFileSnapshot { VideoCodec = "AV1", Size = 500, CustomFormatScore = 1200 }
+                }
+            ] }]
+        };
+
+        CodecStatisticsResponse result = service.Build(settings, null, null);
+
+        CodecMediaFileItem episode = Assert.Single(result.VideoCodecs.Single(item => item.Label == "HEVC").MediaFiles);
+        Assert.Equal(2, episode.SeasonNumber);
+        Assert.Equal(3, episode.EpisodeNumber);
+        Assert.True(episode.Monitored);
+        Assert.Equal(new DateTimeOffset(2026, 1, 5, 20, 0, 0, TimeSpan.Zero), episode.AirDateUtc);
+        Assert.Equal("HD", episode.QualityProfileName);
+        Assert.Equal(1500, episode.UpgradeUntilCustomFormatScore);
+        Assert.Equal(800, episode.CustomFormatScore);
+        Assert.Null(episode.Status);
+        Assert.Null(episode.PosterUrl);
+        Assert.Equal("1080p", episode.MediaDetails!.Resolution);
+        Assert.Equal("1920x1080", episode.MediaDetails.OriginalResolution);
+        Assert.Equal("HEVC", episode.MediaDetails.VideoCodec);
+        Assert.Equal("AAC", episode.MediaDetails.AudioCodec);
+        Assert.Equal("SDR", episode.MediaDetails.DynamicRange);
+        Assert.Equal("MKV", episode.MediaDetails.ContainerFormat);
+        Assert.Equal(1500d, episode.MediaDetails.DurationSeconds);
+        Assert.Equal(300, episode.MediaDetails.Size);
+
+        CodecMediaFileItem movie = Assert.Single(result.VideoCodecs.Single(item => item.Label == "AV1").MediaFiles);
+        Assert.Null(movie.SeasonNumber);
+        Assert.Null(movie.EpisodeNumber);
+        Assert.False(movie.Monitored);
+        Assert.Equal("released", movie.Status);
+        Assert.Equal("UHD", movie.QualityProfileName);
+        Assert.Equal(1000, movie.UpgradeUntilCustomFormatScore);
+        Assert.Equal(1200, movie.CustomFormatScore);
+        Assert.Equal("https://poster.example/movie.jpg", movie.PosterUrl);
+        Assert.Equal(["Drama"], movie.Genres);
+        Assert.Equal(["oc"], movie.Tags);
+        Assert.Equal("AV1", movie.MediaDetails!.VideoCodec);
+
+        CodecStatisticsResponse compact = CodecStatisticsTransport.Compact(result);
+        CodecMediaFileItem compactEpisode = compact.Files!.Single(file => file.EpisodeNumber == 3);
+        Assert.Equal("1080p", compactEpisode.MediaDetails!.Resolution);
+        Assert.Equal(1500, compactEpisode.UpgradeUntilCustomFormatScore);
+    }
+
+    [Fact]
     public void Build_ShouldNormalizeContainerValues_AndKeepDynamicRangeRaw()
     {
         AppSettings settings = new()
