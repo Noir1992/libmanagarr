@@ -1,13 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { existsSync, statSync } from 'node:fs';
-import { login, prepareAccount } from '../fixtures/app.js';
+import { login, mutation, prepareAccount } from '../fixtures/app.js';
 import { configureLibrary } from '../fixtures/library.js';
 import { configureSymlinks, episode, managedLinks, rowsOf, seededPair, seriesOf } from '../fixtures/symlinks.js';
 
 test('E16: a declined pair stays declined through another sync and changes nothing on disk', async ({ request, page }) => {
   await prepareAccount(request);
   const pair = await seededPair(request);
-  await configureLibrary(request);
+  const instances = await configureLibrary(request);
   await configureSymlinks(request);
 
   await login(page);
@@ -29,7 +29,12 @@ test('E16: a declined pair stays declined through another sync and changes nothi
   await expect(rejection.getByText('Belongs to the series, not to this shelf', { exact: true })).toBeVisible();
 
   // Another synchronization and another matching pass must not bring the decision back as an offer.
-  await configureLibrary(request);
+  // Keep the instance IDs: reconfiguring without IDs would create a different pair.
+  for (const kind of ['sonarr', 'radarr'] as const)
+    await mutation(request, 'post', '/api/settings/sync', {
+      kind: kind === 'sonarr' ? 'Sonarr' : 'Radarr',
+      instanceId: instances[`${kind}Instances`][0].id,
+    });
   await page.getByRole('button', { name: 'Match again', exact: true }).click();
   await expect(rowsOf(page, 'Suggestions')).toHaveCount(0);
   await expect(rejection).toHaveCount(1);
