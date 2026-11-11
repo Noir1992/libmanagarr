@@ -29,46 +29,34 @@ describe('ReleasesService', () => {
   });
 
   it('reads the release list from the release endpoint', async () => {
-    const load: Promise<void> = service.loadAsync(false);
+    const load: Promise<void> = service.loadAsync();
 
     const request: TestRequest = httpTestingController.expectOne('/api/releases/');
     expect(request.request.method).toBe('GET');
-    request.flush(overview('Ok', ['1.4.0', '1.3.0'], false));
+    request.flush(overview('Ok', ['1.4.0', '1.3.0'], true));
 
     await load;
 
     expect(service.versions().map((version) => version.version)).toEqual(['1.4.0', '1.3.0']);
     expect(service.currentVersion()).toBe('1.3.0');
-    expect(service.updateAvailable()).toBeFalse();
+    expect(service.updateAvailable()).toBeTrue();
     expect(service.loadError()).toBeNull();
   });
 
-  it('asks the backend to re-read the release list on a refresh', async () => {
-    const load: Promise<void> = service.loadAsync(true);
-
-    const request: TestRequest = httpTestingController.expectOne('/api/releases/refresh');
-    expect(request.request.method).toBe('POST');
-    request.flush(overview('Ok', ['1.5.0'], true));
-
-    await load;
-
-    expect(service.updateAvailable()).toBeTrue();
-  });
-
   it('names the failure without dropping the state of a failed read', async () => {
-    const first: Promise<void> = service.loadAsync(false);
+    const first: Promise<void> = service.loadAsync();
     httpTestingController.expectOne('/api/releases/').flush(overview('Ok', ['1.3.0'], false));
     await first;
 
-    const second: Promise<void> = service.loadAsync(true);
-    httpTestingController.expectOne('/api/releases/refresh').flush({}, { status: 503, statusText: 'Unavailable' });
+    const second: Promise<void> = service.loadAsync();
+    httpTestingController.expectOne('/api/releases/').flush({}, { status: 503, statusText: 'Unavailable' });
     await second;
 
     expect(service.loadError()).toBe('releases.unreachable');
     expect(service.loading()).toBeFalse();
   });
 
-  it('probes once per session while a refresh stays explicit', async () => {
+  it('probes once per session', async () => {
     const firstProbe: Promise<void> = service.loadOnceAsync();
     httpTestingController.expectOne('/api/releases/').flush(overview('Ok', ['1.3.0'], false));
     await firstProbe;
@@ -99,7 +87,6 @@ describe('ReleasesService', () => {
       checkedAt: '2026-11-02T10:00:00.000Z',
       versions: versions.map((version): ReleaseOverview['versions'][number] => ({
         version,
-        name: `Release ${version}`,
         tag: `v${version}`,
         publishedAt: '2026-11-01T10:00:00.000Z',
         notes: 'Notes',
@@ -107,7 +94,6 @@ describe('ReleasesService', () => {
         isPrerelease: false,
         isCurrent: version === '1.3.0',
         isNewerThanCurrent: updateAvailable && version !== '1.3.0',
-        pullReference: `ghcr.io/noir1992/libmanagarr:${version}`,
       })),
     };
   }

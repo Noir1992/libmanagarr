@@ -53,6 +53,20 @@ public sealed class ScheduledTaskService(IScheduledTaskStore store, ScheduledTas
         return errors;
     }
 
+    // Brings a task to the front of its schedule without touching its configuration, so the next
+    // scheduler tick runs it. A task that is already due or switched off keeps its state.
+    public async Task MarkDueNowAsync(string key, CancellationToken token)
+    {
+        ScheduledTask task = await GetAsync(key, token);
+        DateTimeOffset now = clock.GetUtcNow();
+        if (!task.Enabled || task.NextRunAt is DateTimeOffset planned && planned <= now)
+        {
+            return;
+        }
+
+        await store.UpdateRunAsync(key, task.Revision, task.LastRunAt, now, token);
+    }
+
     private ScheduledTask ApplyCapabilities(ScheduledTask task)
     {
         ScheduledTaskDefinition definition = RequireDefinition(task.TaskKey);

@@ -7,27 +7,6 @@
   </section>
 
   <section class="page-content">
-    <div class="releases-summary">
-      <div class="releases-summary-version">
-        <span class="releases-summary-label">{{ currentLabel() }}</span>
-        <span class="releases-summary-value">{{ runningVersion() }}</span>
-      </div>
-      <div class="releases-summary-meta">
-        @if (checkedAtLabel(); as checkedAt) {
-          <span class="releases-summary-checked">{{ checkedAt }}</span>
-        }
-        <button
-          type="button"
-          class="releases-refresh-button"
-          [attr.aria-label]="refreshLabel()"
-          [disabled]="loading()"
-          (click)="refreshAsync()"
-        >
-          <mat-icon class="material-symbols-outlined" aria-hidden="true">refresh</mat-icon>
-        </button>
-      </div>
-    </div>
-
     @if (isBusy()) {
       <app-loading-section />
     } @else if (loadError(); as error) {
@@ -43,8 +22,13 @@
           @for (release of versions(); track release.tag) {
             <li class="release-entry">
               <header class="release-entry-header">
-                <h2 class="release-entry-title">{{ release.name }}</h2>
                 <span class="release-entry-version">{{ release.version }}</span>
+                @if (release.url.length > 0) {
+                  <a class="release-entry-link" [href]="release.url" target="_blank" rel="noopener" aria-label="GitHub">
+                    <mat-icon class="material-symbols-outlined" aria-hidden="true">link</mat-icon>
+                  </a>
+                }
+                <span class="release-entry-date">{{ publishedAtLabel(release) }}</span>
                 @if (release.isCurrent) {
                   <span class="release-entry-badge" data-state="current">{{ currentLabel() }}</span>
                 }
@@ -55,19 +39,9 @@
                   <span class="release-entry-badge" data-state="prerelease">{{ prereleaseLabel() }}</span>
                 }
               </header>
-              <p class="release-entry-meta">
-                <span class="release-entry-date">{{ publishedLabel(release) }}</span>
-                @if (release.url.length > 0) {
-                  <a class="release-entry-link" [href]="release.url" target="_blank" rel="noopener">GitHub</a>
-                }
-              </p>
               @if (release.notes; as notes) {
-                <pre class="release-entry-notes">{{ notes }}</pre>
+                <div class="release-entry-notes markdown" [innerHTML]="notes | markdown"></div>
               }
-              <p class="release-entry-pull">
-                <span class="release-entry-pull-label" [title]="pullLabel()">{{ pullLabel() }}</span>
-                <code class="release-entry-pull-value">{{ release.pullReference }}</code>
-              </p>
             </li>
           }
         </ol>

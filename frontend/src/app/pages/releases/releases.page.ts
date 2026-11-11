@@ -7,6 +7,7 @@ import { AppI18nService } from '../../services/app-i18n.service';
 import { AppSettingsService } from '../../services/app-settings.service';
 import { ReleasesService } from '../../services/releases.service';
 import { TranslationKey } from '../../services/i18n/_i18n-key';
+import { MarkdownPipe } from '../../pipes/markdown.pipe';
 import { LoadingErrorSectionWidget } from '../../widgets/sections/loading-error-section/loading-error-section.widget';
 import { LoadingSectionWidget } from '../../widgets/sections/loading-section/loading-section.widget';
 
@@ -18,7 +19,7 @@ const STATUS_NOTICE_KEYS: Record<Exclude<ReleaseOverview['status'], 'Ok'>, Trans
 
 @Component({
   selector: 'app-releases-page',
-  imports: [MatIcon, LoadingErrorSectionWidget, LoadingSectionWidget],
+  imports: [MatIcon, MarkdownPipe, LoadingErrorSectionWidget, LoadingSectionWidget],
   templateUrl: './releases.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './releases.page.scss',
@@ -32,11 +33,9 @@ export class ReleasesPage implements OnInit {
   /* I18n signals */
   protected readonly title: Signal<string> = computed((): string => this.i18n.t('releases.title'));
   protected readonly description: Signal<string> = computed((): string => this.i18n.t('releases.description'));
-  protected readonly refreshLabel: Signal<string> = computed((): string => this.i18n.t('releases.refresh'));
   protected readonly currentLabel: Signal<string> = computed((): string => this.i18n.t('releases.current'));
   protected readonly newerLabel: Signal<string> = computed((): string => this.i18n.t('releases.newer'));
   protected readonly prereleaseLabel: Signal<string> = computed((): string => this.i18n.t('releases.prerelease'));
-  protected readonly pullLabel: Signal<string> = computed((): string => this.i18n.t('releases.pull'));
   protected readonly emptyText: Signal<string> = computed((): string => this.i18n.t('releases.empty'));
 
   /* State signals */
@@ -46,13 +45,7 @@ export class ReleasesPage implements OnInit {
   protected readonly versions: Signal<readonly ReleaseVersion[]> = this.releasesService.versions;
 
   /* Derived labels */
-  protected readonly runningVersion: Signal<string> = this.releasesService.currentVersion;
   protected readonly noDataAvailable: Signal<boolean> = computed((): boolean => this.overview() !== null && this.versions().length === 0);
-  protected readonly checkedAtLabel: Signal<string> = computed((): string => {
-    const overview: ReleaseOverview | null = this.overview();
-
-    return overview === null ? '' : this.i18n.t('releases.checkedAt', { date: this.formatInstant(overview.checkedAt) });
-  });
 
   // An unreachable release host is a normal outcome, so it is named next to the last known list
   // instead of being raised as a load error.
@@ -68,16 +61,12 @@ export class ReleasesPage implements OnInit {
 
   /* Lifecycle */
   ngOnInit(): void {
-    void this.releasesService.loadAsync(false);
+    void this.releasesService.loadAsync();
   }
 
   /* Handlers */
-  protected async refreshAsync(): Promise<void> {
-    await this.releasesService.loadAsync(true);
-  }
-
-  protected publishedLabel(release: ReleaseVersion): string {
-    return this.i18n.t('releases.published', { date: this.formatInstant(release.publishedAt) });
+  protected publishedAtLabel(release: ReleaseVersion): string {
+    return this.formatInstant(release.publishedAt);
   }
 
   protected isBusy(): boolean {

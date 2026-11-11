@@ -1,6 +1,5 @@
 import { provideHttpClient, withXhr } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { TestRequest } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReleaseOverview } from '../../interfaces/releases/release-overview';
 import { AppI18nService } from '../../services/app-i18n.service';
@@ -24,16 +23,13 @@ describe('ReleasesPage', () => {
               ({
                 'releases.title': 'What is new',
                 'releases.description': 'Release notes description',
-                'releases.current': 'Running version',
+                'releases.current': 'Current version',
                 'releases.newer': 'Newer than installed',
                 'releases.prerelease': 'Prerelease',
-                'releases.pull': 'Container image',
                 'releases.empty': 'No published releases are available yet.',
                 'releases.unreachable': 'The published releases could not be fetched.',
                 'releases.rateLimited': 'GitHub is not answering further requests right now.',
                 'releases.rejected': 'GitHub rejected the request.',
-                'releases.published': 'Published on {date}',
-                'releases.checkedAt': 'Checked on {date}',
               })[key] ?? key,
           },
         },
@@ -59,11 +55,12 @@ describe('ReleasesPage', () => {
     const entries: NodeListOf<Element> = (fixture.nativeElement as HTMLElement).querySelectorAll('.release-entry');
 
     expect(entries).toHaveSize(2);
-    expect(entries[0].querySelector('.release-entry-title')?.textContent).toContain('Version 1.4.0');
+    expect(entries[0].querySelector('.release-entry-version')?.textContent).toContain('1.4.0');
+    expect(entries[0].querySelector('.release-entry-link')?.getAttribute('href')).toContain('/releases/tag/v1.4.0');
+    expect(entries[0].querySelector('.release-entry-date')?.textContent).toMatch(/\d{1,2}:\d{2}/);
     expect(entries[0].querySelector('[data-state="newer"]')?.textContent).toContain('Newer than installed');
-    expect(entries[1].querySelector('[data-state="current"]')?.textContent).toContain('Running version');
-    expect(entries[1].querySelector('.release-entry-notes')?.textContent).toContain('Fixed the calendar');
-    expect(entries[1].querySelector('.release-entry-pull-value')?.textContent).toContain('ghcr.io/noir1992/libmanagarr:1.3.0');
+    expect(entries[1].querySelector('[data-state="current"]')?.textContent).toContain('Current version');
+    expect(entries[1].querySelector('.release-entry-notes li')?.textContent).toContain('Fixed the calendar');
   });
 
   it('names an unreachable release host next to the last known list', async () => {
@@ -79,31 +76,6 @@ describe('ReleasesPage', () => {
 
     expect(compiled.querySelector('.releases-notice')?.textContent).toContain('The published releases could not be fetched.');
     expect(compiled.querySelector('.releases-empty')?.textContent).toContain('No published releases are available yet.');
-    expect(compiled.querySelector('.releases-summary-value')?.textContent).toContain('1.3.0');
-    expect(compiled.querySelector('.releases-summary-checked')?.textContent).toContain('Checked on');
-  });
-
-  it('re-reads the release list through the refresh action', async () => {
-    fixture.detectChanges();
-
-    httpTestingController.expectOne('/api/releases/').flush(overview('Ok'));
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const refreshButton: HTMLButtonElement | null = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
-      '.releases-refresh-button',
-    );
-    expect(refreshButton?.disabled).toBeFalse();
-
-    refreshButton?.click();
-
-    const refreshRequest: TestRequest = httpTestingController.expectOne('/api/releases/refresh');
-    expect(refreshRequest.request.method).toBe('POST');
-    refreshRequest.flush(overview('Ok', { versions: ['2.0.0'] }));
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.release-entry')).toHaveSize(1);
   });
 
   it('reports a failed read instead of leaving the page empty', async () => {
@@ -139,15 +111,13 @@ describe('ReleasesPage', () => {
       checkedAt: overrides?.checkedAt ?? '2026-11-02T09:30:00.000Z',
       versions: versions.map((version): ReleaseOverview['versions'][number] => ({
         version,
-        name: `Version ${version}`,
         tag: `v${version}`,
         publishedAt: '2026-11-01T08:00:00.000Z',
-        notes: version === '1.3.0' ? 'Fixed the calendar' : '',
+        notes: version === '1.3.0' ? '- Fixed the calendar' : '',
         url: `https://github.com/Noir1992/libmanagarr/releases/tag/v${version}`,
         isPrerelease: false,
         isCurrent: version === '1.3.0',
         isNewerThanCurrent: version !== '1.3.0',
-        pullReference: `ghcr.io/noir1992/libmanagarr:${version}`,
       })),
     };
   }

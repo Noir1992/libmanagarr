@@ -4,8 +4,6 @@ public sealed class ReleaseVersion
 {
     public required string Version { get; init; }
 
-    public required string Name { get; init; }
-
     public required string Tag { get; init; }
 
     public required DateTimeOffset PublishedAt { get; init; }
@@ -19,6 +17,4 @@ public sealed class ReleaseVersion
     public required bool IsCurrent { get; init; }
 
     public required bool IsNewerThanCurrent { get; init; }
-
-    public required string PullReference { get; init; }
 }

@@ -21,7 +21,9 @@ export class ReleasesService {
   readonly currentVersion: Signal<string> = computed((): string => this.overviewState()?.currentVersion ?? '');
   readonly updateAvailable: Signal<boolean> = computed((): boolean => this.overviewState()?.updateAvailable ?? false);
 
-  async loadAsync(refresh: boolean): Promise<void> {
+  // The releaseCheck scheduled task decides when GitHub is asked; the browser only ever reads
+  // the stored overview.
+  async loadAsync(): Promise<void> {
     if (this.loadingState()) {
       return;
     }
@@ -30,9 +32,7 @@ export class ReleasesService {
     this.loadErrorState.set(null);
 
     try {
-      const overview: ReleaseOverview = await firstValueFrom(
-        refresh ? this.http.post<ReleaseOverview>(`${this.apiUrl}/refresh`, {}) : this.http.get<ReleaseOverview>(`${this.apiUrl}/`),
-      );
+      const overview: ReleaseOverview = await firstValueFrom(this.http.get<ReleaseOverview>(`${this.apiUrl}/`));
       this.overviewState.set(overview);
     } catch {
       this.loadErrorState.set(this.i18n.t('releases.unreachable'));
@@ -42,13 +42,13 @@ export class ReleasesService {
     }
   }
 
-  // The navigation shows the version on every shell render, so the first answer is kept and
-  // refreshed only when the page asks for it.
+  // The navigation shows the version on every shell render, so the answer is kept for the whole
+  // session and the shell does not poll the endpoint on every navigation.
   async loadOnceAsync(): Promise<void> {
     if (this.attempted || this.overviewState() !== null) {
       return;
     }
 
-    await this.loadAsync(false);
+    await this.loadAsync();
   }
 }

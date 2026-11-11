@@ -18,38 +18,22 @@ public sealed partial class ReleaseOverviewService(
     // unrelated to any published release and must never raise the update hint.
     public const string DevelopmentVersion = "1.0.0";
 
-    private static readonly SemaphoreSlim RequestGate = new(1, 1);
-
     // The assembly value is the only one for a running instance; tests initialise the property
     // with the version they need to exercise the comparison rules.
     public string CurrentVersion { get; init; } = ReadBuildVersion();
 
-    public Task<ReleaseOverview> GetOverviewAsync(CancellationToken cancellationToken) =>
-        GetOverviewAsync(refresh: false, cancellationToken);
-
-    public async Task<ReleaseOverview> GetOverviewAsync(bool refresh, CancellationToken cancellationToken)
+    // Page reads never leave the process: they serve the stored snapshot, empty until the first
+    // scheduled check has landed. Only the releaseCheck task asks GitHub, through RefreshAsync.
+    public Task<ReleaseOverview> GetOverviewAsync(CancellationToken cancellationToken)
     {
-        if (cache.TryGetFresh(refresh, out IReadOnlyList<ReleaseVersion> versions, out ReleaseOverviewStatus status, out DateTimeOffset checkedAt))
-        {
-            return MapOverview(versions, status, checkedAt);
-        }
+        cache.TryGet(out IReadOnlyList<ReleaseVersion> versions, out ReleaseOverviewStatus status, out DateTimeOffset checkedAt);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        await RequestGate.WaitAsync(cancellationToken);
-        try
-        {
-            // A concurrent request may have filled the store while this one waited for the gate.
-            if (cache.TryGetFresh(refresh, out versions, out status, out checkedAt))
-            {
-                return MapOverview(versions, status, checkedAt);
-            }
-
-            return await FetchOverviewAsync(cancellationToken);
-        }
-        finally
-        {
-            RequestGate.Release();
-        }
+        return Task.FromResult(MapOverview(versions, status, checkedAt));
     }
+
+    // The task scheduler already runs one releaseCheck at a time, so the fetch needs no own gate.
+    public Task<ReleaseOverview> RefreshAsync(CancellationToken cancellationToken) => FetchOverviewAsync(cancellationToken);
 
     // The running instance only ever learns its own version from the assembly, because the
     // release image is the single artifact that ships without a source tree to read it from.
@@ -141,7 +125,6 @@ public sealed partial class ReleaseOverviewService(
         return new ReleaseVersion
         {
             Version = version,
-            Name = string.IsNullOrWhiteSpace(resource.Name) ? version : resource.Name!,
             Tag = tag,
             PublishedAt = resource.PublishedAt ?? default,
             Notes = string.IsNullOrWhiteSpace(resource.Body) ? null : resource.Body,
@@ -149,8 +132,7 @@ public sealed partial class ReleaseOverviewService(
             IsPrerelease = resource.Prerelease,
             IsCurrent = comparisonToCurrent == 0 && releaseParts is not null && currentParts is not null,
             // A prerelease competes with nothing: the hint is reserved for stable releases.
-            IsNewerThanCurrent = !resource.Prerelease && comparisonToCurrent > 0,
-            PullReference = $"ghcr.io/{GitHubReleasesClient.RepositoryOwner.ToLowerInvariant()}/{GitHubReleasesClient.RepositoryName}:{version}"
+            IsNewerThanCurrent = !resource.Prerelease && comparisonToCurrent > 0
         };
     }
 

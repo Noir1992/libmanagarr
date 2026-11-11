@@ -84,12 +84,12 @@
           [attr.title]="updateAvailable() ? updateAvailableHint() : null"
           (click)="closeNavigation()"
         >
-          <mat-icon class="material-symbols-outlined navigation-version-icon" [class.is-visible]="updateAvailable()" aria-hidden="true"
-            >priority_high</mat-icon
-          >
           <span class="navigation-version-body">
             <span class="navigation-version-label">{{ versionLabel() }}</span>
             <span class="navigation-version-value">{{ runningVersion() || releasesLabel() }}</span>
+            <mat-icon class="material-symbols-outlined navigation-version-icon" [class.is-visible]="updateAvailable()" aria-hidden="true"
+              >priority_high</mat-icon
+            >
           </span>
         </a>
       </nav>

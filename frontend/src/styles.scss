@@ -346,3 +346,99 @@ button.cancel-button {
     opacity: 0;
   }
 }
+
+// Html produced by the markdown pipe is inserted with innerHTML, so the browser defaults of its
+// elements reach the page unscoped; this sheet gives them the compact app look back.
+.markdown {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 0.9em 0 0.4em;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  p {
+    margin: 0 0 0.5em;
+  }
+
+  ul,
+  ol {
+    margin: 0 0 0.5em;
+    padding-left: 1.4em;
+  }
+
+  li {
+    margin: 0.15em 0;
+  }
+
+  a {
+    color: var(--theme-accent);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--theme-link-hover);
+      text-decoration: underline;
+    }
+  }
+
+  code {
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    background: var(--theme-interactive-hover-bg);
+    font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    font-size: 0.85em;
+  }
+
+  pre {
+    margin: 0 0 0.5em;
+    padding: 0.6em 0.8em;
+    border-radius: 6px;
+    background: var(--theme-interactive-hover-bg);
+    overflow-x: auto;
+  }
+
+  pre code {
+    padding: 0;
+    background: none;
+  }
+
+  blockquote {
+    margin: 0 0 0.5em;
+    padding-left: 0.8em;
+    border-left: 3px solid var(--theme-border);
+    color: var(--theme-muted);
+  }
+
+  hr {
+    margin: 0.8em 0;
+    border: none;
+    border-top: 1px solid var(--theme-border);
+  }
+
+  img {
+    max-width: 100%;
+  }
+
+  table {
+    margin: 0 0 0.5em;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    padding: 0.25em 0.6em;
+    border: 1px solid var(--theme-border);
+  }
+
+  > :first-child {
+    margin-top: 0;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+}

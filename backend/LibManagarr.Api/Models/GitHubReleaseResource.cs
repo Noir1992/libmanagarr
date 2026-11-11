@@ -7,9 +7,6 @@ public sealed class GitHubReleaseResource
     [JsonPropertyName("tag_name")]
     public string? TagName { get; init; }
 
-    [JsonPropertyName("name")]
-    public string? Name { get; init; }
-
     [JsonPropertyName("body")]
     public string? Body { get; init; }
 

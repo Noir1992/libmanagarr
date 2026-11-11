@@ -8,16 +8,20 @@ type TranslateFn = (key: TranslationKey, params?: Record<string, string>) => str
 const TASK_NAME_KEYS: Readonly<Record<string, TranslationKey>> = {
   arrDataSync: 'settings.tasks.dataSync.title',
   cleanup: 'settings.tasks.cleanup.title',
+  releaseCheck: 'settings.tasks.releaseCheck.title',
   symlinkHealthCheck: 'settings.tasks.healthCheck.title',
 };
 
 export function buildTaskRows(scheduledTasks: ScheduledTasks, translate: TranslateFn): ScheduledTaskRow[] {
-  return scheduledTasks.map((task) => ({
-    ...task,
-    name: TASK_NAME_KEYS[task.taskKey]
-      ? translate(TASK_NAME_KEYS[task.taskKey])
-      : task.taskKey.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' '),
-  }));
+  // The table is read by name, so rows arrive in alphabetical order of the displayed name.
+  return scheduledTasks
+    .map((task) => ({
+      ...task,
+      name: TASK_NAME_KEYS[task.taskKey]
+        ? translate(TASK_NAME_KEYS[task.taskKey])
+        : task.taskKey.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' '),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
 }
 
 export function describeTaskRunSchedule(task: ScheduledTaskRow, translate: TranslateFn): string {

@@ -1,7 +1,7 @@
 namespace LibManagarr.Api.Services;
 
 public sealed class ScheduledTaskBackgroundService(
-    ScheduledTaskService tasks, ScheduledTaskExecutionService execution, TimeProvider clock,
+    ScheduledTaskService tasks, ScheduledTaskExecutionService execution, ScheduledTaskCatalog catalog, TimeProvider clock,
     ILogger<ScheduledTaskBackgroundService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -9,6 +9,12 @@ public sealed class ScheduledTaskBackgroundService(
         HashSet<Task> running = [];
         try
         {
+            // Tasks that promise a look at startup become due before the first poll, so the tick
+            // that starts the scheduler is also the tick that executes them.
+            foreach (ScheduledTaskDefinition definition in catalog.Definitions)
+            {
+                if (definition.RunAtStartup) await tasks.MarkDueNowAsync(definition.TaskKey, stoppingToken);
+            }
             using PeriodicTimer timer = new(TimeSpan.FromMinutes(1), clock);
             do
             {

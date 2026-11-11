@@ -48,10 +48,11 @@ public sealed class ScheduledTaskStoreTests : IDisposable
         SqliteScheduledTaskStore store = CreateStore();
         ScheduledTaskService service = new(store, CreateCatalog(), clock);
         IReadOnlyList<ScheduledTask> tasks = await service.GetAllAsync(CancellationToken.None);
-        Assert.Equal(3, tasks.Count);
+        Assert.Equal(4, tasks.Count);
         ScheduledTask sync = tasks.Single(task => task.TaskKey == "arrDataSync");
         ScheduledTask cleanup = tasks.Single(task => task.TaskKey == "cleanup");
         ScheduledTask health = tasks.Single(task => task.TaskKey == "symlinkHealthCheck");
+        ScheduledTask release = tasks.Single(task => task.TaskKey == "releaseCheck");
         Assert.True(sync.Enabled);
         Assert.False(sync.ReadOnly);
         Assert.True(sync.CanRunManually);
@@ -71,6 +72,14 @@ public sealed class ScheduledTaskStoreTests : IDisposable
         Assert.Equal(ScheduleMode.DailyAtTime, cleanup.ScheduleMode);
         Assert.Equal(0, cleanup.TimeHour);
         Assert.True(cleanup.NextRunAt > clock.GetUtcNow());
+        // The release check keeps a fixed rhythm nobody edits, but its look-up can be triggered by hand.
+        Assert.True(release.Enabled);
+        Assert.True(release.ReadOnly);
+        Assert.True(release.CanRunManually);
+        Assert.Equal(ScheduleMode.Interval, release.ScheduleMode);
+        Assert.Equal(ScheduleIntervalUnit.Hour, release.IntervalUnit);
+        Assert.Equal(12, release.IntervalValue);
+        Assert.Equal(clock.GetUtcNow().AddHours(12), release.NextRunAt);
         clock.Advance(TimeSpan.FromDays(3));
         ScheduledTask restarted = (await CreateStore().GetAsync("cleanup", CancellationToken.None))!;
         Assert.Equal(cleanup.NextRunAt, restarted.NextRunAt);
@@ -260,8 +269,8 @@ public sealed class ScheduledTaskStoreTests : IDisposable
         ScheduledTaskCatalog catalog = CreateCatalog(new ScheduledTaskDefinition("thirdTask", false, true, () => new() { IntervalValue = 5 }));
         SqliteScheduledTaskStore upgraded = CreateStore(catalog);
         ScheduledTaskService service = new(upgraded, catalog, clock);
-        Assert.Equal(4, (await service.GetAllAsync(CancellationToken.None)).Count);
-        Assert.Equal(5, (await upgraded.GetAllAsync(CancellationToken.None)).Count);
+        Assert.Equal(5, (await service.GetAllAsync(CancellationToken.None)).Count);
+        Assert.Equal(6, (await upgraded.GetAllAsync(CancellationToken.None)).Count);
         ScheduledTask third = (await upgraded.GetAsync("thirdTask", CancellationToken.None))!;
         third.IntervalValue = 9;
         Assert.True(await upgraded.UpdateConfigurationAsync(third, 0, CancellationToken.None));
@@ -290,6 +299,42 @@ public sealed class ScheduledTaskStoreTests : IDisposable
         Assert.Equal(cleanup.NextRunAt, (await service.GetAsync("cleanup", CancellationToken.None)).NextRunAt);
         Assert.False(await store.UpdateRunAsync("arrDataSync", 0, clock.GetUtcNow(), null, CancellationToken.None));
         Assert.True((await service.GetAsync("arrDataSync", CancellationToken.None)).Enabled);
+    }
+
+    [Fact]
+    public async Task MarkDueNow_PullsTheFutureRunToThisInstantWithoutTouchingConfiguration()
+    {
+        SqliteScheduledTaskStore store = CreateStore();
+        ScheduledTaskService service = new(store, CreateCatalog(), clock);
+        ScheduledTask before = await service.GetAsync("releaseCheck", CancellationToken.None);
+        Assert.True(before.NextRunAt > clock.GetUtcNow());
+
+        await service.MarkDueNowAsync("releaseCheck", CancellationToken.None);
+
+        ScheduledTask after = await service.GetAsync("releaseCheck", CancellationToken.None);
+        Assert.Equal(clock.GetUtcNow(), after.NextRunAt);
+        Assert.Equal(before.IntervalValue, after.IntervalValue);
+        Assert.Equal(before.Revision, after.Revision);
+        Assert.Null(after.LastRunAt);
+    }
+
+    [Fact]
+    public async Task MarkDueNow_LeavesDisabledTasksAndAlreadyDueTasksAlone()
+    {
+        SqliteScheduledTaskStore store = CreateStore();
+        ScheduledTaskService service = new(store, CreateCatalog(), clock);
+        await service.MarkDueNowAsync("releaseCheck", CancellationToken.None);
+        DateTimeOffset dueAt = clock.GetUtcNow();
+        // A second startup while the task already sits due must not push it forward again.
+        clock.Advance(TimeSpan.FromMinutes(30));
+        await service.MarkDueNowAsync("releaseCheck", CancellationToken.None);
+        Assert.Equal(dueAt, (await service.GetAsync("releaseCheck", CancellationToken.None)).NextRunAt);
+
+        await ExecuteSqlAsync("UPDATE scheduled_tasks SET enabled=0, next_run_at=NULL WHERE task_key='releaseCheck';");
+        await service.MarkDueNowAsync("releaseCheck", CancellationToken.None);
+        ScheduledTask disabled = (await store.GetAsync("releaseCheck", CancellationToken.None))!;
+        Assert.False(disabled.Enabled);
+        Assert.Null(disabled.NextRunAt);
     }
 
     internal static ScheduledTaskUpdateRequest Request(ScheduledTask task, bool enabled, int interval = 1) => new()

@@ -23,18 +23,7 @@ public sealed class ReleaseEndpointsTests
     }
 
     [Fact]
-    public async Task ReleaseRoutes_RequireCsrfTokenForTheMutatingRefresh()
-    {
-        using AuthTestAppFactory factory = new();
-        using HttpClient client = factory.CreateClient();
-        await SetupAsync(client);
-        client.DefaultRequestHeaders.Remove("X-XSRF-TOKEN");
-
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync("/api/releases/refresh", null)).StatusCode);
-    }
-
-    [Fact]
-    public async Task GetReleases_AnswersWithAnEmptyOverview_WhenGitHubCannotBeReached()
+    public async Task GetReleases_ServesAnEmptyOverview_BeforeTheScheduledCheckHasLanded()
     {
         using AuthTestAppFactory factory = new();
         using WebApplicationFactory<Program> host = factory.WithWebHostBuilder((builder) => builder.ConfigureTestServices((services) =>
@@ -46,9 +35,10 @@ public sealed class ReleaseEndpointsTests
         using HttpResponseMessage response = await client.GetAsync("/api/releases");
         JsonObject overview = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
 
+        // The read answers from the stored snapshot only, so the unreachable upstream above never
+        // turns into a failure: the check belongs to the releaseCheck task, not to the browser.
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        // The failure is reported in the body instead of an error status, so the navigation stays cheap.
-        Assert.Equal("Unreachable", overview["status"]!.GetValue<string>());
+        Assert.Equal("Ok", overview["status"]!.GetValue<string>());
         Assert.False(overview["updateAvailable"]!.GetValue<bool>());
         Assert.Empty(overview["versions"]!.AsArray());
         Assert.True(overview["currentVersion"]!.GetValue<string>().Length > 0);
@@ -57,24 +47,15 @@ public sealed class ReleaseEndpointsTests
     }
 
     [Fact]
-    public async Task RefreshReleases_ServesTheOverviewFromTheStubbedUpstream_WithCsrfToken()
+    public async Task RefreshRoute_IsGoneNowThatTheScheduledTaskOwnsTheTrigger()
     {
         using AuthTestAppFactory factory = new();
-        using WebApplicationFactory<Program> host = factory.WithWebHostBuilder((builder) => builder.ConfigureTestServices((services) =>
-            services.AddHttpClient<GitHubReleasesClient>().ConfigurePrimaryHttpMessageHandler(
-                () => new StubHandler("""
-                    [ { "tag_name": "v9.9.9", "name": "Future", "body": "notes", "html_url": "https://example.test/v9.9.9",
-                        "published_at": "2026-10-28T09:12:00Z", "prerelease": false, "draft": false } ]
-                    """))));
-        using HttpClient client = host.CreateClient();
+        using HttpClient client = factory.CreateClient();
         await SetupAsync(client);
 
         using HttpResponseMessage response = await client.PostAsync("/api/releases/refresh", null);
-        JsonObject overview = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("Ok", overview["status"]!.GetValue<string>());
-        Assert.Equal("v9.9.9", overview["versions"]!.AsArray()[0]!["tag"]!.GetValue<string>());
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -113,18 +94,6 @@ public sealed class ReleaseEndpointsTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             throw failure;
-        }
-    }
-
-    private sealed class StubHandler(string json) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(json, Encoding.UTF8, "application/json"),
-                RequestMessage = request
-            });
         }
     }
 }

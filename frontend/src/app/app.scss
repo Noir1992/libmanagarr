@@ -125,8 +125,23 @@
           background: color-mix(in srgb, var(--theme-version-entry) 22%, transparent);
         }
 
+        // Without a leading icon the entry carries its content alone: one centered line of label,
+        // version and update hint. The hidden icon keeps its place, revealing without a layout jump.
+        .navigation-version-body {
+          grid-column: 1 / -1;
+          display: flex;
+          gap: 5px;
+          align-items: center;
+          justify-content: center;
+          min-width: 0;
+        }
+
         .navigation-version-icon {
-          justify-self: center;
+          flex: 0 0 auto;
+          width: 18px;
+          height: 18px;
+          font-size: 18px;
+          line-height: 18px;
           color: var(--theme-update-indicator);
           visibility: hidden;
 
@@ -135,24 +150,14 @@
           }
         }
 
-        .navigation-version-body {
-          display: grid;
-          gap: 1px;
-          justify-items: start;
-          min-width: 0;
-        }
-
-        // The caption stays behind the version it names, which is the only value in this entry.
         .navigation-version-label {
-          font-size: 0.7rem;
+          flex: 0 0 auto;
           font-weight: 400;
-          line-height: 1.2;
         }
 
         .navigation-version-value {
-          max-width: 100%;
+          min-width: 0;
           overflow: hidden;
-          font-size: 0.85rem;
           text-overflow: ellipsis;
           white-space: nowrap;
         }

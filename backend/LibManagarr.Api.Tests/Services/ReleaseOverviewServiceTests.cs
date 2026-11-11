@@ -42,12 +42,12 @@ public sealed class ReleaseOverviewServiceTests
         """;
 
     [Fact]
-    public async Task GetOverview_MarksTheRunningVersionAndFlagsNewerStableReleases()
+    public async Task Refresh_MarksTheRunningVersionAndFlagsNewerStableReleases()
     {
         FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 2, 14, 3, 0, TimeSpan.Zero));
         ReleaseOverviewService service = CreateService(time, new StubHandler(ReleaseJson), currentVersion: "1.2.3");
 
-        ReleaseOverview overview = await service.GetOverviewAsync(CancellationToken.None);
+        ReleaseOverview overview = await service.RefreshAsync(CancellationToken.None);
 
         Assert.Equal(ReleaseOverviewStatus.Ok, overview.Status);
         Assert.Equal("1.2.3", overview.CurrentVersion);
@@ -60,33 +60,29 @@ public sealed class ReleaseOverviewServiceTests
         ReleaseVersion newer = overview.Versions[0];
         Assert.False(newer.IsCurrent);
         Assert.True(newer.IsNewerThanCurrent);
-        Assert.Equal("Version 1.4.0", newer.Name);
         Assert.Equal("v1.4.0", newer.Tag);
         Assert.Equal("- Release-Kalender ergaenzt", newer.Notes);
-        Assert.Equal("ghcr.io/noir1992/libmanagarr:1.4.0", newer.PullReference);
 
         ReleaseVersion running = overview.Versions[1];
         Assert.True(running.IsCurrent);
         Assert.False(running.IsNewerThanCurrent);
-        // A release without a name falls back to its version so the list is never blank.
-        Assert.Equal("1.2.3", running.Name);
         Assert.Null(running.Notes);
     }
 
     [Fact]
-    public async Task GetOverview_KeepsTheHintOffWhenTheRunningVersionIsTheNewestRelease()
+    public async Task Refresh_KeepsTheHintOffWhenTheRunningVersionIsTheNewestRelease()
     {
         FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 2, 14, 3, 0, TimeSpan.Zero));
         ReleaseOverviewService service = CreateService(time, new StubHandler(ReleaseJson), currentVersion: "v1.4.0");
 
-        ReleaseOverview overview = await service.GetOverviewAsync(CancellationToken.None);
+        ReleaseOverview overview = await service.RefreshAsync(CancellationToken.None);
 
         Assert.False(overview.UpdateAvailable);
         Assert.True(overview.Versions[0].IsCurrent);
     }
 
     [Fact]
-    public async Task GetOverview_KeepsTheHintOffForPrereleasesAndBuildsWithoutAReleaseNumber()
+    public async Task Refresh_KeepsTheHintOffForPrereleasesAndBuildsWithoutAReleaseNumber()
     {
         FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 2, 14, 3, 0, TimeSpan.Zero));
         const string PrereleaseJson = """
@@ -104,28 +100,28 @@ public sealed class ReleaseOverviewServiceTests
             """;
 
         ReleaseOverview prerelease = await CreateService(time, new StubHandler(PrereleaseJson), currentVersion: "1.3.0")
-            .GetOverviewAsync(CancellationToken.None);
+            .RefreshAsync(CancellationToken.None);
         Assert.True(prerelease.Versions[0].IsPrerelease);
         Assert.False(prerelease.Versions[0].IsNewerThanCurrent);
         Assert.False(prerelease.UpdateAvailable);
 
         // An edge identifier carries no release number, so nothing can be newer than it.
         ReleaseOverview edge = await CreateService(time, new StubHandler(ReleaseJson), currentVersion: "edge-sha-a03cf0d")
-            .GetOverviewAsync(CancellationToken.None);
+            .RefreshAsync(CancellationToken.None);
         Assert.Equal("edge-sha-a03cf0d", edge.CurrentVersion);
         Assert.False(edge.UpdateAvailable);
         Assert.DoesNotContain(edge.Versions, version => version.IsCurrent);
     }
 
     [Fact]
-    public async Task GetOverview_KeepsTheDevelopmentVersionOutOfTheComparison()
+    public async Task Refresh_KeepsTheDevelopmentVersionOutOfTheComparison()
     {
         FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 2, 14, 3, 0, TimeSpan.Zero));
 
         // A development run reports the SDK default, which matches no published release. Naming it
         // on the scale would make every release newer and light the navigation hint forever.
         ReleaseOverview overview = await CreateService(time, new StubHandler(ReleaseJson), currentVersion: "1.0.0")
-            .GetOverviewAsync(CancellationToken.None);
+            .RefreshAsync(CancellationToken.None);
 
         Assert.Equal(ReleaseOverviewStatus.Ok, overview.Status);
         Assert.Equal("1.0.0", overview.CurrentVersion);
@@ -135,39 +131,54 @@ public sealed class ReleaseOverviewServiceTests
     }
 
     [Fact]
-    public async Task GetOverview_ServesTheCachedResultUntilTheLifetimeElapses()
+    public async Task GetOverview_AnswersWithAnEmptyOverview_BeforeTheFirstScheduledCheck()
     {
         FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 2, 14, 3, 0, TimeSpan.Zero));
         StubHandler handler = new(ReleaseJson);
         ReleaseOverviewService service = CreateService(time, handler, currentVersion: "1.2.3");
 
-        await service.GetOverviewAsync(CancellationToken.None);
-        ReleaseOverview second = await service.GetOverviewAsync(CancellationToken.None);
+        ReleaseOverview overview = await service.GetOverviewAsync(CancellationToken.None);
 
+        Assert.Equal(ReleaseOverviewStatus.Ok, overview.Status);
+        Assert.Empty(overview.Versions);
+        Assert.False(overview.UpdateAvailable);
+        // The read stayed inside the process: upstream was not asked at all.
+        Assert.Equal(0, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task GetOverview_ServesTheStoredSnapshotWithoutAskingGitHubAgain()
+    {
+        FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 2, 14, 3, 0, TimeSpan.Zero));
+        StubHandler handler = new(ReleaseJson);
+        ReleaseOverviewService service = CreateService(time, handler, currentVersion: "1.2.3");
+        await service.RefreshAsync(CancellationToken.None);
+
+        ReleaseOverview read = await service.GetOverviewAsync(CancellationToken.None);
+        time.Advance(TimeSpan.FromDays(30));
+        ReleaseOverview laterRead = await service.GetOverviewAsync(CancellationToken.None);
+
+        // The rhythm lives in the task schedule, so a stored snapshot never expires on its own.
+        Assert.Equal(2, read.Versions.Count);
+        Assert.Equal(read.Versions.Select(version => version.Version), laterRead.Versions.Select(version => version.Version));
         Assert.Equal(1, handler.RequestCount);
-        Assert.Equal(2, second.Versions.Count);
-
-        time.Advance(ReleaseOverviewCache.Lifetime + TimeSpan.FromMinutes(1));
-        await service.GetOverviewAsync(CancellationToken.None);
-
-        Assert.Equal(2, handler.RequestCount);
     }
 
     [Fact]
-    public async Task GetOverview_WithRefreshBypassesTheFreshCache()
+    public async Task Refresh_AsksUpstreamOnEveryCall()
     {
         FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 2, 14, 3, 0, TimeSpan.Zero));
         StubHandler handler = new(ReleaseJson);
         ReleaseOverviewService service = CreateService(time, handler, currentVersion: "1.2.3");
 
-        await service.GetOverviewAsync(CancellationToken.None);
-        await service.GetOverviewAsync(refresh: true, CancellationToken.None);
+        await service.RefreshAsync(CancellationToken.None);
+        await service.RefreshAsync(CancellationToken.None);
 
         Assert.Equal(2, handler.RequestCount);
     }
 
     [Fact]
-    public async Task GetOverview_ReportsUnreachableWithAnEmptyListWhenGitHubCannotBeReached()
+    public async Task Refresh_ReportsUnreachableWithAnEmptyListWhenGitHubCannotBeReached()
     {
         FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 2, 14, 3, 0, TimeSpan.Zero));
         ReleaseOverviewService service = CreateService(
@@ -175,7 +186,7 @@ public sealed class ReleaseOverviewServiceTests
             new StubHandler(new HttpRequestException("no route to host")),
             currentVersion: "1.2.3");
 
-        ReleaseOverview overview = await service.GetOverviewAsync(CancellationToken.None);
+        ReleaseOverview overview = await service.RefreshAsync(CancellationToken.None);
 
         Assert.Equal(ReleaseOverviewStatus.Unreachable, overview.Status);
         Assert.Empty(overview.Versions);
@@ -187,29 +198,29 @@ public sealed class ReleaseOverviewServiceTests
     [InlineData(HttpStatusCode.TooManyRequests, ReleaseOverviewStatus.RateLimited)]
     [InlineData(HttpStatusCode.Unauthorized, ReleaseOverviewStatus.Rejected)]
     [InlineData(HttpStatusCode.InternalServerError, ReleaseOverviewStatus.Rejected)]
-    public async Task GetOverview_MapsUpstreamStatusCodesToAStatusInBody(HttpStatusCode statusCode, ReleaseOverviewStatus expected)
+    public async Task Refresh_MapsUpstreamStatusCodesToAStatusInBody(HttpStatusCode statusCode, ReleaseOverviewStatus expected)
     {
         FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 2, 14, 3, 0, TimeSpan.Zero));
         ReleaseOverviewService service = CreateService(time, new StubHandler(statusCode), currentVersion: "1.2.3");
 
-        ReleaseOverview overview = await service.GetOverviewAsync(CancellationToken.None);
+        ReleaseOverview overview = await service.RefreshAsync(CancellationToken.None);
 
         Assert.Equal(expected, overview.Status);
         Assert.False(overview.UpdateAvailable);
     }
 
     [Fact]
-    public async Task GetOverview_KeepsTheLastSuccessfulListWhenAFollowingAttemptIsRateLimited()
+    public async Task Refresh_KeepsTheLastSuccessfulListWhenTheFollowingCheckIsRateLimited()
     {
         FakeTimeProvider time = new(new DateTimeOffset(2026, 11, 2, 14, 3, 0, TimeSpan.Zero));
         StubHandler handler = new(ReleaseJson);
         ReleaseOverviewService service = CreateService(time, handler, currentVersion: "1.2.3");
         DateTimeOffset firstSuccess = time.GetUtcNow();
 
-        ReleaseOverview succeeded = await service.GetOverviewAsync(CancellationToken.None);
+        ReleaseOverview succeeded = await service.RefreshAsync(CancellationToken.None);
         handler.NextStatusCode = HttpStatusCode.Forbidden;
-        time.Advance(ReleaseOverviewCache.Lifetime + TimeSpan.FromMinutes(1));
-        ReleaseOverview rateLimited = await service.GetOverviewAsync(CancellationToken.None);
+        time.Advance(TimeSpan.FromHours(12));
+        ReleaseOverview rateLimited = await service.RefreshAsync(CancellationToken.None);
 
         Assert.Equal(ReleaseOverviewStatus.RateLimited, rateLimited.Status);
         Assert.Equal(succeeded.Versions.Select(version => version.Version), rateLimited.Versions.Select(version => version.Version));
@@ -227,7 +238,7 @@ public sealed class ReleaseOverviewServiceTests
 
         return new ReleaseOverviewService(
             client,
-            new ReleaseOverviewCache(time),
+            new ReleaseOverviewCache(),
             time,
             NullLogger<ReleaseOverviewService>.Instance)
         {
