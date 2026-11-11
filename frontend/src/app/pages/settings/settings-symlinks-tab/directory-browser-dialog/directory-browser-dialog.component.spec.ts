@@ -72,12 +72,14 @@ describe('DirectoryBrowserDialogComponent', () => {
   it('navigates to the parent with the Up icon button', async () => {
     await settle();
     browse.and.resolveTo({ path: '/', parentPath: null, canSelect: false, directories: [], truncated: false });
-    const up = fixture.nativeElement.querySelector('button[aria-label="Up"]') as HTMLButtonElement;
+    const up = fixture.nativeElement.querySelector('button[aria-label="Go to the parent directory"]') as HTMLButtonElement;
     expect(up.querySelector('mat-icon')?.textContent).toBe('arrow_upward');
     up.click();
     await settle();
     expect(browse).toHaveBeenCalledWith('/');
-    expect((fixture.nativeElement.querySelector('button[aria-label="Up"]') as HTMLButtonElement).disabled).toBeTrue();
+    expect(
+      (fixture.nativeElement.querySelector('button[aria-label="Go to the parent directory"]') as HTMLButtonElement).disabled,
+    ).toBeTrue();
   });
 
   it('returns no directory when Cancel is clicked', async () => {
