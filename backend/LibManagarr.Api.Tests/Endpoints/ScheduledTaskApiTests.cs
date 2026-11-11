@@ -36,9 +36,10 @@ public sealed class ScheduledTaskApiTests
         JsonObject cleanup = tasks.Single(task => task!["taskKey"]!.GetValue<string>() == "cleanup")!.AsObject();
         JsonObject health = tasks.Single(task => task!["taskKey"]!.GetValue<string>() == "symlinkHealthCheck")!.AsObject();
         Assert.True(sync["canRunManually"]!.GetValue<bool>());
+        Assert.True(sync["enabled"]!.GetValue<bool>());
         Assert.True(cleanup["readOnly"]!.GetValue<bool>());
         Assert.True(cleanup["canRunManually"]!.GetValue<bool>());
-        Assert.False(health["enabled"]!.GetValue<bool>());
+        Assert.True(health["enabled"]!.GetValue<bool>());
         Assert.False(health["readOnly"]!.GetValue<bool>());
         Assert.True(health["canRunManually"]!.GetValue<bool>());
         Assert.Equal(0, sync["revision"]!.GetValue<int>());

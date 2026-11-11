@@ -17,8 +17,6 @@ test('E10: task editor persists a schedule and a manual disabled task synchroniz
   await expect(dialog.getByText('Enter a value within the allowed range.', { exact: true })).toBeVisible();
   await dialog.getByLabel('Interval value*', { exact: true }).fill('24');
   const enabled = dialog.getByRole('switch', { name: 'Enabled', exact: true });
-  await expect(enabled).not.toBeChecked();
-  await enabled.click();
   await expect(enabled).toBeChecked();
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).toBeHidden();
