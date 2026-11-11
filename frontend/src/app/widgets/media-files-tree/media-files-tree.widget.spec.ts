@@ -71,9 +71,7 @@ describe('MediaFilesTreeWidget', () => {
 });
 
 function sonarrRootToggle(fixture: ComponentFixture<MediaFilesTreeWidget>): HTMLElement {
-  const toggles: HTMLElement[] = Array.from(
-    (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.root-toggle'),
-  );
+  const toggles: HTMLElement[] = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.root-toggle'));
   const sonarr: HTMLElement | undefined = toggles.find((toggle: HTMLElement) => toggle.textContent?.includes('Sonarr'));
   return sonarr!;
 }
