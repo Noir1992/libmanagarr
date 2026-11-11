@@ -13,17 +13,22 @@ public sealed class ScheduledTaskCatalog(IEnumerable<ScheduledTaskDefinition> de
 
     public static IServiceCollection AddBuiltInScheduledTasks(IServiceCollection services)
     {
-        services.AddSingleton(new ScheduledTaskDefinition("arrDataSync", false, true, () => new()));
+        // A fresh installation gets a working clock from the first start: the sync runs hourly and skips
+        // itself with one info line while no instance is configured, so an empty list costs no failed runs.
+        services.AddSingleton(new ScheduledTaskDefinition("arrDataSync", false, true, () => new()
+        {
+            Enabled = true, ScheduleMode = ScheduleMode.Interval, IntervalUnit = ScheduleIntervalUnit.Hour, IntervalValue = 1
+        }));
         services.AddSingleton(new ScheduledTaskDefinition("cleanup", true, true, () => new()
         {
             Enabled = true, ScheduleMode = ScheduleMode.DailyAtTime
         }));
-        // Nobody asked for a health pass before the feature existed, so it comes in switched off and the
-        // operator turns it on once the media tree is set up. Three in the local morning is the offer the
-        // plan makes: quiet hours for a pass that walks the shares.
+        // The health pass comes in switched on with the feature; the run itself stays quiet while the media
+        // tree is unproven and skips with one info line instead of walking shares that are not there.
+        // Three in the local morning is the offer the plan makes: quiet hours for a pass that walks the shares.
         services.AddSingleton(new ScheduledTaskDefinition("symlinkHealthCheck", false, true, () => new()
         {
-            Enabled = false, ScheduleMode = ScheduleMode.DailyAtTime, TimeHour = 3, TimeMinute = 0
+            Enabled = true, ScheduleMode = ScheduleMode.DailyAtTime, TimeHour = 3, TimeMinute = 0
         }));
         services.AddScoped<IScheduledTaskHandler, ArrDataSyncTaskHandler>();
         services.AddScoped<IScheduledTaskHandler, LogCleanupTaskHandler>();
