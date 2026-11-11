@@ -1,3 +1,5 @@
+import { CodecMediaFile } from '../codec-statistic/codec-media-file';
+
 export interface MediaTreeNode {
   key: string;
   label: string;
@@ -8,4 +10,5 @@ export interface MediaTreeNode {
   source: string;
   instanceName: string;
   url?: string | null;
+  file?: CodecMediaFile;
 }

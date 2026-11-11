@@ -15,6 +15,12 @@
             <span class="tree-name" [title]="entry.node.label">{{ entry.node.label }}</span>
             <small class="tree-meta">{{ entry.node.fileCount }} files &middot; {{ entry.node.totalSizeBytes | formatBytes }}</small>
           </button>
+        } @else if (entry.node.file) {
+          <button class="file-row" type="button" (click)="openFileDetails(entry.node)">
+            <span class="material-symbols-outlined file-icon">insert_drive_file</span>
+            <span class="tree-name" [title]="entry.node.label">{{ entry.node.label }}</span>
+            <small class="tree-meta">{{ entry.node.totalSizeBytes | formatBytes }}</small>
+          </button>
         } @else {
           <span class="file-row">
             <span class="material-symbols-outlined file-icon">insert_drive_file</span>
