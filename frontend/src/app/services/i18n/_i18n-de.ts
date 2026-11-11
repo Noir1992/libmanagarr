@@ -733,11 +733,11 @@ export const i18nDe: Record<TranslationKey, string> = {
   'settings.symlinks.enabled': 'Symlinks aktivieren',
   'settings.symlinks.enabledHint':
     'Beim Ausschalten werden Vorschläge und die Verarbeitung von Links pausiert. Vorhandene Links bleiben bestehen.',
-  'settings.symlinks.browse': 'Verzeichnisse durchsuchen',
+  'settings.symlinks.browse': 'Durchsuchen',
   'settings.symlinks.browser.hint':
     'Angezeigt werden die Verzeichnisse, die der LibManagarr-Server bzw. Container sieht. Verlinkte Verzeichnisse werden ausgeblendet.',
   'settings.symlinks.browser.locations': 'Dateisystem',
-  'settings.symlinks.browser.up': 'Nach oben',
+  'settings.symlinks.browser.up': 'Zum übergeordneten Verzeichnis wechseln',
   'settings.symlinks.browser.loading': 'Verzeichnisse werden geladen...',
   'settings.symlinks.browser.empty': 'Keine Unterverzeichnisse.',
   'settings.symlinks.browser.truncated':

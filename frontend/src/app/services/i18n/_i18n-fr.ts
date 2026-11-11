@@ -735,11 +735,11 @@ export const i18nFr: Record<TranslationKey, string> = {
   'settings.symlinks.enabled': 'Activer les liens symboliques',
   'settings.symlinks.enabledHint':
     'La désactivation suspend les suggestions et le traitement des liens. Les liens existants sont conservés.',
-  'settings.symlinks.browse': 'Parcourir les dossiers',
+  'settings.symlinks.browse': 'Parcourir',
   'settings.symlinks.browser.hint':
     'Les dossiers affichés sont ceux visibles par le serveur ou conteneur LibManagarr. Les dossiers liés sont exclus.',
   'settings.symlinks.browser.locations': 'Emplacements',
-  'settings.symlinks.browser.up': 'Dossier parent',
+  'settings.symlinks.browser.up': 'Ouvrir le dossier parent',
   'settings.symlinks.browser.loading': 'Chargement des dossiers...',
   'settings.symlinks.browser.empty': 'Aucun sous-dossier.',
   'settings.symlinks.browser.truncated':

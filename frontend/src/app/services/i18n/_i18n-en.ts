@@ -727,11 +727,11 @@ export const i18nEn: Record<TranslationKey, string> = {
   'view.toggle': 'Toggle view',
   'settings.symlinks.enabled': 'Enable symlinks',
   'settings.symlinks.enabledHint': 'Disabling pauses suggestions and link processing. Existing links remain in place.',
-  'settings.symlinks.browse': 'Browse directories',
+  'settings.symlinks.browse': 'Browse',
   'settings.symlinks.browser.hint':
     'The directories shown are those visible to the LibManagarr server or container. Linked directories are excluded.',
   'settings.symlinks.browser.locations': 'Filesystem locations',
-  'settings.symlinks.browser.up': 'Up',
+  'settings.symlinks.browser.up': 'Go to the parent directory',
   'settings.symlinks.browser.loading': 'Loading directories...',
   'settings.symlinks.browser.empty': 'No subdirectories.',
   'settings.symlinks.browser.truncated':
