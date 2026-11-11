@@ -1,3 +1,30 @@
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 12px;
+  border-bottom: 1px solid var(--theme-border-color);
+  height: 48px;
+
+  h2 {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 0 0 24px;
+
+    &::before {
+      height: auto;
+    }
+  }
+
+  button {
+    flex-shrink: 0;
+  }
+}
+
 .calendar-day-dialog-list {
   display: flex;
   flex-direction: column;
