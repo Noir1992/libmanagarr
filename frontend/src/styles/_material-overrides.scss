@@ -13,6 +13,9 @@
 /* ------------------------------------------------------------------ */
 
 :root {
+  /* Buttons */
+  --mat-button-text-container-height: 30px;
+
   /* Dialog */
   --mat-dialog-container-color: var(--theme-panel-bg);
   --mat-dialog-subhead-color: var(--theme-text);
