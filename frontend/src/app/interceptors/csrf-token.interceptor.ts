@@ -16,9 +16,8 @@ export const csrfTokenInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown
   const authService: AuthService = inject(AuthService);
 
   return from(authService.csrfTokenAsync()).pipe(
-    switchMap(
-      (token: string): Observable<HttpEvent<unknown>> =>
-        token.length === 0 ? next(req) : next(req.clone({ setHeaders: { 'X-XSRF-TOKEN': token } })),
+    switchMap((token: string): Observable<HttpEvent<unknown>> =>
+      token.length === 0 ? next(req) : next(req.clone({ setHeaders: { 'X-XSRF-TOKEN': token } })),
     ),
   );
 };

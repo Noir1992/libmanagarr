@@ -1,8 +1,2 @@
 export type SymlinkSetupStep =
-  | 'LinkCreated'
-  | 'MonitoringDisabled'
-  | 'RescanRequested'
-  | 'EpisodeAssigned'
-  | 'MetadataMatched'
-  | 'Renamed'
-  | 'Completed';
+  'LinkCreated' | 'MonitoringDisabled' | 'RescanRequested' | 'EpisodeAssigned' | 'MetadataMatched' | 'Renamed' | 'Completed';

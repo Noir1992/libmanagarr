@@ -37,6 +37,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      # The npm bundled with node 22 (npm 10) cannot read this lockfile's nested
+      # overrides and fails `npm ci` with "Missing: minimatch@10.2.6 from lock file".
+      # Pin the same version the frontend declares (packageManager) and the Dockerfile installs.
+      - run: npm install -g npm@11.12.1
       - run: npm ci
       - run: npm run lint
       - run: npx prettier --check .
