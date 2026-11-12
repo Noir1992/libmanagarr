@@ -79,12 +79,10 @@ export class RequestsPage implements OnInit {
   protected readonly statusFilter = this.requestsService.statusFilter;
   protected readonly statusFilters: Signal<readonly RequestsFilterOption[]> = computed((): readonly RequestsFilterOption[] => [
     { value: null, label: this.i18n.t('requests.filter.all') },
-    ...FILTERABLE_STATUSES.map(
-      (status: Exclude<SeerrRequestStatus, 'unknown'>): RequestsFilterOption => ({
-        value: status,
-        label: this.i18n.t(STATUS_LABEL_KEYS[status]),
-      }),
-    ),
+    ...FILTERABLE_STATUSES.map((status: Exclude<SeerrRequestStatus, 'unknown'>): RequestsFilterOption => ({
+      value: status,
+      label: this.i18n.t(STATUS_LABEL_KEYS[status]),
+    })),
   ]);
   protected readonly isFiltered: Signal<boolean> = computed((): boolean => this.statusFilter() !== null);
   protected readonly totalPages: Signal<number> = computed((): number =>

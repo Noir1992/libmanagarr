@@ -76,20 +76,16 @@ export class SettingsArrInstanceCardWidget implements OnInit, OnDestroy {
   readonly connectionFeedbackMessage: Signal<string | null> = computed(
     (): string | null => this.connectionFeedbackMessageState() ?? this.connectionHintMessageState(),
   );
-  protected readonly requiredFieldMessages: Signal<Record<InstanceField, string>> = computed(
-    (): Record<InstanceField, string> => ({
-      name: this.i18n.t('settings.instanceNameRequired'),
-      baseUrl: this.i18n.t('settings.tasks.validation.required'),
-      apiKey: this.i18n.t('settings.instanceApiKeyRequired'),
-    }),
-  );
-  protected readonly maxLengthFieldMessages: Signal<Record<InstanceField, string>> = computed(
-    (): Record<InstanceField, string> => ({
-      name: this.i18n.t('settings.instanceNameTooLong'),
-      baseUrl: this.i18n.t('settings.instanceUrlTooLong'),
-      apiKey: this.i18n.t('settings.instanceApiKeyTooLong'),
-    }),
-  );
+  protected readonly requiredFieldMessages: Signal<Record<InstanceField, string>> = computed((): Record<InstanceField, string> => ({
+    name: this.i18n.t('settings.instanceNameRequired'),
+    baseUrl: this.i18n.t('settings.tasks.validation.required'),
+    apiKey: this.i18n.t('settings.instanceApiKeyRequired'),
+  }));
+  protected readonly maxLengthFieldMessages: Signal<Record<InstanceField, string>> = computed((): Record<InstanceField, string> => ({
+    name: this.i18n.t('settings.instanceNameTooLong'),
+    baseUrl: this.i18n.t('settings.instanceUrlTooLong'),
+    apiKey: this.i18n.t('settings.instanceApiKeyTooLong'),
+  }));
 
   protected readonly isApiKeyVisibleState: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly isNameSavingState: WritableSignal<boolean> = signal<boolean>(false);
