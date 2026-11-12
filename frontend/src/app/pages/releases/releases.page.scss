@@ -1,0 +1,111 @@
+.releases-notice {
+  margin: 0;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--theme-warning-color) 45%, transparent);
+  border-radius: var(--theme-border-radius);
+  background: color-mix(in srgb, var(--theme-warning-color) 12%, transparent);
+  color: var(--theme-warning-color);
+  font-size: 0.85rem;
+}
+
+.releases-empty {
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 0.9rem;
+}
+
+.release-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--theme-default-gap-small);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.release-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: var(--theme-default-gap-small);
+  border: 1px solid var(--theme-border-color);
+  border-radius: var(--theme-border-radius);
+  background: var(--theme-tile-surface);
+}
+
+.release-entry-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--theme-border-color);
+}
+
+.release-entry-version {
+  color: var(--theme-text);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.release-entry-badge {
+  padding: 0 0.5rem;
+  border: 1px solid var(--theme-border-color);
+  border-radius: 999px;
+  background: var(--theme-surface);
+  color: var(--theme-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.6;
+  // The badges huddle at the right end of the header line; the auto margin on the first one
+  // takes all the free space so the following badges stay tight against it.
+  margin-left: auto;
+
+  + .release-entry-badge {
+    margin-left: 0;
+  }
+
+  &[data-state='current'] {
+    border-color: color-mix(in srgb, var(--theme-success-color) 45%, transparent);
+    background: color-mix(in srgb, var(--theme-success-color) 12%, transparent);
+    color: var(--theme-success-color);
+  }
+
+  &[data-state='newer'] {
+    border-color: color-mix(in srgb, var(--theme-update-indicator) 45%, transparent);
+    background: var(--theme-update-indicator-soft);
+    color: var(--theme-update-indicator);
+  }
+}
+
+.release-entry-date {
+  color: var(--theme-muted);
+  font-size: 0.85rem;
+}
+
+.release-entry-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--theme-accent);
+
+  &:hover {
+    color: var(--theme-link-hover);
+  }
+
+  mat-icon {
+    height: 16px;
+    width: 16px;
+    min-width: 16px;
+    font-size: 16px;
+  }
+}
+
+// Upstream notes arrive as markdown and are rendered to html by the markdown pipe, so the element
+// itself only sets the reading colour and size; the html element styling lives in the global sheet.
+.release-entry-notes {
+  margin: 0;
+  color: var(--theme-text);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}

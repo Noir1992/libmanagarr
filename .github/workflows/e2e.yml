@@ -2,6 +2,12 @@ name: E2E tests
 
 on:
   workflow_call:
+    inputs:
+      image-version:
+        description: 'Version reported by the built image (assembly InformationalVersion). A full commit sha marks an edge build and is reported as edge-<short sha>.'
+        type: string
+        required: false
+        default: '0.0.0-dev'
 
 permissions:
   contents: read
@@ -40,6 +46,19 @@ jobs:
         timeout-minutes: 3
         working-directory: tests/e2e
         run: npm run format:check
+      - name: Resolve image version
+        id: image_version
+        env:
+          REQUESTED: ${{ inputs.image-version }}
+        run: |
+          # A full commit sha means an edge build and is reported as edge-<short sha>.
+          # The shortening lives here because workflow expressions reject substring.
+          # Everything else (a release version or the dev default) is reported unchanged.
+          if [[ "$REQUESTED" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "value=edge-${REQUESTED:0:7}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=$REQUESTED" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build candidate image
         timeout-minutes: 15
         uses: docker/build-push-action@v7
@@ -48,6 +67,7 @@ jobs:
           load: true
           tags: libmanagarr:e2e
           platforms: linux/amd64
+          build-args: LIBMANAGARR_VERSION=${{ steps.image_version.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Read pinned browser runner image

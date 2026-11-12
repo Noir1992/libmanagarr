@@ -1,0 +1,51 @@
+<main class="page-shell">
+  <section class="page-header">
+    <div class="page-title-row">
+      <h1 class="page-title">{{ title() }}</h1>
+    </div>
+    <p class="page-description">{{ description() }}</p>
+  </section>
+
+  <section class="page-content">
+    @if (isBusy()) {
+      <app-loading-section />
+    } @else if (loadError(); as error) {
+      <app-loading-error-section [error]="error" />
+    } @else {
+      @if (statusNotice(); as notice) {
+        <p class="releases-notice" role="status">{{ notice }}</p>
+      }
+      @if (noDataAvailable()) {
+        <p class="releases-empty">{{ emptyText() }}</p>
+      } @else {
+        <ol class="release-list">
+          @for (release of versions(); track release.tag) {
+            <li class="release-entry">
+              <header class="release-entry-header">
+                <span class="release-entry-version">{{ release.version }}</span>
+                @if (release.url.length > 0) {
+                  <a class="release-entry-link" [href]="release.url" target="_blank" rel="noopener" aria-label="GitHub">
+                    <mat-icon class="material-symbols-outlined" aria-hidden="true">link</mat-icon>
+                  </a>
+                }
+                <span class="release-entry-date">{{ publishedAtLabel(release) }}</span>
+                @if (release.isCurrent) {
+                  <span class="release-entry-badge" data-state="current">{{ currentLabel() }}</span>
+                }
+                @if (release.isNewerThanCurrent) {
+                  <span class="release-entry-badge" data-state="newer">{{ newerLabel() }}</span>
+                }
+                @if (release.isPrerelease) {
+                  <span class="release-entry-badge" data-state="prerelease">{{ prereleaseLabel() }}</span>
+                }
+              </header>
+              @if (release.notes; as notes) {
+                <div class="release-entry-notes markdown" [innerHTML]="notes | markdown"></div>
+              }
+            </li>
+          }
+        </ol>
+      }
+    }
+  </section>
+</main>

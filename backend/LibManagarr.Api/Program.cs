@@ -70,6 +70,8 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     builder.Services.AddScoped<LibraryTrendStatisticsService>();
     builder.Services.AddSingleton<CalendarCache>();
     builder.Services.AddScoped<CalendarService>();
+    builder.Services.AddSingleton<ReleaseOverviewCache>();
+    builder.Services.AddScoped<ReleaseOverviewService>();
     ScheduledTaskCatalog.AddBuiltInScheduledTasks(builder.Services);
     builder.Services.AddSingleton<ScheduledTaskCatalog>();
     builder.Services.AddSingleton<IScheduledTaskStore, SqliteScheduledTaskStore>();
@@ -98,6 +100,8 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     builder.Services.AddHttpClient<SeerrClient>();
     builder.Services.AddHttpClient<PosterCacheService>();
     builder.Services.AddSingleton<IPosterCacheService, PosterCacheService>();
+
+    builder.Services.AddHttpClient<GitHubReleasesClient>((client) => client.Timeout = TimeSpan.FromSeconds(10));
 
     builder.Services.AddDataProtection().SetApplicationName("LibManagarr");
     builder.Services.AddOptions<KeyManagementOptions>().Configure<StoragePaths, ILoggerFactory>((options, paths, loggerFactory) =>
@@ -263,6 +267,7 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     app.MapStatisticsEndpoints();
     app.MapRequestEndpoints();
     app.MapCalendarEndpoints();
+    app.MapReleaseEndpoints();
     app.MapBackupEndpoints();
 
     // Unknown API paths must answer with a plain 404 problem instead of falling through to the

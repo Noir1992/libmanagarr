@@ -66,17 +66,18 @@ describe('SettingsTasksTabWidget', () => {
 
   it('renders all server tasks with a readable fallback and server capabilities', () => {
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.querySelectorAll('tr.mat-mdc-row')).toHaveSize(3);
-    expect(element.textContent).toContain('Data sync');
-    expect(element.textContent).toContain('Cleanup');
-    expect(element.textContent).toContain('third Task');
+    const rows = element.querySelectorAll('tr.mat-mdc-row');
+    expect(rows).toHaveSize(3);
+    expect(rows[0].textContent).toContain('Cleanup');
+    expect(rows[1].textContent).toContain('Data sync');
+    expect(rows[2].textContent).toContain('third Task');
     expect(element.querySelectorAll('mat-slide-toggle')).toHaveSize(2);
     expect(element.querySelectorAll('.task-actions > button')).toHaveSize(5);
     expect(service.load).toHaveBeenCalledTimes(1);
   });
 
   it('runs cleanup manually while keeping its schedule read-only', async () => {
-    const row = (fixture.nativeElement as HTMLElement).querySelectorAll('tr.mat-mdc-row')[1];
+    const row = (fixture.nativeElement as HTMLElement).querySelectorAll('tr.mat-mdc-row')[0];
     const buttons = row.querySelectorAll<HTMLButtonElement>('.task-actions > button');
     expect(buttons).toHaveSize(1);
     expect(buttons[0].textContent).toContain('play_arrow');
@@ -107,9 +108,9 @@ describe('SettingsTasksTabWidget', () => {
     states.set({ arrDataSync: { running: true, error: 'Task conflict' } });
     await fixture.whenStable();
     const rows = (fixture.nativeElement as HTMLElement).querySelectorAll('tr.mat-mdc-row');
-    expect(rows[0].querySelectorAll('button.material-symbols-outlined')[1].hasAttribute('disabled')).toBeTrue();
-    expect(rows[0].querySelector('mat-slide-toggle button')?.hasAttribute('disabled')).toBeFalse();
+    expect(rows[1].querySelectorAll('button.material-symbols-outlined')[1].hasAttribute('disabled')).toBeTrue();
+    expect(rows[1].querySelector('mat-slide-toggle button')?.hasAttribute('disabled')).toBeFalse();
     expect(rows[2].querySelector('button')?.disabled).toBeFalse();
-    expect(rows[0].textContent).toContain('Task conflict');
+    expect(rows[1].textContent).toContain('Task conflict');
   });
 });

@@ -13,8 +13,11 @@ RUN npm run build
 # ---- Stage 2: publish the backend and merge the SPA into wwwroot -------------------
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS backend-build
 WORKDIR /build
+# The running instance reports this value through /api/releases; the release workflow passes
+# the release version, the CI workflow an "edge-sha-<short>" identifier for edge installs.
+ARG LIBMANAGARR_VERSION=0.0.0-dev
 COPY backend/ ./
-RUN dotnet publish LibManagarr.Api/LibManagarr.Api.csproj -c Release -o /publish --nologo
+RUN dotnet publish LibManagarr.Api/LibManagarr.Api.csproj -c Release -o /publish --nologo -p:InformationalVersion=${LIBMANAGARR_VERSION}
 COPY --from=frontend-build /build/dist/libmanagarr/browser /publish/wwwroot
 
 # ---- Stage 3: minimal runtime -------------------------------------------------------

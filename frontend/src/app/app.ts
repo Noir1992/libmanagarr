@@ -18,6 +18,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AppI18nService } from './services/app-i18n.service';
 import { AuthService } from './services/auth.service';
+import { ReleasesService } from './services/releases.service';
 import { SymlinkService } from './services/symlink.service';
 
 const NARROW_VIEWPORT_QUERY: string = '(max-width: 820px)';
@@ -34,6 +35,7 @@ const NAVIGATION_OPEN_STORAGE_KEY: string = 'navigation:open';
 export class App implements OnInit, OnDestroy {
   private readonly i18n: AppI18nService = inject(AppI18nService);
   private readonly authService: AuthService = inject(AuthService);
+  private readonly releasesService: ReleasesService = inject(ReleasesService);
   protected readonly symlinks = inject(SymlinkService);
   private narrowMediaQuery?: MediaQueryList;
   protected readonly navigationOpen: WritableSignal<boolean> = signal<boolean>(false);
@@ -48,6 +50,11 @@ export class App implements OnInit, OnDestroy {
   protected readonly calendarLabel: Signal<string> = computed((): string => this.i18n.t('navigation.calendar'));
   protected readonly symlinksLabel: Signal<string> = computed((): string => this.i18n.t('navigation.symlinks'));
   protected readonly logsLabel: Signal<string> = computed((): string => this.i18n.t('navigation.logs'));
+  protected readonly releasesLabel: Signal<string> = computed((): string => this.i18n.t('navigation.releases'));
+  protected readonly versionLabel: Signal<string> = computed((): string => this.i18n.t('navigation.version'));
+  protected readonly runningVersion: Signal<string> = this.releasesService.currentVersion;
+  protected readonly updateAvailable: Signal<boolean> = this.releasesService.updateAvailable;
+  protected readonly updateAvailableHint: Signal<string> = computed((): string => this.i18n.t('releases.updateAvailable'));
   protected readonly navigationToggleLabel: Signal<string> = computed((): string => this.i18n.t('navigation.toggle'));
   protected readonly userMenuLabel: Signal<string> = computed((): string => this.i18n.t('navigation.userMenu'));
   protected readonly scrollToTopLabel: Signal<string> = computed((): string => this.i18n.t('common.scrollToTop'));
@@ -57,6 +64,14 @@ export class App implements OnInit, OnDestroy {
   protected readonly showShell: Signal<boolean> = computed(
     (): boolean => this.authService.state() === 'loading' || this.authService.state() === 'authenticated',
   );
+
+  // The version label belongs to the shell, so it is read once per session and only after the
+  // session is known — an anonymous probe would answer 401 for nothing.
+  protected readonly releasesProbeEffect = effect(() => {
+    if (this.authService.state() === 'authenticated') {
+      void this.releasesService.loadOnceAsync();
+    }
+  });
 
   constructor() {
     effect((onCleanup) => {

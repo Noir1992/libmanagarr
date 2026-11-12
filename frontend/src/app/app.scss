@@ -57,11 +57,14 @@
     transition: transform 180ms ease;
 
     .main-navigation {
-      display: grid;
+      display: flex;
+      flex-direction: column;
       gap: 2px;
+      min-height: 100%;
 
       .navigation-item {
         display: grid;
+        flex: 0 0 auto;
         grid-template-columns: 24px minmax(0, 1fr) auto;
         gap: 8px;
         align-items: center;
@@ -102,6 +105,61 @@
           stroke-width: 1.9;
           stroke-linecap: round;
           stroke-linejoin: round;
+        }
+      }
+
+      // The running version is metadata, so it sits at the bottom of the navigation instead of
+      // joining the ranked entries above it. It is framed as one block, and that frame keeps its
+      // colour: a newer release is announced by the icon alone, never by a recoloured entry.
+      .navigation-version {
+        margin-top: auto;
+        padding: 5px 6px;
+        border: 1px solid color-mix(in srgb, var(--theme-version-entry) 45%, transparent);
+        background: var(--theme-version-entry-soft);
+        font-weight: 500;
+
+        // Hover and the active route deepen the frame instead of replacing it, so the entry keeps
+        // reading as the version block it always was.
+        &:hover,
+        &.is-active {
+          background: color-mix(in srgb, var(--theme-version-entry) 22%, transparent);
+        }
+
+        // Without a leading icon the entry carries its content alone: one centered line of label,
+        // version and update hint. The hidden icon keeps its place, revealing without a layout jump.
+        .navigation-version-body {
+          grid-column: 1 / -1;
+          display: flex;
+          gap: 5px;
+          align-items: center;
+          justify-content: center;
+          min-width: 0;
+        }
+
+        .navigation-version-icon {
+          flex: 0 0 auto;
+          width: 18px;
+          height: 18px;
+          font-size: 18px;
+          line-height: 18px;
+          color: var(--theme-update-indicator);
+          visibility: hidden;
+
+          &.is-visible {
+            visibility: visible;
+          }
+        }
+
+        .navigation-version-label {
+          flex: 0 0 auto;
+          font-weight: 400;
+        }
+
+        .navigation-version-value {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
       }
     }

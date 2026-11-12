@@ -31,10 +31,11 @@ public sealed class ScheduledTaskApiTests
         using HttpClient client = factory.CreateClient();
         await SetupAsync(client);
         JsonArray tasks = (await client.GetFromJsonAsync<JsonArray>("/api/settings/tasks"))!;
-        Assert.Equal(3, tasks.Count);
+        Assert.Equal(4, tasks.Count);
         JsonObject sync = tasks.Single(task => task!["taskKey"]!.GetValue<string>() == "arrDataSync")!.AsObject();
         JsonObject cleanup = tasks.Single(task => task!["taskKey"]!.GetValue<string>() == "cleanup")!.AsObject();
         JsonObject health = tasks.Single(task => task!["taskKey"]!.GetValue<string>() == "symlinkHealthCheck")!.AsObject();
+        JsonObject release = tasks.Single(task => task!["taskKey"]!.GetValue<string>() == "releaseCheck")!.AsObject();
         Assert.True(sync["canRunManually"]!.GetValue<bool>());
         Assert.True(sync["enabled"]!.GetValue<bool>());
         Assert.True(cleanup["readOnly"]!.GetValue<bool>());
@@ -42,6 +43,12 @@ public sealed class ScheduledTaskApiTests
         Assert.True(health["enabled"]!.GetValue<bool>());
         Assert.False(health["readOnly"]!.GetValue<bool>());
         Assert.True(health["canRunManually"]!.GetValue<bool>());
+        // The release check shows up listed and manually runnable but stays uneditable; its manual
+        // run is not exercised here because that would send the real GitHub look-up out of the test.
+        Assert.True(release["enabled"]!.GetValue<bool>());
+        Assert.True(release["readOnly"]!.GetValue<bool>());
+        Assert.True(release["canRunManually"]!.GetValue<bool>());
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync("/api/settings/tasks/releaseCheck", Configuration())).StatusCode);
         Assert.Equal(0, sync["revision"]!.GetValue<int>());
         JsonObject payload = Configuration();
         using HttpResponseMessage update = await client.PutAsJsonAsync(TaskRoute, payload);

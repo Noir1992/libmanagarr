@@ -3,7 +3,7 @@ using LibManagarr.Api.Models;
 namespace LibManagarr.Api.Services;
 
 public sealed record ScheduledTaskDefinition(
-    string TaskKey, bool ReadOnly, bool CanRunManually, Func<ScheduledTaskSettings> CreateDefaults);
+    string TaskKey, bool ReadOnly, bool CanRunManually, Func<ScheduledTaskSettings> CreateDefaults, bool RunAtStartup = false);
 
 public sealed class ScheduledTaskCatalog(IEnumerable<ScheduledTaskDefinition> definitions)
 {
@@ -30,9 +30,17 @@ public sealed class ScheduledTaskCatalog(IEnumerable<ScheduledTaskDefinition> de
         {
             Enabled = true, ScheduleMode = ScheduleMode.DailyAtTime, TimeHour = 3, TimeMinute = 0
         }));
+        // The release look-up keeps a fixed rhythm nobody edits: every twelve hours and once at every
+        // start, so the update hint stays right even when no browser visits the page in between. Only
+        // the schedule is sealed — an operator may still trigger one look-up by hand.
+        services.AddSingleton(new ScheduledTaskDefinition("releaseCheck", true, true, () => new()
+        {
+            Enabled = true, ScheduleMode = ScheduleMode.Interval, IntervalUnit = ScheduleIntervalUnit.Hour, IntervalValue = 12
+        }, RunAtStartup: true));
         services.AddScoped<IScheduledTaskHandler, ArrDataSyncTaskHandler>();
         services.AddScoped<IScheduledTaskHandler, LogCleanupTaskHandler>();
         services.AddScoped<IScheduledTaskHandler, SymlinkHealthCheckTaskHandler>();
+        services.AddScoped<IScheduledTaskHandler, ReleaseCheckTaskHandler>();
         return services;
     }
 }
