@@ -46,8 +46,9 @@ jobs:
     uses: ./.github/workflows/e2e.yml
     with:
       # Edge builds carry no semantic version, so they report the commit they were built
-      # from. The hyphen keeps the value intact when the backend strips a `+revision` suffix.
-      image-version: edge-${{ Substring(github.sha, 0, 7) }}
+      # from. The full sha travels here because workflow expressions reject substring;
+      # e2e.yml shortens it to the `edge-<short>` identifier in its own shell step.
+      image-version: ${{ github.sha }}
 
   docker:
     name: Publish tested image
