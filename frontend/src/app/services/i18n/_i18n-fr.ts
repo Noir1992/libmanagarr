@@ -707,7 +707,6 @@ export const i18nFr: Record<TranslationKey, string> = {
   'symlinks.suggestion.Pending': 'Ouvert',
   'symlinks.suggestion.Rejected': 'Refusé',
   'symlinks.suggestion.Stale': 'Obsolète',
-  'symlinks.suggestion.WaitingForFile': 'En attente du fichier',
   'symlinks.suggestions.alternative': 'Film {movie}',
   'symlinks.existingFile.Matches': 'Le lien existant pointe vers le film proposé.',
   'symlinks.existingFile.TargetMismatch': 'Le lien existant pointe vers une autre cible.',

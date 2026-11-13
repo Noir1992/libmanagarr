@@ -3,8 +3,9 @@ using Microsoft.Data.Sqlite;
 namespace LibManagarr.Api.Services;
 
 /// <summary>
-/// Creates the tables of the symlink feature. Purely additive: no existing row is read or rewritten,
-/// so the pre-migration copy that the task migration takes for its restructuring is not needed here.
+/// Creates the tables of the symlink feature. Additive except for the v8 cleanup of a retired status:
+/// no other existing row is read or rewritten, so the pre-migration copy that the task migration takes
+/// for its restructuring is not needed here.
 /// </summary>
 internal sealed class SymlinkMigration(TimeProvider clock, ILogger logger)
 {
@@ -248,6 +249,15 @@ internal sealed class SymlinkMigration(TimeProvider clock, ILogger logger)
                 WHERE operation_status <> 3;
             CREATE INDEX IF NOT EXISTS symlink_links_radarr_source
                 ON symlink_links (radarr_instance_id, radarr_movie_id);
+            """
+        ),
+        (
+            "symlinks-v8",
+            """
+            -- An offer without a movie file cannot be acted on, so the state was dropped and value 1
+            -- retired. Whatever the old matcher left behind goes away; when the download arrives the
+            -- instance signature changes and the pair is reported afresh as Pending.
+            DELETE FROM symlink_suggestions WHERE status = 1;
             """
         )
     ];

@@ -13,7 +13,6 @@ internal sealed class InMemorySymlinkStore : ISymlinkStore
     private static readonly SymlinkSuggestionStatus[] ActiveStatuses =
     [
         SymlinkSuggestionStatus.Pending,
-        SymlinkSuggestionStatus.WaitingForFile,
         SymlinkSuggestionStatus.Creating
     ];
 

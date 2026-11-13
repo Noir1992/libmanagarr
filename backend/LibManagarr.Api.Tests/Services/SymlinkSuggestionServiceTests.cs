@@ -159,26 +159,24 @@ public sealed class SymlinkSuggestionServiceTests
     }
 
     [Fact]
-    public async Task Refresh_AMovieWithoutAFileWaitsAndTheSameRowIsReadyWhenTheFileArrives()
+    public async Task Refresh_AMovieWithoutAFileIsNotOfferedAndAppearsWhenTheFileArrives()
     {
         AppSettings settings = Settings(movies: [Film(SpecialTitle, hasFile: false)]);
         SymlinkSuggestionService service = Service(settings);
 
         await service.RefreshAsync(force: false, CancellationToken.None);
-        SymlinkSuggestion waiting = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
-        Assert.Equal(SymlinkSuggestionStatus.WaitingForFile, waiting.Status);
-        Assert.Null(waiting.RadarrFileId);
+        // Nothing can be linked yet, so the pair does not even become a row to wait with.
+        Assert.Empty(await store.GetSuggestionsAsync(CancellationToken.None));
 
         clock.Advance(TimeSpan.FromMinutes(1));
         settings.RadarrSnapshots[0].Movies[0] = Film(SpecialTitle);
-        await service.RefreshAsync(force: false, CancellationToken.None);
+        SymlinkMatchingRun run = await service.RefreshAsync(force: false, CancellationToken.None);
 
+        // The file changed the instance signature, so the pass ran without being forced.
+        Assert.Equal(1, run.Created);
         SymlinkSuggestion ready = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
-        // The row the user is already looking at becomes actionable; no second question for the same pair.
-        Assert.Equal(waiting.Id, ready.Id);
         Assert.Equal(SymlinkSuggestionStatus.Pending, ready.Status);
         Assert.Equal(900, ready.RadarrFileId);
-        Assert.Equal(waiting.CreatedAt, ready.CreatedAt);
     }
 
     [Fact]
@@ -413,20 +411,19 @@ public sealed class SymlinkSuggestionServiceTests
         [
             Film(SpecialTitle, movieId: 70),
             Film(SpecialTitle, movieId: 71, fileId: 901),
+            // A movie without a file cannot be offered, so it is not a rival to choose between either.
             Film("Kabaneri of the Iron Fortress — The Battle of Unato!", movieId: 72, hasFile: false)
         ]);
 
         SymlinkMatchingRun run = await Service(settings).RefreshAsync(force: false, CancellationToken.None);
 
-        Assert.Equal(3, run.Created);
+        Assert.Equal(2, run.Created);
         List<SymlinkSuggestion> rows = [.. await store.GetSuggestionsAsync(CancellationToken.None)];
-        // Title equality alone is not an identity, so nothing is picked: every pair shows the two rivals.
-        Assert.All(rows, row => Assert.Equal(2, row.Alternatives.Count));
+        Assert.DoesNotContain(rows, row => row.Pair.RadarrMovieId == 72);
+        // Title equality alone is not an identity, so nothing is picked: every pair shows its rival.
+        Assert.All(rows, row => Assert.Single(row.Alternatives));
         SymlinkSuggestion withFile = rows.Single(row => row.RadarrFileId == 900);
-        Assert.Equal([71, 72], withFile.Alternatives.Select(alternative => alternative.RadarrMovieId));
-        SymlinkSuggestionAlternative rivalWithoutFile = withFile.Alternatives.Single(alternative => alternative.RadarrMovieId == 72);
-        Assert.Null(rivalWithoutFile.RadarrFileId);
-        Assert.Contains("no file of its own", rivalWithoutFile.Detail, StringComparison.Ordinal);
+        Assert.Equal([71], withFile.Alternatives.Select(alternative => alternative.RadarrMovieId));
         Assert.Equal(901, withFile.Alternatives.Single(alternative => alternative.RadarrMovieId == 71).RadarrFileId);
     }
 

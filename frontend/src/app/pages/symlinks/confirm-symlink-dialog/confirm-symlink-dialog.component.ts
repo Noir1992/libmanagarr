@@ -4,6 +4,7 @@ import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/materia
 import { MatIconModule } from '@angular/material/icon';
 import { ExistingLinkConfirmation, SymlinkFinding, SymlinkLink, SymlinkLinkPlan } from '../../../interfaces/symlinks/symlink-link';
 import { SymlinkSuggestion } from '../../../interfaces/symlinks/symlink-suggestion';
+import { FeedbackIconWidget } from '../../../widgets/feedback-icon/feedback-icon.widget';
 import { AppI18nService } from '../../../services/app-i18n.service';
 import { SymlinkService } from '../../../services/symlink.service';
 import { TranslationKey } from '../../../services/i18n/_i18n-key';
@@ -21,7 +22,7 @@ export interface ConfirmSymlinkDialogData {
  */
 @Component({
   selector: 'app-confirm-symlink-dialog',
-  imports: [MatDialogModule, MatButtonModule, MatIconModule],
+  imports: [MatDialogModule, MatButtonModule, MatIconModule, FeedbackIconWidget],
   templateUrl: './confirm-symlink-dialog.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './confirm-symlink-dialog.component.scss',

@@ -36,7 +36,7 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT migration_id FROM schema_migrations ORDER BY migration_id";
         Assert.Equal(
-            ["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4", "symlinks-v5", "symlinks-v6", "symlinks-v7"],
+            ["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4", "symlinks-v5", "symlinks-v6", "symlinks-v7", "symlinks-v8"],
             await ReadAllAsync(command));
     }
 
@@ -45,7 +45,7 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
     {
         await CreateStore().InitializeAsync(CancellationToken.None);
         await ExecuteSqlAsync("""
-            DELETE FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3','symlinks-v4','symlinks-v5','symlinks-v6','symlinks-v7');
+            DELETE FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3','symlinks-v4','symlinks-v5','symlinks-v6','symlinks-v7','symlinks-v8');
             DROP TABLE symlink_matching_state;
             ALTER TABLE symlink_links DROP COLUMN naming_move;
             ALTER TABLE symlink_capability_checks DROP COLUMN process_id;
@@ -60,14 +60,36 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         await connection.OpenAsync();
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT migration_id FROM schema_migrations ORDER BY migration_id";
-        Assert.Equal(["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4", "symlinks-v5", "symlinks-v6", "symlinks-v7"], await ReadAllAsync(command));
+        Assert.Equal(["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4", "symlinks-v5", "symlinks-v6", "symlinks-v7", "symlinks-v8"], await ReadAllAsync(command));
         // A step is marked once, so reopening an installed database does not replay it — which for the
         // widening step matters more than for a create, because the second ALTER would fail outright.
         await CreateStore().InitializeAsync(CancellationToken.None);
         using SqliteCommand counted = connection.CreateCommand();
-        counted.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3','symlinks-v4','symlinks-v5','symlinks-v6','symlinks-v7')";
-        Assert.Equal(6L, await counted.ExecuteScalarAsync());
+        counted.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE migration_id IN ('symlinks-v2','symlinks-v3','symlinks-v4','symlinks-v5','symlinks-v6','symlinks-v7','symlinks-v8')";
+        Assert.Equal(7L, await counted.ExecuteScalarAsync());
         Assert.NotNull(await store.GetMatchingStateAsync("sonarr-1", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Migration_FromV7DropsRowsInTheRetiredWaitingForFileState()
+    {
+        SqliteSymlinkStore store = CreateStore();
+        await store.InitializeAsync(CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await ExecuteSqlAsync("""
+            INSERT INTO symlink_suggestions (id,revision,matcher_version,status,radarr_instance_id,radarr_movie_id,
+                radarr_file_id,sonarr_instance_id,sonarr_series_id,sonarr_episode_id,season_number,episode_number,
+                reasons,config_revision,created_at,updated_at)
+            VALUES ('waiting-row',0,'1',1,'radarr-1',70,NULL,'sonarr-1',12,5,0,3,'[]',0,'2026-11-01T00:00:00+00:00','2026-11-01T00:00:00+00:00'),
+                   ('pending-row',0,'1',0,'radarr-1',71,NULL,'sonarr-1',12,6,0,4,'[]',0,'2026-11-01T00:00:00+00:00','2026-11-01T00:00:00+00:00');
+            DELETE FROM schema_migrations WHERE migration_id='symlinks-v8';
+            """);
+
+        SqliteSymlinkStore upgraded = CreateStore();
+
+        // The retired state cannot be read back; only rows that still expect a decision survive the step.
+        Assert.Null(await upgraded.GetSuggestionAsync("waiting-row", CancellationToken.None));
+        Assert.NotNull(await upgraded.GetSuggestionAsync("pending-row", CancellationToken.None));
     }
 
     [Fact]

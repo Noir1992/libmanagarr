@@ -1,7 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSlideToggleChange } from '@angular/material/slide-toggle';
 import { FilterOptionType } from '../../enums/filter-option-type';
-import { DEFAULT_FILTER_ALL, DateTimeRangeFilterOption, MultiSelectFilterOption, SwitchFilterOption } from '../../interfaces/filter-option';
+import {
+  DEFAULT_FILTER_ALL,
+  DateTimeRangeFilterOption,
+  MultiSelectFilterOption,
+  SelectFilterOption,
+  SwitchFilterOption,
+} from '../../interfaces/filter-option';
 import { PageFilterWidget } from './page-filter.widget';
 
 describe('PageFilterWidget', () => {
@@ -100,6 +106,46 @@ describe('PageFilterWidget', () => {
     expect(multiFilter.selectedValues).toEqual(['2']);
     expect(switchFilter.onChanged).not.toHaveBeenCalled();
     expect(multiFilter.onChanged).not.toHaveBeenCalled();
+  });
+
+  function validatedSelect(): SelectFilterOption {
+    return {
+      id: 'test-select',
+      label: 'Test Select',
+      type: FilterOptionType.SELECT,
+      validateRestoredValue: true,
+      options: [
+        { value: '', label: 'All' },
+        { value: 'kept', label: 'Kept' },
+      ],
+      selectedValue: null,
+      onChanged: jasmine.createSpy('selectChanged'),
+    };
+  }
+
+  it('drops a validated select value the options no longer offer and migrates it out of storage', async () => {
+    localStorage.setItem(storageKey, JSON.stringify({ 'test-select': 'removed' }));
+    const select = validatedSelect();
+    const restoredFixture = TestBed.createComponent(PageFilterWidget);
+    restoredFixture.componentRef.setInput('filters', [select]);
+    restoredFixture.componentRef.setInput('storagePrefix', 'page-filter-unit-test');
+    restoredFixture.detectChanges();
+    await restoredFixture.whenStable();
+    expect(select.selectedValue).toBe('');
+    expect(savedFilters()['test-select']).toBe('');
+    expect(select.onChanged).not.toHaveBeenCalled();
+  });
+
+  it('keeps a validated select value that the options still offer', async () => {
+    localStorage.setItem(storageKey, JSON.stringify({ 'test-select': 'kept' }));
+    const select = validatedSelect();
+    const restoredFixture = TestBed.createComponent(PageFilterWidget);
+    restoredFixture.componentRef.setInput('filters', [select]);
+    restoredFixture.componentRef.setInput('storagePrefix', 'page-filter-unit-test');
+    restoredFixture.detectChanges();
+    await restoredFixture.whenStable();
+    expect(select.selectedValue).toBe('kept');
+    expect(savedFilters()['test-select']).toBe('kept');
   });
 
   it('restores a saved empty multiselect instead of keeping an explicit default selection', async () => {

@@ -672,7 +672,6 @@ export type TranslationKey =
   | 'symlinks.suggestion.Pending'
   | 'symlinks.suggestion.Rejected'
   | 'symlinks.suggestion.Stale'
-  | 'symlinks.suggestion.WaitingForFile'
   | 'symlinks.suggestions.alternative'
   | 'symlinks.existingFile.Matches'
   | 'symlinks.existingFile.TargetMismatch'

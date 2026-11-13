@@ -198,6 +198,26 @@ describe('ConfirmSymlinkDialogComponent', () => {
     expect(dialogRef.close).toHaveBeenCalledWith(jasmine.objectContaining({ id: 'link-1' }));
   });
 
+  it('keeps the label and shows the spinner on the button while the write runs', async () => {
+    let finishWrite: ((link: SymlinkLink) => void) | undefined;
+    confirmSuggestion.and.returnValue(new Promise<SymlinkLink>((resolve) => (finishWrite = resolve)));
+    await open();
+
+    actionButtons()[1].click();
+    await settle();
+
+    // The label names the action that is running; only the icon beside it reports the progress.
+    const button = actionButtons()[1];
+    expect(button.disabled).toBeTrue();
+    expect(button.textContent).toContain('Create it now');
+    expect(button.textContent).not.toContain('Loading data...');
+    expect(button.querySelector('mat-icon.spinning')).not.toBeNull();
+
+    finishWrite?.(createDraft({ id: 'link-1' }));
+    await settle();
+    expect(dialogRef.close).toHaveBeenCalledWith(jasmine.objectContaining({ id: 'link-1' }));
+  });
+
   it('shows the existing link and its metadata and explicitly confirms adoption', async () => {
     previewLink.and.resolveTo({
       runnable: true,

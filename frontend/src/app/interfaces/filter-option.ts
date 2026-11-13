@@ -45,6 +45,11 @@ export interface SelectFilterOption extends FilterOptionBase {
   options: readonly FilterSelectOption[];
   selectedValue: string | null;
   onChanged: (values: string) => void;
+  /**
+   * For selects whose options are complete at restore time: a stored value an update removed
+   * falls back to the first option instead of filtering every row away in silence.
+   */
+  validateRestoredValue?: boolean;
 }
 
 export interface MultiSelectFilterOption extends FilterOptionBase {

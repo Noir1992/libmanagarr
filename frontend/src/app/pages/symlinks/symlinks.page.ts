@@ -93,9 +93,12 @@ export class SymlinksPage implements OnInit {
       id: 'status',
       label: this.t('symlinks.filterStatus'),
       type: FilterOptionType.SELECT,
+      // The choices are static, so a status a previous version stored — such as the retired
+      // WaitingForFile — is dropped to "all" instead of hiding every offer forever.
+      validateRestoredValue: true,
       options: [
         { value: '', label: this.t('symlinks.all') },
-        ...['Pending', 'WaitingForFile', 'Stale', 'Failed', 'Active', 'Updating', 'Conflict', 'DeletePending'].map((status) => ({
+        ...['Pending', 'Stale', 'Failed', 'Active', 'Updating', 'Conflict', 'DeletePending'].map((status) => ({
           value: status,
           label: this.filterStatusLabel(status),
         })),
@@ -125,7 +128,7 @@ export class SymlinksPage implements OnInit {
       .suggestions()
       .filter(
         (suggestion) =>
-          ['Pending', 'WaitingForFile', 'Stale', 'Failed', 'Conflict'].includes(suggestion.status) &&
+          ['Pending', 'Stale', 'Failed', 'Conflict'].includes(suggestion.status) &&
           this.matches(suggestion, suggestion.status) &&
           !this.symlinks
             .links()
@@ -242,7 +245,6 @@ export class SymlinksPage implements OnInit {
   protected filterStatusLabel(status: string): string {
     const keys: Record<string, TranslationKey> = {
       Pending: 'symlinks.suggestion.Pending',
-      WaitingForFile: 'symlinks.suggestion.WaitingForFile',
       Stale: 'symlinks.suggestion.Stale',
       Failed: 'symlinks.suggestion.Failed',
       Active: 'symlinks.operation.Active',
