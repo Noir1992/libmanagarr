@@ -700,7 +700,6 @@ export const i18nEn: Record<TranslationKey, string> = {
   'symlinks.suggestion.Pending': 'Open',
   'symlinks.suggestion.Rejected': 'Declined',
   'symlinks.suggestion.Stale': 'Outdated',
-  'symlinks.suggestion.WaitingForFile': 'Waiting for the file',
   'symlinks.suggestions.alternative': 'Movie {movie}',
   'symlinks.existingFile.Matches': 'Existing symlink points to the proposed movie.',
   'symlinks.existingFile.TargetMismatch': 'Existing symlink points to a different target.',

@@ -26,7 +26,6 @@ export function suggestionReasonLabel(reason: SymlinkSuggestionReason, translate
 
 const suggestionStatusKeys: Record<SymlinkSuggestionStatus, TranslationKey> = {
   Pending: 'symlinks.suggestion.Pending',
-  WaitingForFile: 'symlinks.suggestion.WaitingForFile',
   Rejected: 'symlinks.suggestion.Rejected',
   Creating: 'symlinks.suggestion.Creating',
   Completed: 'symlinks.suggestion.Completed',

@@ -355,7 +355,7 @@ export class PageFilterWidget {
 
       if (storedValue !== undefined) {
         this.restorePersistentFilter(filter, storedValue, migrateDefaults && storedState[`${filter.id}:exclude`] !== true);
-        nextState[filter.id] = filter.type === FilterOptionType.MULTISELECT ? [...filter.selectedValues] : storedValue;
+        nextState[filter.id] = this.currentlySelectedValue(filter, storedValue);
       }
       if (filter.supportsExclusion) {
         const key = `${filter.id}:exclude`;
@@ -368,6 +368,22 @@ export class PageFilterWidget {
 
     this.writeStoredState(storageKey, nextState);
     this.filterChangeTick.update((n) => n + 1);
+  }
+
+  /**
+   * The value that replaces a stored one on restore. A multiselect always writes back its normalised
+   * selection; a validated select writes back the validated one, so a value an update removed migrates
+   * out of storage on first sight instead of being repaired on every later visit. Every other filter
+   * keeps its stored value untouched.
+   */
+  private currentlySelectedValue(filter: FilterOption, storedValue: StoredFilterValue): StoredFilterValue {
+    if (filter.type === FilterOptionType.MULTISELECT) {
+      return [...filter.selectedValues];
+    }
+    if (filter.type === FilterOptionType.SELECT && filter.validateRestoredValue) {
+      return filter.selectedValue;
+    }
+    return storedValue;
   }
 
   private restorePersistentFilter(filter: FilterOption, storedValue: StoredFilterValue, migrateDefaults: boolean): void {
@@ -392,7 +408,8 @@ export class PageFilterWidget {
     }
 
     if (filter.type === FilterOptionType.SELECT) {
-      filter.selectedValue = storedValue as string;
+      const known = typeof storedValue === 'string' && filter.options.some((option) => option.value === storedValue);
+      filter.selectedValue = !filter.validateRestoredValue || known ? (storedValue as string) : (filter.options[0]?.value ?? null);
     }
 
     if (filter.type === FilterOptionType.NUMBER_RANGE) {

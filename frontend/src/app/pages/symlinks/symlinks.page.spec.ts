@@ -289,6 +289,24 @@ describe('SymlinksPage', () => {
     );
   });
 
+  it('migrates a stored status filter the update removed instead of hiding every offer', async () => {
+    fixture.destroy();
+    globalThis.localStorage.setItem('filters:symlinks', JSON.stringify({ status: 'WaitingForFile' }));
+    fixture = TestBed.createComponent(SymlinksPage);
+    element = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+    await settle();
+
+    stub.suggestions.set([createSuggestion()]);
+    fixture.detectChanges();
+
+    // The retired status is no longer a choice; the page falls back to showing all offers and writes
+    // the repaired value back so nothing has to be repaired again on the next visit.
+    expect(rowText(0)).toContain('The Special Movie');
+    expect(element.querySelectorAll('.filter-bubble-remove').length).toBe(0);
+    expect(JSON.parse(globalThis.localStorage.getItem('filters:symlinks') ?? '{}')).toEqual(jasmine.objectContaining({ status: '' }));
+  });
+
   it('reads the register and the path configuration together', () => {
     // The paths are what the preview is drawn from, so the offers are unusable without them.
     expect(stub.loadOverview).toHaveBeenCalledTimes(1);
@@ -311,16 +329,14 @@ describe('SymlinksPage', () => {
 
   it('keeps non-default offer states visible', () => {
     stub.suggestions.set([
-      createSuggestion({ status: 'WaitingForFile' }),
       createSuggestion({ id: 'stale', status: 'Stale' }),
       createSuggestion({ id: 'conflict', status: 'Conflict' }),
       createSuggestion({ id: 'failed', status: 'Failed' }),
     ]);
     fixture.detectChanges();
     const states = cards()[0].querySelectorAll('.status-pill');
-    expect(states.length).toBe(4);
+    expect(states.length).toBe(3);
     expect(Array.from(states, (state) => state.textContent?.trim())).toEqual([
-      TestBed.inject(AppI18nService).t('symlinks.suggestion.WaitingForFile'),
       TestBed.inject(AppI18nService).t('symlinks.suggestion.Stale'),
       TestBed.inject(AppI18nService).t('symlinks.suggestion.Conflict'),
       TestBed.inject(AppI18nService).t('symlinks.suggestion.Failed'),

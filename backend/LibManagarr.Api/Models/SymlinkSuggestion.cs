@@ -1,20 +1,20 @@
 namespace LibManagarr.Api.Models;
 
 /// <summary>
-/// State of a detected Radarr movie / Sonarr special pair. <see cref="WaitingForFile"/> keeps a
-/// match alive that has no downloadable file yet, and <see cref="Stale"/> marks a pair whose data
-/// has to be looked at again before anything may act on it.
+/// State of a detected Radarr movie / Sonarr special pair. <see cref="Stale"/> marks a pair whose data
+/// has to be looked at again before anything may act on it. The numbers are persisted, so the retired
+/// value 1 stays out of the enum: a suggestion is only ever made for a movie that has a file, and the
+/// symlinks-v8 migration removed the rows the old <c>WaitingForFile</c> state had left behind.
 /// </summary>
 public enum SymlinkSuggestionStatus
 {
-    Pending,
-    WaitingForFile,
-    Rejected,
-    Creating,
-    Completed,
-    Stale,
-    Conflict,
-    Failed
+    Pending = 0,
+    Rejected = 2,
+    Creating = 3,
+    Completed = 4,
+    Stale = 5,
+    Conflict = 6,
+    Failed = 7
 }
 
 /// <summary>
@@ -56,7 +56,7 @@ public sealed class SymlinkSuggestion
 
     public SpecialMoviePair Pair { get; set; } = new(string.Empty, 0, string.Empty, 0, 0);
 
-    /// <summary>The file the suggestion would link to. Absent while the movie has no file yet.</summary>
+    /// <summary>The file the suggestion would link to. Only movies that have a file are ever reported.</summary>
     public int? RadarrFileId { get; set; }
 
     public int SeasonNumber { get; set; }

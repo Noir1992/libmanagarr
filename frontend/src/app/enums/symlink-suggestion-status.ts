@@ -1,2 +1,1 @@
-export type SymlinkSuggestionStatus =
-  'Pending' | 'WaitingForFile' | 'Rejected' | 'Creating' | 'Completed' | 'Stale' | 'Conflict' | 'Failed';
+export type SymlinkSuggestionStatus = 'Pending' | 'Rejected' | 'Creating' | 'Completed' | 'Stale' | 'Conflict' | 'Failed';

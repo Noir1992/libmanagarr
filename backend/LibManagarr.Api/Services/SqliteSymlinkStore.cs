@@ -244,11 +244,10 @@ public sealed class SqliteSymlinkStore(
                     SELECT id FROM symlink_suggestions
                     WHERE radarr_instance_id=$radarr_instance_id AND radarr_movie_id=$radarr_movie_id
                       AND sonarr_instance_id=$sonarr_instance_id AND sonarr_series_id=$sonarr_series_id
-                      AND sonarr_episode_id=$sonarr_episode_id AND status IN ($pending,$waiting,$creating)
+                      AND sonarr_episode_id=$sonarr_episode_id AND status IN ($pending,$creating)
                     """;
                 AddPair(existing, suggestion.Pair);
                 existing.Parameters.AddWithValue("$pending", (int)SymlinkSuggestionStatus.Pending);
-                existing.Parameters.AddWithValue("$waiting", (int)SymlinkSuggestionStatus.WaitingForFile);
                 existing.Parameters.AddWithValue("$creating", (int)SymlinkSuggestionStatus.Creating);
                 object? found = await existing.ExecuteScalarAsync(cancellationToken);
                 if (found is string existingId)
@@ -318,12 +317,11 @@ public sealed class SqliteSymlinkStore(
             SELECT {SuggestionColumns} FROM symlink_suggestions
             WHERE radarr_instance_id=$radarr_instance_id AND radarr_movie_id=$radarr_movie_id
               AND sonarr_instance_id=$sonarr_instance_id AND sonarr_series_id=$sonarr_series_id
-              AND sonarr_episode_id=$sonarr_episode_id AND status IN ($pending,$waiting,$creating)
+              AND sonarr_episode_id=$sonarr_episode_id AND status IN ($pending,$creating)
             LIMIT 1
             """;
         AddPair(command, pair);
         command.Parameters.AddWithValue("$pending", (int)SymlinkSuggestionStatus.Pending);
-        command.Parameters.AddWithValue("$waiting", (int)SymlinkSuggestionStatus.WaitingForFile);
         command.Parameters.AddWithValue("$creating", (int)SymlinkSuggestionStatus.Creating);
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadSuggestion(reader) : null;

@@ -23,8 +23,8 @@ public sealed record SymlinkMatchingRun(
 /// <summary>
 /// Turns the snapshots into durable suggestions. The matcher decides whether a pair is defensible;
 /// this service decides what the register has to remember about it: that a pair is reported once, that
-/// a decline survives the next sync, that a movie without a file is only waiting, and that a pair the
-/// snapshots no longer contain has to be said out loud instead of being dropped quietly.
+/// a decline survives the next sync, that only a movie which has a file can be offered, and that a pair
+/// the snapshots no longer contain has to be said out loud instead of being dropped quietly.
 /// </summary>
 public sealed class SymlinkSuggestionService(
     ISettingsService settingsService,
@@ -37,8 +37,7 @@ public sealed class SymlinkSuggestionService(
     /// </summary>
     private static readonly SymlinkSuggestionStatus[] ReportableStatuses =
     [
-        SymlinkSuggestionStatus.Pending,
-        SymlinkSuggestionStatus.WaitingForFile
+        SymlinkSuggestionStatus.Pending
     ];
 
     /// <summary>
@@ -167,7 +166,7 @@ public sealed class SymlinkSuggestionService(
             {
                 Id = previous?.Id ?? UuidV7.Create(),
                 MatcherVersion = SpecialMovieMatchingRules.MatcherVersion.ToString(CultureInfo.InvariantCulture),
-                Status = match.MovieHasFile ? SymlinkSuggestionStatus.Pending : SymlinkSuggestionStatus.WaitingForFile,
+                Status = SymlinkSuggestionStatus.Pending,
                 Pair = match.Pair,
                 RadarrFileId = match.RadarrFileId,
                 SeasonNumber = match.SeasonNumber,
@@ -223,7 +222,9 @@ public sealed class SymlinkSuggestionService(
     /// <summary>
     /// Specials of every Sonarr instance against movies of every Radarr instance. Both directions the
     /// plan asks for fall out of this one loop: a new series brings specials nobody paired before, and
-    /// a new movie meets the specials that are already sitting there.
+    /// a new movie meets the specials that are already sitting there. A movie without a file is not a
+    /// candidate — nothing can be linked yet — but its download changes the instance signature, so a
+    /// later pass reports the pair once the file is there.
     /// </summary>
     private static List<Candidate> CollectCandidates(AppSettings settings)
     {
@@ -242,7 +243,7 @@ public sealed class SymlinkSuggestionService(
                             {
                                 SpecialMovieMatch? match = SpecialMovieMatchingRules.Match(
                                     sonarr.InstanceId, series, episode, season.SeasonNumber, radarr.InstanceId, movie);
-                                if (match is not null) candidates.Add(new Candidate(match, episode));
+                                if (match is { MovieHasFile: true }) candidates.Add(new Candidate(match, episode));
                             }
                         }
                     }
@@ -276,9 +277,7 @@ public sealed class SymlinkSuggestionService(
                         other.Match.Pair.RadarrInstanceId,
                         other.Match.Pair.RadarrMovieId,
                         other.Match.RadarrFileId,
-                        other.Match.MovieHasFile
-                            ? "Another movie matches this special too and is already on disk, so one of them has to be chosen."
-                            : "Another movie matches this special too but has no file of its own yet."))];
+                        "Another movie matches this special too and is already on disk, so one of them has to be chosen."))];
             }
         }
 

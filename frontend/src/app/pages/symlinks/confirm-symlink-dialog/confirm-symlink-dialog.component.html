@@ -69,6 +69,9 @@
     [disabled]="loading() || busy() || plan()?.runnable !== true"
     (click)="confirmAsync()"
   >
-    {{ busy() ? t('common.loading') : t(plan()?.adoptsExisting ? 'symlinks.confirm.adoptRun' : 'symlinks.confirm.run') }}
+    <span class="button-content">
+      <span>{{ t(plan()?.adoptsExisting ? 'symlinks.confirm.adoptRun' : 'symlinks.confirm.run') }}</span>
+      <app-feedback-icon [state]="busy() ? 'loading' : null" variant="inline" />
+    </span>
   </button>
 </mat-dialog-actions>
