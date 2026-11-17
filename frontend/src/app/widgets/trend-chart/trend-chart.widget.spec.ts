@@ -64,6 +64,23 @@ describe('TrendChartWidget', () => {
     return svg;
   }
 
+  it('shrinks axis labels on narrow charts and caps their rendered size on wide charts', () => {
+    fixture.detectChanges();
+    const wrap = fixture.nativeElement.querySelector('.trend-chart-wrap') as HTMLElement;
+    const label = fixture.nativeElement.querySelector('.trend-y-label') as HTMLElement;
+    const maximum = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) * 0.875;
+    const sizes = [320, 960, 1920].map((width) => {
+      wrap.style.width = `${width}px`;
+      const size = Number.parseFloat(getComputedStyle(label).fontSize);
+      expect(size).toBeGreaterThan(0);
+      expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(maximum + 0.1);
+      return size;
+    });
+    expect(sizes[0]).toBeLessThan(sizes[1]);
+    expect(sizes[1]).toBeCloseTo(maximum);
+    expect(sizes[2]).toBeCloseTo(maximum);
+  });
+
   it('zooms the time axis, updates date labels, and clips paths without scaling the value axis', () => {
     setFullChart();
     const widget = fixture.componentInstance;

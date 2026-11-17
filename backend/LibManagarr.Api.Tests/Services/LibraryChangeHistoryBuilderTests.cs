@@ -10,11 +10,11 @@ public sealed class LibraryChangeHistoryBuilderTests
     [Theory]
     [InlineData(true, "downloadFolderImported", LibraryChangeType.Added, 100)]
     [InlineData(true, "seriesFolderImported", LibraryChangeType.Added, 100)]
-    [InlineData(true, "episodeFileRenamed", LibraryChangeType.Changed, 70)]
+    [InlineData(true, "episodeFileRenamed", LibraryChangeType.Changed, 0)]
     [InlineData(true, "episodeFileDeleted", LibraryChangeType.Deleted, -30)]
     [InlineData(false, "downloadFolderImported", LibraryChangeType.Added, 100)]
     [InlineData(false, "movieFolderImported", LibraryChangeType.Added, 100)]
-    [InlineData(false, "movieFileRenamed", LibraryChangeType.Changed, 70)]
+    [InlineData(false, "movieFileRenamed", LibraryChangeType.Changed, 0)]
     [InlineData(false, "movieFileDeleted", LibraryChangeType.Deleted, -30)]
     public void BuildEntries_ShouldMapEventsAndCalculateSizeDeltas(bool sonarr, string eventType, LibraryChangeType changeType, long delta)
     {
@@ -29,8 +29,8 @@ public sealed class LibraryChangeHistoryBuilderTests
         Assert.Equal(Timestamp, entry.OccurredAt);
         Assert.Equal("Current title", entry.EntityTitle);
         Assert.Equal(sonarr ? "Series title" : null, entry.SeriesTitle);
-        Assert.Equal("current.mkv", entry.FilePath);
-        Assert.Equal(100, entry.SizeBytes);
+        Assert.Equal(changeType == LibraryChangeType.Deleted ? "History title" : "current.mkv", entry.FilePath);
+        Assert.Equal(changeType == LibraryChangeType.Added ? 100 : 30, entry.SizeBytes);
         Assert.Equal(changeType, entry.ChangeType);
         Assert.Equal(delta, entry.DeltaSizeBytes);
     }
@@ -56,14 +56,14 @@ public sealed class LibraryChangeHistoryBuilderTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void BuildEntries_ShouldUsePreviousSizeAndSourceTitleForADeletedFile(bool sonarr)
+    public void BuildEntries_ShouldPreservePreviousFileMetadataForADeletedFile(bool sonarr)
     {
         LibraryChangeHistoryEntry entry = Assert.Single(Build(sonarr, sonarr ? "episodeFileDeleted" : "movieFileDeleted", 42, Timestamp, hasCurrentFile: false));
 
         Assert.Equal(-30, entry.DeltaSizeBytes);
         Assert.Equal(30, entry.SizeBytes);
-        Assert.Equal("History title", entry.EntityTitle);
-        Assert.Null(entry.FilePath);
+        Assert.Equal("Current title", entry.EntityTitle);
+        Assert.Equal("History title", entry.FilePath);
         Assert.Equal(sonarr ? "Series title" : null, entry.SeriesTitle);
     }
 
@@ -76,11 +76,11 @@ public sealed class LibraryChangeHistoryBuilderTests
     }
 
     [Fact]
-    public void BuildSonarrEntries_ShouldKeepTheSeriesTitleEmptyWhenTheSeriesIsUnknown()
+    public void BuildSonarrEntries_ShouldUsePreviousSeriesTitleWhenCurrentSeriesCannotBeResolved()
     {
         LibraryChangeHistoryEntry entry = Assert.Single(Build(true, "downloadFolderImported", 42, Timestamp, hasCurrentFile: false, historySeriesId: 99));
 
-        Assert.Null(entry.SeriesTitle);
+        Assert.Equal("Series title", entry.SeriesTitle);
     }
 
     [Theory]

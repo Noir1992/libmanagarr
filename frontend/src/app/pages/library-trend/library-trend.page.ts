@@ -91,6 +91,12 @@ export class LibraryTrendPage implements OnInit {
   protected readonly storageLabel: Signal<string> = computed((): string => this.i18n.t('libraryTrend.storage'));
   protected readonly totalMediaFilesLabel: Signal<string> = computed((): string => this.i18n.t('libraryTrend.totalMediaFiles'));
   protected readonly totalStorageLabel: Signal<string> = computed((): string => this.i18n.t('libraryTrend.totalStorage'));
+  protected readonly inventoryReconciliationLabel: Signal<string> = computed((): string =>
+    this.i18n.t('libraryTrend.inventoryReconciliation'),
+  );
+  protected readonly inventoryDetailsLabel: Signal<string> = computed((): string => this.i18n.t('libraryTrend.inventoryDetails'));
+  protected readonly observedChangeLabel: Signal<string> = computed((): string => this.i18n.t('libraryTrend.observedChange'));
+  protected readonly unknownSizeLabel: Signal<string> = computed((): string => this.i18n.t('libraryTrend.unknownSize'));
   protected readonly noChangeLabel: Signal<string> = computed((): string => this.i18n.t('libraryTrend.noChange'));
   protected readonly loadErrorLabel: Signal<string> = computed((): string => this.i18n.t('common.tableLoadError'));
   protected readonly addedLabel: Signal<string> = computed((): string => this.i18n.t('libraryTrend.added'));
@@ -394,7 +400,9 @@ export class LibraryTrendPage implements OnInit {
   private buildTooltipLines(point: LibraryTrendPoint, chartId: TrendChartSeries): readonly string[] {
     const delta: number = this.resolveChartDelta(point, chartId);
     let deltaLabel: string = this.noChangeLabel();
-    if (delta !== 0) {
+    if (chartId === 'storage' && point.isSizeDeltaKnown === false) {
+      deltaLabel = this.unknownSizeLabel();
+    } else if (delta !== 0) {
       if (chartId === 'media') {
         deltaLabel = `${this.changeLabel()}: ${this.formatSignedNumber(delta)} ${this.mediaFilesLabel()}`;
       } else {

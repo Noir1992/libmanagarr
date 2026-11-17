@@ -4,4 +4,5 @@ export interface LibraryTrendPoint {
   totalSizeBytes: number;
   deltaMediaFileCount: number;
   deltaSizeBytes: number;
+  isSizeDeltaKnown?: boolean;
 }

@@ -1,4 +1,5 @@
 .trend-chart-wrap {
+  container-type: inline-size;
   position: relative;
   width: 100%;
   aspect-ratio: 960 / 360;
@@ -46,9 +47,32 @@
   }
 }
 
+// Keep labels outside the SVG so its viewBox cannot magnify their font size.
 .trend-axis-label {
-  font-size: 18px;
-  fill: var(--theme-muted);
+  position: absolute;
+  font-size: min(1.875cqw, 0.875rem);
+  line-height: 1;
+  color: var(--theme-muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.trend-y-label {
+  left: calc(64 / 960 * 100%);
+  transform: translate(-100%, -50%);
+}
+
+.trend-x-label {
+  top: calc(336 / 360 * 100%);
+  transform: translateY(-50%);
+
+  &.trend-label-middle {
+    transform: translate(-50%, -50%);
+  }
+
+  &.trend-label-end {
+    transform: translate(-100%, -50%);
+  }
 }
 
 .trend-tooltip {

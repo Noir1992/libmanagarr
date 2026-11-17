@@ -9,6 +9,8 @@ internal sealed class InMemoryHistoryStore : IHistoryStore
 
     public List<LibraryChangeHistoryEntry> RadarrLibraryHistory { get; } = [];
 
+    private readonly Dictionary<ArrApplicationKind, List<LibraryChangeHistoryEntry>> events = [];
+
     public List<object> SnapshotHistory { get; } = [];
 
     public List<SonarrInstanceSnapshot> SonarrInstanceSnapshots { get; } = [];
@@ -24,12 +26,14 @@ internal sealed class InMemoryHistoryStore : IHistoryStore
         return Task.CompletedTask;
     }
 
-    public Task ReplaceLibraryHistoryAsync(ArrApplicationKind kind, IReadOnlyList<LibraryChangeHistoryEntry> entries, CancellationToken cancellationToken)
+    public Task ReplaceLibraryHistoryAsync(ArrApplicationKind kind, IReadOnlyList<LibraryChangeHistoryEntry> entries, CancellationToken cancellationToken,
+        IReadOnlyList<LibraryChangeHistoryEntry>? rawEntries = null)
     {
         List<LibraryChangeHistoryEntry> target = kind == ArrApplicationKind.Sonarr
             ? SonarrLibraryHistory
             : RadarrLibraryHistory;
 
+        if (rawEntries is not null) events[kind] = [.. rawEntries];
         target.Clear();
         target.AddRange(entries.Where((entry) => entry.Kind == kind));
         return Task.CompletedTask;
@@ -49,6 +53,9 @@ internal sealed class InMemoryHistoryStore : IHistoryStore
 
         return Task.FromResult<IReadOnlyList<LibraryChangeHistoryEntry>>([.. SonarrLibraryHistory, .. RadarrLibraryHistory]);
     }
+
+    public async Task<IReadOnlyList<LibraryChangeHistoryEntry>> GetLibraryHistoryEventsAsync(ArrApplicationKind kind, CancellationToken cancellationToken) =>
+        events.TryGetValue(kind, out var stored) ? stored : await GetLibraryHistoryAsync(kind, cancellationToken);
 
     public Task<bool> HasLibraryHistoryAsync(ArrApplicationKind kind, string instanceId, CancellationToken cancellationToken)
     {

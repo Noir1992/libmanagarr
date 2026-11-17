@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal, WritableSignal } from '@angular/core';
 import { FilterOptionType } from '../../enums/filter-option-type';
 import { LibraryChangeHistoryEntry } from '../../interfaces/library-trend/library-change-history-entry';
+import { LibraryTrendStatisticsResponse } from '../../interfaces/library-trend/library-trend-statistics-response';
 import { By } from '@angular/platform-browser';
 import { PageFilterWidget } from '../../widgets/page-filter/page-filter.widget';
 import { of } from 'rxjs';
@@ -13,6 +14,7 @@ import { LibraryTrendPage } from './library-trend.page';
 describe('LibraryTrendPage', () => {
   let fixture: ComponentFixture<LibraryTrendPage>;
   let apiService: jasmine.SpyObj<LibraryTrendStatisticsApiService>;
+  let statisticsResponse: LibraryTrendStatisticsResponse;
   let sonarrInstancesSignal: WritableSignal<{ id: string; name: string; baseUrl: string; apiKey: string }[]>;
   let radarrInstancesSignal: WritableSignal<{ id: string; name: string; baseUrl: string; apiKey: string }[]>;
 
@@ -43,6 +45,10 @@ describe('LibraryTrendPage', () => {
           'libraryTrend.storage': 'storage',
           'libraryTrend.change': 'Changes',
           'libraryTrend.noChange': 'No change',
+          'libraryTrend.unknownSize': 'Unknown',
+          'libraryTrend.inventoryReconciliation': 'Inventory reconciliation',
+          'libraryTrend.inventoryDetails': 'Individual changes can no longer be reconstructed',
+          'libraryTrend.observedChange': 'Detected during inventory check',
           'libraryTrend.mediaChart': 'Media changes',
           'libraryTrend.storageChart': 'Storage usage',
           'libraryTrend.history': 'History',
@@ -51,6 +57,7 @@ describe('LibraryTrendPage', () => {
           'libraryTrend.added': 'Added',
           'libraryTrend.changed': 'Changed',
           'libraryTrend.deleted': 'Deleted',
+          'libraryTrend.updated': 'Updated',
           'libraryTrend.totalMediaFiles': 'Total media files',
           'libraryTrend.totalStorage': 'Total storage',
           'common.noArrInstances': 'No Sonarr/Radarr instances configured.',
@@ -65,45 +72,44 @@ describe('LibraryTrendPage', () => {
       },
     };
 
-    apiService.fetchLibraryTrendStatistics.and.returnValue(
-      of({
-        availableFrom: '2026-04-15T00:00:00.000Z',
-        availableTo: '2026-05-02T10:00:00.000Z',
-        totalMediaFileCount: 42,
-        totalSizeBytes: 1400,
-        points: [
-          {
-            occurredAt: '2026-05-01T10:00:00.000Z',
-            mediaFileCount: 10,
-            totalSizeBytes: 1000,
-            deltaMediaFileCount: 10,
-            deltaSizeBytes: 1000,
-          },
-          {
-            occurredAt: '2026-05-02T10:00:00.000Z',
-            mediaFileCount: 12,
-            totalSizeBytes: 1400,
-            deltaMediaFileCount: 2,
-            deltaSizeBytes: 400,
-          },
-        ],
-        history: [
-          {
-            sourceKey: 'sonarr:1',
-            kind: 'Sonarr',
-            instanceId: 'sonarr-1',
-            instanceName: 'Sonarr Main',
-            occurredAt: '2026-05-01T10:00:00.000Z',
-            changeType: 'Added',
-            entityTitle: 'Episode 1',
-            seriesTitle: 'Sample Series',
-            filePath: '/media/episode-1.mkv',
-            sizeBytes: 1000,
-            deltaSizeBytes: 1000,
-          },
-        ],
-      }),
-    );
+    statisticsResponse = {
+      availableFrom: '2026-04-15T00:00:00.000Z',
+      availableTo: '2026-05-02T10:00:00.000Z',
+      totalMediaFileCount: 42,
+      totalSizeBytes: 1400,
+      points: [
+        {
+          occurredAt: '2026-05-01T10:00:00.000Z',
+          mediaFileCount: 10,
+          totalSizeBytes: 1000,
+          deltaMediaFileCount: 10,
+          deltaSizeBytes: 1000,
+        },
+        {
+          occurredAt: '2026-05-02T10:00:00.000Z',
+          mediaFileCount: 12,
+          totalSizeBytes: 1400,
+          deltaMediaFileCount: 2,
+          deltaSizeBytes: 400,
+        },
+      ],
+      history: [
+        {
+          sourceKey: 'sonarr:1',
+          kind: 'Sonarr',
+          instanceId: 'sonarr-1',
+          instanceName: 'Sonarr Main',
+          occurredAt: '2026-05-01T10:00:00.000Z',
+          changeType: 'Added',
+          entityTitle: 'Episode 1',
+          seriesTitle: 'Sample Series',
+          filePath: '/media/episode-1.mkv',
+          sizeBytes: 1000,
+          deltaSizeBytes: 1000,
+        },
+      ],
+    };
+    apiService.fetchLibraryTrendStatistics.and.returnValue(of(statisticsResponse));
 
     await TestBed.configureTestingModule({
       imports: [LibraryTrendPage],
@@ -221,22 +227,91 @@ describe('LibraryTrendPage', () => {
   }
 
   async function loadPageWithHistory(history: LibraryChangeHistoryEntry[]): Promise<LibraryTrendPage> {
+    apiService.fetchLibraryTrendStatistics.and.returnValue(of({ ...statisticsResponse, history }));
     fixture.detectChanges();
     await TestBed.inject(AppSettingsService).loadInstances();
     await fixture.whenStable();
-    const page: LibraryTrendPage = fixture.componentInstance;
-    const current = fixture.componentInstance['stats']()!;
-    page['stats'].set({ ...current, history });
     fixture.detectChanges();
-    await fixture.whenStable();
-    await new Promise((resolve) => setTimeout(resolve));
+    const page: LibraryTrendPage = fixture.componentInstance;
     const viewport = page['historyViewport']();
-    viewport?.checkViewportSize();
-    viewport?.scrollToIndex(0);
+    if (viewport) {
+      // Give the virtual table a real viewport even in Karma's test iframe.
+      viewport.getElementRef().nativeElement.style.height = '240px';
+      viewport.checkViewportSize();
+      viewport.scrollToIndex(0);
+    }
+    // CDK measures the viewport on one frame and forwards its range to MatTable on the next.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     await fixture.whenStable();
     fixture.detectChanges();
     return page;
   }
+
+  it('shows an unknown update size separately from an unchanged size and a reduction', async () => {
+    const unknown = {
+      ...buildHistoryEntry('2026-05-02T12:00:00.000Z'),
+      changeType: 'Updated' as const,
+      deltaSizeBytes: 0,
+      isSizeDeltaKnown: false,
+    };
+    const unchanged = {
+      ...buildHistoryEntry('2026-05-02T11:00:00.000Z'),
+      changeType: 'Updated' as const,
+      deltaSizeBytes: 0,
+      isSizeDeltaKnown: true,
+    };
+    const smaller = {
+      ...buildHistoryEntry('2026-05-02T10:00:00.000Z'),
+      changeType: 'Updated' as const,
+      deltaSizeBytes: -1024,
+      isSizeDeltaKnown: true,
+    };
+    await loadPageWithHistory([unknown, unchanged, smaller]);
+    const sizes = Array.from(fixture.nativeElement.querySelectorAll('td.mat-column-deltaSizeBytes')) as HTMLElement[];
+    expect(sizes.map((cell) => cell.textContent?.trim())).toEqual(['Unknown', 'No change', '-1.0 KB']);
+  });
+
+  it('explains inferred deletions and distinguishes inventory reconciliation from a named deletion', async () => {
+    const deleted = {
+      ...buildHistoryEntry('2026-05-02T12:00:00.000Z'),
+      changeType: 'Deleted' as const,
+      isInferred: true,
+      entityTitle: 'Missing episode',
+      seriesTitle: 'Removed series',
+      deltaSizeBytes: -1024,
+    };
+    const reconciled = {
+      ...buildHistoryEntry('2026-05-02T11:00:00.000Z'),
+      changeType: 'Changed' as const,
+      isInferred: true,
+      eventType: 'libraryInventoryReconciled',
+      deltaSizeBytes: -2048,
+    };
+    await loadPageWithHistory([deleted, reconciled]);
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('tr.mat-mdc-row')) as HTMLElement[];
+    expect(rows[0].textContent).toContain('Deleted');
+    expect(rows[0].textContent).toContain('Missing episode');
+    expect(rows[0].textContent).toContain('Removed series');
+    expect(rows[0].textContent).toContain('Detected during inventory check');
+    expect(rows[1].textContent).toContain('Inventory reconciliation');
+    expect(rows[1].textContent).toContain('Individual changes can no longer be reconstructed');
+    expect(rows[1].textContent).toContain('-2.0 KB');
+  });
+
+  it('shows an unknown storage delta in the chart tooltip', async () => {
+    await loadPageWithHistory([]);
+    const page = fixture.componentInstance;
+    const point = {
+      occurredAt: '2026-05-02T12:00:00.000Z',
+      mediaFileCount: 1,
+      totalSizeBytes: 100,
+      deltaMediaFileCount: 0,
+      deltaSizeBytes: 0,
+      isSizeDeltaKnown: false,
+    };
+    expect(page['buildTooltipLines'](point, 'storage').at(-1)).toBe('Unknown');
+    expect(page['buildTooltipLines'](point, 'media').at(-1)).toBe('No change');
+  });
 
   it('highlights every history entry of the clicked day and scrolls the first one into the center', async () => {
     const entries: LibraryChangeHistoryEntry[] = [

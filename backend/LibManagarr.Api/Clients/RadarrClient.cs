@@ -45,7 +45,7 @@ public sealed class RadarrClient(HttpClient httpClient)
                    instance,
                    $"/api/v3/history/since?date={sinceValue}&includeMovie=true",
                    cancellationToken)
-               ?? [];
+               ?? throw new HttpRequestException("Radarr returned no history response.");
     }
 
     public async Task<RadarrInstanceSnapshot> FetchSnapshotAsync(
@@ -59,7 +59,7 @@ public sealed class RadarrClient(HttpClient httpClient)
         IReadOnlyList<RadarrMovieResource> movies = await GetAsync<List<RadarrMovieResource>>(
             instance,
             "/api/v3/movie",
-            cancellationToken) ?? [];
+            cancellationToken) ?? throw new HttpRequestException("Radarr returned no movies response.");
 
         Dictionary<int, SonarrProfileSummary> profileMap = profiles
             .Where(profile => profile.Id.HasValue)
@@ -84,7 +84,7 @@ public sealed class RadarrClient(HttpClient httpClient)
             List<RadarrMovieFileResource> movieFiles = movie.HasFile == false ? [] : await GetAsync<List<RadarrMovieFileResource>>(
                 instance,
                 $"/api/v3/moviefile?movieId={movie.Id!.Value}",
-                cancellationToken) ?? [];
+                cancellationToken) ?? throw new HttpRequestException("Radarr returned no movie-files response.");
             SonarrProfileSummary? profile = movie.QualityProfileId.HasValue
                 ? profileMap.GetValueOrDefault(movie.QualityProfileId.Value)
                 : null;

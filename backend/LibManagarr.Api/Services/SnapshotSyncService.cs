@@ -66,20 +66,22 @@ public sealed class SnapshotSyncService(
             ArrApplicationKind.Sonarr,
             instanceId,
             cancellationToken);
+        IReadOnlyList<LibraryChangeHistoryEntry> raw = await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, cancellationToken);
+        bool backfill = raw.Any(e => e.InstanceId == instanceId && e.NeedsHistoryBackfill);
         SonarrInstanceSnapshot snapshot = await sonarrClient.FetchSnapshotAsync(instance, cancellationToken);
         DateTimeOffset historyStart = previousSnapshot?.LastFullSyncAt ?? previousSnapshot?.SyncedAt ?? GetSonarrBootstrapDate(snapshot);
-        if (!hasSonarrLibraryHistory)
+        if (!hasSonarrLibraryHistory || backfill)
         {
-            historyStart = GetSonarrBootstrapDate(snapshot);
+            historyStart = backfill ? DateTimeOffset.UnixEpoch : GetSonarrBootstrapDate(snapshot);
         }
         IReadOnlyList<SonarrHistoryResource> historyResources = await sonarrClient.FetchHistorySinceAsync(
             instance,
             historyStart,
             cancellationToken);
-        historyResources = historyResources.Where(history => history.SeriesId is not int id
+        historyResources = historyResources.Where(history => history.Date <= snapshot.SyncedAt && (backfill || history.SeriesId is not int id
             || previousSnapshot?.SeriesSyncTimes.TryGetValue(id, out DateTimeOffset alreadySynced) != true
-            || history.Date > alreadySynced).ToArray();
-        await PersistSonarrSnapshotAsync(instance, previousSnapshot, snapshot, historyResources, cancellationToken);
+            || history.Date > alreadySynced)).ToArray();
+        await PersistSonarrSnapshotAsync(instance, previousSnapshot, snapshot, historyResources, cancellationToken, backfill);
 
         logger.LogInformation(
             "Completed Sonarr snapshot sync for instance {InstanceName} with {ItemCount} items.",
@@ -110,7 +112,9 @@ public sealed class SnapshotSyncService(
                 ?? throw new ApiProblemException(StatusCodes.Status404NotFound, "Sonarr instance not found", $"No Sonarr instance exists for id '{instanceId}'.");
             SonarrInstanceSnapshot? previous = settings.SonarrSnapshots.FirstOrDefault(value => value.InstanceId == instanceId);
             // Establish the baseline once; subsequent targeted syncs never read unrelated series.
-            if (previous is null) return await SyncSonarrAsync(instanceId, settings, cancellationToken);
+            if (previous is null || (await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, cancellationToken))
+                .Any(e => e.InstanceId == instanceId && e.NeedsHistoryBackfill))
+                return await SyncSonarrAsync(instanceId, settings, cancellationToken);
 
             DateTimeOffset observedAt = DateTimeOffset.UtcNow;
             SonarrSeriesSnapshot series = await sonarrClient.FetchSeriesSnapshotAsync(instance, seriesId, cancellationToken);
@@ -120,14 +124,16 @@ public sealed class SnapshotSyncService(
             resources = resources.Where(history => history.SeriesId == seriesId && history.Date > since && history.Date <= observedAt).ToArray();
             SonarrInstanceSnapshot merged = new()
             {
-                InstanceId = instance.Id, InstanceName = instance.Name, SyncedAt = observedAt,
+                InstanceId = instance.Id,
+                InstanceName = instance.Name,
+                SyncedAt = observedAt,
                 LastFullSyncAt = previous.LastFullSyncAt ?? previous.SyncedAt,
                 SeriesSyncTimes = new(previous.SeriesSyncTimes) { [seriesId] = observedAt },
                 Series = [.. previous.Series.Where(value => value.SeriesId != seriesId), series],
                 PosterUrls = new(previous.PosterUrls) { [seriesId] = series.PosterRemoteUrl }
             };
             merged.Series = merged.Series.OrderBy(value => value.Title, StringComparer.OrdinalIgnoreCase).ToList();
-            await PersistSonarrSnapshotAsync(instance, previous, merged, resources, cancellationToken);
+            await PersistSonarrSnapshotAsync(instance, previous, merged, resources, cancellationToken, seriesId: seriesId);
             symlinkMatching.Request();
             logger.LogInformation("Synchronized Sonarr series {SeriesId} in instance {InstanceId}.", seriesId, instanceId);
             return new SyncInstanceResult { Message = "Sonarr series synchronized.", SyncedAt = observedAt, ItemCount = 1 };
@@ -136,18 +142,25 @@ public sealed class SnapshotSyncService(
     }
 
     private async Task PersistSonarrSnapshotAsync(ArrInstanceSettings instance, SonarrInstanceSnapshot? previous,
-        SonarrInstanceSnapshot snapshot, IReadOnlyList<SonarrHistoryResource> resources, CancellationToken token)
+        SonarrInstanceSnapshot snapshot, IReadOnlyList<SonarrHistoryResource> resources, CancellationToken token, bool backfill = false, int? seriesId = null)
     {
         IReadOnlyList<LibraryChangeHistoryEntry> historyEntries = LibraryChangeHistoryBuilder.BuildSonarrEntries(instance, snapshot, previous, resources);
-        IReadOnlyList<LibraryChangeHistoryEntry> persisted = await historyStore.GetLibraryHistoryAsync(ArrApplicationKind.Sonarr, token);
-        // Preserve previously recorded deltas when a partial sync's events are seen by a later full sync.
-        List<LibraryChangeHistoryEntry> combined = persisted.Concat(historyEntries)
-            .DistinctBy(entry => (entry.Kind, entry.InstanceId, entry.SourceKey)).ToList();
+        IReadOnlyList<LibraryChangeHistoryEntry> persisted = await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, token);
+        List<LibraryChangeHistoryEntry> combined = LibraryHistoryReconciler.MergeEvents(persisted, historyEntries);
+        combined.AddRange(LibraryHistoryReconciler.InferSonarrDeletions(instance, previous, snapshot, combined, seriesId));
         IReadOnlyList<LibraryChangeHistoryEntry> seeds = LibraryHistorySeedBuilder.BuildSonarrSeeds(instance, snapshot, combined);
+        combined = LibraryHistoryReconciler.MergeEvents(combined, seeds);
+        // A targeted sync contains stale observations of other series; only a full sync can
+        // establish a new measured total for the entire instance.
+        if (!seriesId.HasValue)
+            combined = LibraryInventoryHistoryBuilder.Observe(combined, ArrApplicationKind.Sonarr, instance.Id, instance.Name, snapshot.SyncedAt,
+                snapshot.Series.SelectMany(series => series.Seasons).SelectMany(season => season.Episodes)
+                    .Where(episode => episode.HasFile).Sum(episode => episode.File.Size ?? 0));
+        if (backfill) LibraryHistoryReconciler.CompleteBackfill(combined, instance.Id);
         await historyStore.AppendSnapshotHistoryAsync(ArrApplicationKind.Sonarr, snapshot.InstanceId, snapshot.InstanceName,
             snapshot.SyncedAt, snapshot, token);
         await historyStore.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr,
-            LibraryChangeHistoryNormalizer.Normalize(combined.Concat(seeds)), token);
+            LibraryHistoryReconciler.Project(combined), token, combined);
         LibraryFilterValues filterValues = LibraryFilterValuesBuilder.Build(instance.Id, snapshot);
         await settingsService.UpdateAsync(current =>
         {
@@ -181,16 +194,19 @@ public sealed class SnapshotSyncService(
             ArrApplicationKind.Radarr,
             instanceId,
             cancellationToken);
+        IReadOnlyList<LibraryChangeHistoryEntry> raw = await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Radarr, cancellationToken);
+        bool backfill = raw.Any(e => e.InstanceId == instanceId && e.NeedsHistoryBackfill);
         RadarrInstanceSnapshot snapshot = await radarrClient.FetchSnapshotAsync(instance, cancellationToken);
         DateTimeOffset historyStart = previousSnapshot?.SyncedAt ?? GetRadarrBootstrapDate(snapshot);
-        if (!hasRadarrLibraryHistory)
+        if (!hasRadarrLibraryHistory || backfill)
         {
-            historyStart = GetRadarrBootstrapDate(snapshot);
+            historyStart = backfill ? DateTimeOffset.UnixEpoch : GetRadarrBootstrapDate(snapshot);
         }
         IReadOnlyList<RadarrHistoryResource> historyResources = await radarrClient.FetchHistorySinceAsync(
             instance,
             historyStart,
             cancellationToken);
+        historyResources = historyResources.Where(history => history.Date <= snapshot.SyncedAt).ToArray();
         IReadOnlyList<LibraryChangeHistoryEntry> historyEntries = LibraryChangeHistoryBuilder.BuildRadarrEntries(
             instance,
             snapshot,
@@ -207,18 +223,22 @@ public sealed class SnapshotSyncService(
             snapshot.SyncedAt,
             snapshot,
             cancellationToken);
-        IReadOnlyList<LibraryChangeHistoryEntry> persistedRadarrHistory = await historyStore.GetLibraryHistoryAsync(
+        IReadOnlyList<LibraryChangeHistoryEntry> persistedRadarrHistory = await historyStore.GetLibraryHistoryEventsAsync(
             ArrApplicationKind.Radarr,
             cancellationToken);
-        List<LibraryChangeHistoryEntry> combinedRadarrHistory = [.. persistedRadarrHistory, .. historyEntries];
+        List<LibraryChangeHistoryEntry> combinedRadarrHistory = LibraryHistoryReconciler.MergeEvents(persistedRadarrHistory, historyEntries);
+        combinedRadarrHistory.AddRange(LibraryHistoryReconciler.InferRadarrDeletions(instance, previousSnapshot, snapshot, combinedRadarrHistory));
         IReadOnlyList<LibraryChangeHistoryEntry> radarrSeedEntries = LibraryHistorySeedBuilder.BuildRadarrSeeds(
             instance,
             snapshot,
             combinedRadarrHistory);
+        combinedRadarrHistory = LibraryHistoryReconciler.MergeEvents(combinedRadarrHistory, radarrSeedEntries);
+        combinedRadarrHistory = LibraryInventoryHistoryBuilder.Observe(combinedRadarrHistory, ArrApplicationKind.Radarr,
+            instance.Id, instance.Name, snapshot.SyncedAt, snapshot.Movies.Where(movie => movie.HasFile).Sum(movie => movie.File.Size ?? 0));
+        if (backfill) LibraryHistoryReconciler.CompleteBackfill(combinedRadarrHistory, instanceId);
         await historyStore.ReplaceLibraryHistoryAsync(
-            ArrApplicationKind.Radarr,
-            LibraryChangeHistoryNormalizer.Normalize(combinedRadarrHistory.Concat(radarrSeedEntries)),
-            cancellationToken);
+            ArrApplicationKind.Radarr, LibraryHistoryReconciler.Project(combinedRadarrHistory),
+            cancellationToken, combinedRadarrHistory);
 
         LibraryFilterValues radarrFilterValues = LibraryFilterValuesBuilder.Build(instance.Id, snapshot);
         settings.LibraryFilterValues = [

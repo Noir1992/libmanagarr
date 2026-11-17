@@ -21,6 +21,7 @@ public sealed class LibraryTrendStatisticsService
             .Where((entry) => MatchesInstance(entry, sonarrInstanceIds, radarrInstanceIds))
             .OrderBy((entry) => entry.OccurredAt)
             .ThenBy((entry) => entry.Kind)
+            .ThenBy((entry) => entry.HistoryId ?? NumericHistoryId(entry.SourceKey))
             .ThenBy((entry) => entry.SourceKey, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -29,7 +30,9 @@ public sealed class LibraryTrendStatisticsService
             return new LibraryHistoryStatisticsResponse();
         }
 
-        List<LibraryHistoryPoint> allPoints = BuildPoints(allEntries);
+        IReadOnlyList<LibraryStorageAdjustment> storageAdjustments = BuildLibraryStorageAdjustments(
+            settings, allEntries, sonarrInstanceIds, radarrInstanceIds);
+        List<LibraryHistoryPoint> allPoints = BuildPoints(allEntries, storageAdjustments);
         List<LibraryHistoryPoint> points = allPoints
             .Where((point) => start is null || point.OccurredAt >= start)
             .Where((point) => end is null || point.OccurredAt <= end)
@@ -49,8 +52,8 @@ public sealed class LibraryTrendStatisticsService
             History = visibleHistory,
             TotalMediaFileCount = totalMediaFileCount,
             TotalSizeBytes = totalSizeBytes,
-            AvailableFrom = allEntries.Min((entry) => entry.OccurredAt),
-            AvailableTo = allEntries.Max((entry) => entry.OccurredAt)
+            AvailableFrom = allEntries.Select(entry => entry.OccurredAt).Concat(storageAdjustments.Select(adjustment => adjustment.At)).Min(),
+            AvailableTo = allEntries.Select(entry => entry.OccurredAt).Concat(storageAdjustments.Select(adjustment => adjustment.At)).Max()
         };
     }
 
@@ -72,18 +75,23 @@ public sealed class LibraryTrendStatisticsService
         return value.UtcDateTime.Date;
     }
 
-    private static List<LibraryHistoryPoint> BuildPoints(IReadOnlyList<LibraryChangeHistoryEntry> entries)
+    private static List<LibraryHistoryPoint> BuildPoints(IReadOnlyList<LibraryChangeHistoryEntry> entries,
+        IReadOnlyList<LibraryStorageAdjustment> adjustments)
     {
         List<LibraryHistoryPoint> points = [];
         int totalCount = 0;
         long totalSizeBytes = 0;
 
-        foreach (IGrouping<DateTime, LibraryChangeHistoryEntry> group in entries.GroupBy((entry) => GetUtcDayBucket(entry.OccurredAt)))
+        var eventsByDay = entries.GroupBy(entry => GetUtcDayBucket(entry.OccurredAt)).ToDictionary(group => group.Key, group => group.ToArray());
+        var adjustmentsByDay = adjustments.GroupBy(adjustment => GetUtcDayBucket(adjustment.At))
+            .ToDictionary(group => group.Key, group => group.Sum(adjustment => adjustment.SizeBytes));
+        foreach (DateTime day in eventsByDay.Keys.Union(adjustmentsByDay.Keys).Order())
         {
+            LibraryChangeHistoryEntry[] dayEntries = eventsByDay.GetValueOrDefault(day) ?? [];
             int deltaCount = 0;
-            long deltaSizeBytes = 0;
+            long deltaSizeBytes = adjustmentsByDay.GetValueOrDefault(day);
 
-            foreach (LibraryChangeHistoryEntry entry in group)
+            foreach (LibraryChangeHistoryEntry entry in dayEntries)
             {
                 deltaCount += entry.ChangeType switch
                 {
@@ -100,16 +108,46 @@ public sealed class LibraryTrendStatisticsService
 
             points.Add(new LibraryHistoryPoint
             {
-                OccurredAt = new DateTimeOffset(group.Key, TimeSpan.Zero),
+                OccurredAt = new DateTimeOffset(day, TimeSpan.Zero),
                 MediaFileCount = totalCount,
                 TotalSizeBytes = totalSizeBytes,
                 DeltaMediaFileCount = deltaCount,
+                IsSizeDeltaKnown = !adjustmentsByDay.ContainsKey(day) && dayEntries.All(entry => entry.IsSizeDeltaKnown && entry.EventType != LibraryInventoryHistoryBuilder.EventType),
                 DeltaSizeBytes = deltaSizeBytes
             });
         }
 
         return points;
     }
+
+    private static IReadOnlyList<LibraryStorageAdjustment> BuildLibraryStorageAdjustments(AppSettings settings,
+        IReadOnlyList<LibraryChangeHistoryEntry> entries, IReadOnlySet<string>? sonarrInstanceIds,
+        IReadOnlySet<string>? radarrInstanceIds)
+    {
+        List<LibraryStorageAdjustment> openingBalances = LibraryHistoryStorageBalance.OpeningBalances(entries);
+        List<LibraryStorageAdjustment> adjustments = [.. openingBalances];
+        void ReconcileSnapshot(ArrApplicationKind kind, string instanceId, DateTimeOffset syncedAt, long sizeBytes)
+        {
+            if (syncedAt == default) return; // No trustworthy observation time (e.g. imported legacy data).
+            long recorded = entries.Where(entry => entry.Kind == kind && entry.InstanceId == instanceId && entry.OccurredAt <= syncedAt)
+                .Sum(entry => entry.DeltaSizeBytes);
+            recorded += openingBalances.Where(balance => balance.Kind == kind && balance.InstanceId == instanceId && balance.At <= syncedAt)
+                .Sum(balance => balance.SizeBytes);
+            long difference = sizeBytes - recorded;
+            if (difference != 0) adjustments.Add(new(kind, instanceId, syncedAt, difference));
+        }
+
+        foreach (SonarrInstanceSnapshot snapshot in settings.SonarrSnapshots.Where(snapshot => sonarrInstanceIds is null || sonarrInstanceIds.Contains(snapshot.InstanceId)))
+            ReconcileSnapshot(ArrApplicationKind.Sonarr, snapshot.InstanceId, snapshot.SyncedAt,
+                snapshot.Series.SelectMany(series => series.Seasons).SelectMany(season => season.Episodes)
+                    .Where(episode => episode.HasFile).Sum(episode => episode.File.Size ?? 0));
+        foreach (RadarrInstanceSnapshot snapshot in settings.RadarrSnapshots.Where(snapshot => radarrInstanceIds is null || radarrInstanceIds.Contains(snapshot.InstanceId)))
+            ReconcileSnapshot(ArrApplicationKind.Radarr, snapshot.InstanceId, snapshot.SyncedAt,
+                snapshot.Movies.Where(movie => movie.HasFile).Sum(movie => movie.File.Size ?? 0));
+        return adjustments;
+    }
+
+    private static long NumericHistoryId(string key) => long.TryParse(key.AsSpan(key.LastIndexOf(':') + 1), out long id) ? id : long.MaxValue;
 
     // Totals reflect the current library state from the latest snapshots; the change history can be
     // incomplete (arr history retention/clearing), which would otherwise undercount files permanently.
