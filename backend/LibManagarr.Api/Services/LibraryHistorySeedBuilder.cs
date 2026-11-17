@@ -46,6 +46,7 @@ public static class LibraryHistorySeedBuilder
                         SeriesTitle = string.IsNullOrWhiteSpace(series.Title) ? null : series.Title,
                         FilePath = episode.File.RelativePath,
                         SizeBytes = episode.File.Size,
+                        IsSizeDeltaKnown = episode.File.Size.HasValue,
                         DeltaSizeBytes = ResolveSeedDelta(episode.File.Size, mediaKey, accountedDeltas)
                     });
                 }
@@ -89,6 +90,7 @@ public static class LibraryHistorySeedBuilder
                 EntityTitle = movie.Title,
                 FilePath = movie.File.RelativePath,
                 SizeBytes = movie.File.Size,
+                IsSizeDeltaKnown = movie.File.Size.HasValue,
                 DeltaSizeBytes = ResolveSeedDelta(movie.File.Size, mediaKey, accountedDeltas)
             });
         }

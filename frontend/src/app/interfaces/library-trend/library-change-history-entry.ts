@@ -12,4 +12,7 @@ export interface LibraryChangeHistoryEntry {
   filePath: string | null;
   sizeBytes: number | null;
   deltaSizeBytes: number;
+  isSizeDeltaKnown?: boolean;
+  isInferred?: boolean;
+  eventType?: string | null;
 }

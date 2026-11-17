@@ -52,6 +52,12 @@
   background-color: color-mix(in srgb, var(--theme-accent) 22%, transparent);
 }
 
+.history-observation-note {
+  display: block;
+  color: var(--theme-muted);
+  font-size: 0.8em;
+}
+
 .history-series-title {
   color: var(--theme-muted);
   font-weight: 400;

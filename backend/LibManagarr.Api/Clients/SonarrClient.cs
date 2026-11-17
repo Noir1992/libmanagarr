@@ -49,7 +49,7 @@ public sealed class SonarrClient(HttpClient httpClient)
                    instance,
                    $"/api/v3/history/since?date={sinceValue}&includeSeries=true&includeEpisode=true",
                    cancellationToken)
-               ?? [];
+               ?? throw new HttpRequestException("Sonarr returned no history response.");
     }
 
     public async Task<IReadOnlyList<SonarrHistoryResource>> FetchSeriesHistoryAsync(
@@ -81,7 +81,7 @@ public sealed class SonarrClient(HttpClient httpClient)
         }
         else
         {
-            series = await GetAsync<List<SonarrSeriesResource>>(instance, "/api/v3/series", cancellationToken) ?? [];
+            series = await GetAsync<List<SonarrSeriesResource>>(instance, "/api/v3/series", cancellationToken) ?? throw new HttpRequestException("Sonarr returned no series response.");
         }
 
         Dictionary<int, SonarrProfileSummary> profileMap = profiles
@@ -113,11 +113,11 @@ public sealed class SonarrClient(HttpClient httpClient)
             List<SonarrEpisodeResource> episodes = await GetAsync<List<SonarrEpisodeResource>>(
                 instance,
                 $"/api/v3/episode?seriesId={seriesResource.Id}",
-                cancellationToken) ?? (seriesId.HasValue ? throw new HttpRequestException("Sonarr returned no episodes response.") : []);
+                cancellationToken) ?? throw new HttpRequestException("Sonarr returned no episodes response.");
             List<SonarrEpisodeFileResource> episodeFiles = await GetAsync<List<SonarrEpisodeFileResource>>(
                 instance,
                 $"/api/v3/episodefile?seriesId={seriesResource.Id}",
-                cancellationToken) ?? (seriesId.HasValue ? throw new HttpRequestException("Sonarr returned no episode-files response.") : []);
+                cancellationToken) ?? throw new HttpRequestException("Sonarr returned no episode-files response.");
             Dictionary<int, SonarrEpisodeFileResource> episodeFileMap = episodeFiles
                 .Where(episodeFile => episodeFile.Id.HasValue)
                 .ToDictionary(episodeFile => episodeFile.Id!.Value);

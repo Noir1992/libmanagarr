@@ -62,6 +62,19 @@ services:
 
 The UI is then available at `http://localhost:8080`. During the first start an admin account has to be created.
 
+Existing databases are migrated automatically on first access after an upgrade. Library history
+keeps its original events separately from the displayed updates. The next full sync of each
+existing instance reloads available Sonarr/Radarr history to repair old entries. Archived snapshots
+also recover missing deletions where a file disappeared between two recorded snapshots; their
+recorded time is when the disappearance was observed. Sizes that cannot be reconstructed appear
+as unknown. No database reset or manual SQL migration is required.
+
+Files and entire series that disappear from the library receive deletion history entries even
+when Sonarr/Radarr no longer retains their deletion events. Retained imports or renames can also
+establish this after a fresh sync. These entries show when the absence was observed. Existing
+installations receive an automatic backfill. Differences that cannot be attributed to individual
+files appear as inventory reconciliation entries rather than named deletions.
+
 ---
 
 ## Documentation

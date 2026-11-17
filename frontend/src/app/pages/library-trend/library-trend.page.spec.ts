@@ -43,6 +43,10 @@ describe('LibraryTrendPage', () => {
           'libraryTrend.storage': 'storage',
           'libraryTrend.change': 'Changes',
           'libraryTrend.noChange': 'No change',
+          'libraryTrend.unknownSize': 'Unknown',
+          'libraryTrend.inventoryReconciliation': 'Inventory reconciliation',
+          'libraryTrend.inventoryDetails': 'Individual changes can no longer be reconstructed',
+          'libraryTrend.observedChange': 'Detected during inventory check',
           'libraryTrend.mediaChart': 'Media changes',
           'libraryTrend.storageChart': 'Storage usage',
           'libraryTrend.history': 'History',
@@ -237,6 +241,72 @@ describe('LibraryTrendPage', () => {
     fixture.detectChanges();
     return page;
   }
+
+  it('shows an unknown update size separately from an unchanged size and a reduction', async () => {
+    const unknown = {
+      ...buildHistoryEntry('2026-05-02T12:00:00.000Z'),
+      changeType: 'Updated' as const,
+      deltaSizeBytes: 0,
+      isSizeDeltaKnown: false,
+    };
+    const unchanged = {
+      ...buildHistoryEntry('2026-05-02T11:00:00.000Z'),
+      changeType: 'Updated' as const,
+      deltaSizeBytes: 0,
+      isSizeDeltaKnown: true,
+    };
+    const smaller = {
+      ...buildHistoryEntry('2026-05-02T10:00:00.000Z'),
+      changeType: 'Updated' as const,
+      deltaSizeBytes: -1024,
+      isSizeDeltaKnown: true,
+    };
+    await loadPageWithHistory([unknown, unchanged, smaller]);
+    const sizes = Array.from(fixture.nativeElement.querySelectorAll('td.mat-column-deltaSizeBytes')) as HTMLElement[];
+    expect(sizes.map((cell) => cell.textContent?.trim())).toEqual(['Unknown', 'No change', '-1.0 KB']);
+  });
+
+  it('explains inferred deletions and distinguishes inventory reconciliation from a named deletion', async () => {
+    const deleted = {
+      ...buildHistoryEntry('2026-05-02T12:00:00.000Z'),
+      changeType: 'Deleted' as const,
+      isInferred: true,
+      entityTitle: 'Missing episode',
+      seriesTitle: 'Removed series',
+      deltaSizeBytes: -1024,
+    };
+    const reconciled = {
+      ...buildHistoryEntry('2026-05-02T11:00:00.000Z'),
+      changeType: 'Changed' as const,
+      isInferred: true,
+      eventType: 'libraryInventoryReconciled',
+      deltaSizeBytes: -2048,
+    };
+    await loadPageWithHistory([deleted, reconciled]);
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('tr.mat-mdc-row')) as HTMLElement[];
+    expect(rows[0].textContent).toContain('Deleted');
+    expect(rows[0].textContent).toContain('Missing episode');
+    expect(rows[0].textContent).toContain('Removed series');
+    expect(rows[0].textContent).toContain('Detected during inventory check');
+    expect(rows[1].textContent).toContain('Inventory reconciliation');
+    expect(rows[1].textContent).toContain('Individual changes can no longer be reconstructed');
+    expect(rows[1].textContent).toContain('-2.0 KB');
+  });
+
+  it('shows an unknown storage delta in the chart tooltip', async () => {
+    await loadPageWithHistory([]);
+    const page = fixture.componentInstance;
+    const point = {
+      occurredAt: '2026-05-02T12:00:00.000Z',
+      mediaFileCount: 1,
+      totalSizeBytes: 100,
+      deltaMediaFileCount: 0,
+      deltaSizeBytes: 0,
+      isSizeDeltaKnown: false,
+    };
+    expect(page['buildTooltipLines'](point, 'storage').at(-1)).toBe('Unknown');
+    expect(page['buildTooltipLines'](point, 'media').at(-1)).toBe('No change');
+  });
 
   it('highlights every history entry of the clicked day and scrolls the first one into the center', async () => {
     const entries: LibraryChangeHistoryEntry[] = [

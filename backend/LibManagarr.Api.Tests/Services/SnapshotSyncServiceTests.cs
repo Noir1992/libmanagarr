@@ -98,7 +98,8 @@ public sealed class SnapshotSyncServiceTests
                             eventType = "downloadFolderImported",
                             data = new Dictionary<string, string>
                             {
-                                ["path"] = "/media/andor/S01E01.mkv"
+                                ["path"] = "/media/andor/S01E01.mkv",
+                                ["Size"] = "123456789"
                             }
                         }
                     }
@@ -209,7 +210,7 @@ public sealed class SnapshotSyncServiceTests
                             eventType = "downloadFolderImported",
                             data = new Dictionary<string, string>
                             {
-                                ["path"] = "/media/dune.mkv"
+                                ["path"] = "/media/dune.mkv", ["Size"] = "987654321"
                             }
                         }
                     }
@@ -342,7 +343,8 @@ public sealed class SnapshotSyncServiceTests
                             eventType = "downloadFolderImported",
                             data = new Dictionary<string, string>
                             {
-                                ["path"] = "/media/andor/S01E01.mkv"
+                                ["path"] = "/media/andor/S01E01.mkv",
+                                ["Size"] = "123456789"
                             }
                         }
                     }
@@ -464,7 +466,8 @@ public sealed class SnapshotSyncServiceTests
                             eventType = "downloadFolderImported",
                             data = new Dictionary<string, string>
                             {
-                                ["path"] = "/media/andor/S01E01.mkv"
+                                ["path"] = "/media/andor/S01E01.mkv",
+                                ["Size"] = "120"
                             }
                         }
                     }
@@ -649,9 +652,14 @@ public sealed class SnapshotSyncServiceTests
         before.Series[0].Seasons[0].Episodes[0].HasFile = false;
         historyStore.SonarrLibraryHistory.Add(new LibraryChangeHistoryEntry
         {
-            SourceKey = "sonarr:9001", Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main",
-            MediaKey = "sonarr:sonarr-main:501", ChangeType = LibraryChangeType.Deleted,
-            OccurredAt = new DateTimeOffset(2026, 5, 1, 10, 0, 0, TimeSpan.Zero), SizeBytes = 100, DeltaSizeBytes = -100
+            SourceKey = "sonarr:9001",
+            Kind = ArrApplicationKind.Sonarr,
+            InstanceId = "sonarr-main",
+            MediaKey = "sonarr:sonarr-main:501",
+            ChangeType = LibraryChangeType.Deleted,
+            OccurredAt = new DateTimeOffset(2026, 5, 1, 10, 0, 0, TimeSpan.Zero),
+            SizeBytes = 100,
+            DeltaSizeBytes = -100
         });
         scenario.Responses["/api/v3/episode?seriesId=11"] = new object[]
             { new { id = 501, episodeNumber = 4, seasonNumber = 0, title = "Special", hasFile = true, episodeFileId = 101 } };
@@ -693,19 +701,122 @@ public sealed class SnapshotSyncServiceTests
         Assert.Equal(3, historyStore.SonarrLibraryHistory.Count);
     }
 
+    [Fact]
+    public async Task FullSyncInfersCompletelyDeletedSeriesWithoutHistoryAndDoesNotDuplicateIt()
+    {
+        var scenario = CreateTargetedScenario();
+        scenario.Responses["/api/v3/series"] = new object[] { new { id = 22, title = "Untouched series" } };
+        scenario.Responses["/api/v3/history/since"] = Array.Empty<object>();
+        await scenario.Service.SyncAsync(new() { Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main" }, CancellationToken.None);
+        var deletion = Assert.Single(historyStore.SonarrLibraryHistory, e => e.ChangeType == LibraryChangeType.Deleted);
+        Assert.True(deletion.IsInferred);
+        Assert.Equal(-100, deletion.DeltaSizeBytes);
+        Assert.Equal("Target series", deletion.SeriesTitle);
+        Assert.DoesNotContain(scenario.Settings.CurrentSettings.SonarrSnapshots[0].Series, series => series.SeriesId == 11);
+        await scenario.Service.SyncAsync(new() { Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main" }, CancellationToken.None);
+        Assert.Single(historyStore.SonarrLibraryHistory, e => e.ChangeType == LibraryChangeType.Deleted);
+    }
+
+    [Fact]
+    public async Task TargetedSyncInfersOnlyMissingFilesOfItsSeriesWithoutHistory()
+    {
+        var scenario = CreateTargetedScenario();
+        scenario.Responses["/api/v3/history/series"] = Array.Empty<object>();
+        await scenario.Service.SyncSonarrSeriesAsync("sonarr-main", 11, CancellationToken.None);
+        var deletion = Assert.Single(historyStore.SonarrLibraryHistory, e => e.ChangeType == LibraryChangeType.Deleted);
+        Assert.True(deletion.IsInferred);
+        Assert.Equal("sonarr:sonarr-main:501", deletion.MediaKey);
+        Assert.True(scenario.Settings.CurrentSettings.SonarrSnapshots.Single(s => s.InstanceId == "sonarr-main").Series.Single(s => s.SeriesId == 22).Seasons[0].Episodes[0].HasFile);
+    }
+
+    [Theory]
+    [InlineData("/api/v3/series")]
+    [InlineData("/api/v3/episode?seriesId=11")]
+    [InlineData("/api/v3/episodefile?seriesId=11")]
+    public async Task IncompleteFullSnapshotCannotDeleteTheRecordedLibrary(string failedResponse)
+    {
+        var scenario = CreateTargetedScenario();
+        scenario.Responses[failedResponse] = null;
+        await Assert.ThrowsAsync<HttpRequestException>(() => scenario.Service.SyncAsync(new() { Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main" }, CancellationToken.None));
+        Assert.Empty(historyStore.SnapshotHistory);
+        Assert.DoesNotContain(historyStore.SonarrLibraryHistory, e => e.ChangeType == LibraryChangeType.Deleted);
+        Assert.Equal(0, scenario.Settings.SaveCount);
+    }
+
+    [Fact]
+    public async Task FreshFullSyncFindsRemovedSeriesInRetainedHistoryWithoutAPreviousSnapshot()
+    {
+        var scenario = CreateTargetedScenario();
+        scenario.Settings.CurrentSettings.SonarrSnapshots.RemoveAll(snapshot => snapshot.InstanceId == "sonarr-main");
+        scenario.Responses["/api/v3/series"] = new object[] { new { id = 22, title = "Remaining series" } };
+        scenario.Responses["/api/v3/history/since"] = Array.Empty<object>();
+        var old = historyStore.SonarrLibraryHistory.Single(entry => entry.MediaKey == "sonarr:sonarr-main:501");
+        old.SeriesTitle = "Removed series";
+        await scenario.Service.SyncAsync(new() { Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main" }, CancellationToken.None);
+        var deletion = Assert.Single(historyStore.SonarrLibraryHistory, entry => entry.ChangeType == LibraryChangeType.Deleted);
+        Assert.Equal("Removed series", deletion.SeriesTitle);
+        Assert.Equal(-100, deletion.DeltaSizeBytes);
+        Assert.True(deletion.IsInferred);
+        await scenario.Service.SyncAsync(new() { Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main" }, CancellationToken.None);
+        Assert.Single(historyStore.SonarrLibraryHistory, entry => entry.ChangeType == LibraryChangeType.Deleted);
+    }
+
+    [Fact]
+    public async Task UnattributableStorageDifferenceGetsAnExplicitHistoryEntryAndSurvivesReplay()
+    {
+        var scenario = CreateTargetedScenario();
+        // The current file still exists, but its size changed with no retained arr event.
+        scenario.Responses["/api/v3/episodefile?seriesId=22"] = new object[] { new { id = 102, size = 150 }, new { id = 103, size = 50 } };
+        await scenario.Service.SyncAsync(new() { Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main" }, CancellationToken.None);
+        var reconciliation = Assert.Single(historyStore.SonarrLibraryHistory, entry => entry.EventType == "libraryInventoryReconciled");
+        Assert.Equal(-50, reconciliation.DeltaSizeBytes);
+        Assert.Equal(LibraryChangeType.Changed, reconciliation.ChangeType);
+        await scenario.Service.SyncAsync(new() { Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main" }, CancellationToken.None);
+        Assert.Single(historyStore.SonarrLibraryHistory, entry => entry.EventType == "libraryInventoryReconciled");
+        var chart = new LibraryTrendStatisticsService().Build(scenario.Settings.CurrentSettings, historyStore.SonarrLibraryHistory,
+            new HashSet<string> { "sonarr-main" }, new HashSet<string>(), null, null);
+        Assert.Equal(chart.TotalSizeBytes, chart.Points[^1].TotalSizeBytes);
+    }
+
+    [Fact]
+    public async Task RecoveredRealEventsReplaceAFormerInventoryDifference()
+    {
+        var scenario = CreateTargetedScenario();
+        scenario.Responses["/api/v3/episodefile?seriesId=22"] = new object[] { new { id = 102, size = 150 }, new { id = 103, size = 50 } };
+        await scenario.Service.SyncAsync(new() { Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main" }, CancellationToken.None);
+        Assert.Single(historyStore.SonarrLibraryHistory, entry => entry.EventType == "libraryInventoryReconciled");
+        var raw = await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, CancellationToken.None);
+        var deletedAt = DateTimeOffset.Parse("2026-05-02T12:00:00Z");
+        var recovered = LibraryHistoryReconciler.MergeEvents(raw,
+        [
+            new() { SourceKey = "sonarr:recovered-delete", Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main",
+                MediaKey = "sonarr:sonarr-main:502", ChangeType = LibraryChangeType.Deleted, OccurredAt = deletedAt, SizeBytes = 200, DeltaSizeBytes = -200 },
+            new() { SourceKey = "sonarr:recovered-import", Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main",
+                MediaKey = "sonarr:sonarr-main:502", ChangeType = LibraryChangeType.Added, OccurredAt = deletedAt.AddSeconds(1), SizeBytes = 150, DeltaSizeBytes = 150 }
+        ]);
+        await historyStore.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, LibraryHistoryReconciler.Project(recovered), CancellationToken.None, recovered);
+        await scenario.Service.SyncAsync(new() { Kind = ArrApplicationKind.Sonarr, InstanceId = "sonarr-main" }, CancellationToken.None);
+        Assert.DoesNotContain(historyStore.SonarrLibraryHistory, entry => entry.EventType == "libraryInventoryReconciled");
+        Assert.Single(historyStore.SonarrLibraryHistory, entry => entry.ChangeType == LibraryChangeType.Updated);
+    }
+
     private (SnapshotSyncService Service, InMemorySettingsService Settings, StubHttpMessageHandler Handler,
         Dictionary<string, object?> Responses) CreateTargetedScenario()
     {
         DateTimeOffset lastFull = new(2026, 4, 20, 8, 0, 0, TimeSpan.Zero);
         SonarrSeriesSnapshot target = new()
         {
-            SeriesId = 11, Title = "Target series", Seasons = [new SonarrSeasonSnapshot { SeasonNumber = 0, Episodes =
+            SeriesId = 11,
+            Title = "Target series",
+            Seasons = [new SonarrSeasonSnapshot { SeasonNumber = 0, Episodes =
                 [new SonarrEpisodeSnapshot { EpisodeId = 501, EpisodeNumber = 4, Title = "Special", HasFile = true,
                     File = new MediaFileSnapshot { Id = 101, Size = 100, Resolution = "2160p", RelativePath = "Specials/special.mkv" } }] }]
         };
         SonarrSeriesSnapshot untouched = new()
         {
-            SeriesId = 22, Title = "Untouched series", Seasons = [new SonarrSeasonSnapshot { SeasonNumber = 1, Episodes =
+            SeriesId = 22,
+            Title = "Untouched series",
+            Seasons = [new SonarrSeasonSnapshot { SeasonNumber = 1, Episodes =
                 [new SonarrEpisodeSnapshot { EpisodeId = 502, EpisodeNumber = 1, Title = "Episode", HasFile = true,
                     File = new MediaFileSnapshot { Id = 102, Size = 200, Resolution = "1080p" } }] }]
         };
@@ -717,14 +828,23 @@ public sealed class SnapshotSyncServiceTests
                 Series = [target, untouched] }, new SonarrInstanceSnapshot { InstanceId = "sonarr-other", SyncedAt = lastFull }]
         };
         foreach ((string instance, int episode, long size) in new[] { ("sonarr-main", 501, 100L), ("sonarr-main", 502, 200L), ("sonarr-other", 888, 300L) })
-            historyStore.SonarrLibraryHistory.Add(new LibraryChangeHistoryEntry { SourceKey = $"import:{episode}", Kind = ArrApplicationKind.Sonarr,
-                InstanceId = instance, MediaKey = $"sonarr:{instance}:{episode}", ChangeType = LibraryChangeType.Added,
-                OccurredAt = lastFull.AddDays(-1), SizeBytes = size, DeltaSizeBytes = size });
+            historyStore.SonarrLibraryHistory.Add(new LibraryChangeHistoryEntry
+            {
+                SourceKey = $"import:{episode}",
+                Kind = ArrApplicationKind.Sonarr,
+                InstanceId = instance,
+                MediaKey = $"sonarr:{instance}:{episode}",
+                ChangeType = LibraryChangeType.Added,
+                OccurredAt = lastFull.AddDays(-1),
+                SizeBytes = size,
+                DeltaSizeBytes = size
+            });
         object deleted = new { id = 9001, seriesId = 11, episodeId = 501, sourceTitle = "Special", eventType = "episodeFileDeleted", date = "2026-05-01T10:00:00Z" };
         object imported = new { id = 9002, seriesId = 22, episodeId = 503, sourceTitle = "New episode", eventType = "downloadFolderImported", date = "2026-06-01T10:00:00Z" };
         Dictionary<string, object?> responses = new()
         {
-            ["/api/v3/qualityprofile"] = Array.Empty<object>(), ["/api/v3/tag"] = Array.Empty<object>(),
+            ["/api/v3/qualityprofile"] = Array.Empty<object>(),
+            ["/api/v3/tag"] = Array.Empty<object>(),
             ["/api/v3/series/11"] = new { id = 11, title = "Target series" },
             ["/api/v3/series"] = new object[] { new { id = 11, title = "Target series" }, new { id = 22, title = "Untouched series" } },
             ["/api/v3/episode?seriesId=11"] = new object[] { new { id = 501, episodeNumber = 4, seasonNumber = 0, title = "Special", hasFile = false, episodeFileId = 0 } },
@@ -732,7 +852,8 @@ public sealed class SnapshotSyncServiceTests
             ["/api/v3/episode?seriesId=22"] = new object[] { new { id = 502, episodeNumber = 1, seasonNumber = 1, title = "Episode", hasFile = true, episodeFileId = 102 },
                 new { id = 503, episodeNumber = 2, seasonNumber = 1, title = "New episode", hasFile = true, episodeFileId = 103 } },
             ["/api/v3/episodefile?seriesId=22"] = new object[] { new { id = 102, size = 200 }, new { id = 103, size = 50 } },
-            ["/api/v3/history/series"] = new[] { deleted }, ["/api/v3/history/since"] = new[] { deleted, imported }
+            ["/api/v3/history/series"] = new[] { deleted },
+            ["/api/v3/history/since"] = new[] { deleted, imported }
         };
         StubHttpMessageHandler handler = new(responses);
         InMemorySettingsService saved = new(settings);

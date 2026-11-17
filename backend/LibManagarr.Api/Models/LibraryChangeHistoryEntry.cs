@@ -25,4 +25,27 @@ public sealed class LibraryChangeHistoryEntry
     public long? SizeBytes { get; set; }
 
     public long DeltaSizeBytes { get; set; }
+
+    public bool IsSizeDeltaKnown { get; set; } = true;
+
+    public bool IsInferred { get; set; }
+
+    public DateTimeOffset? ObservedSince { get; set; }
+
+    public string? SourceTitle { get; set; }
+
+    public string? EventType { get; set; }
+
+    public string? DeletionReason { get; set; }
+
+    public long? HistoryId { get; set; }
+
+    public string? FileId { get; set; }
+
+    public Dictionary<string, string>? EventData { get; set; }
+
+    // Migration bookkeeping. Legacy merged entries cannot always be decomposed again.
+    public bool IsLegacy { get; set; }
+
+    public bool NeedsHistoryBackfill { get; set; }
 }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using LibManagarr.Api.Models;
 
 namespace LibManagarr.Api.Services;
@@ -5,111 +6,78 @@ namespace LibManagarr.Api.Services;
 public static class LibraryChangeHistoryNormalizer
 {
     private static readonly TimeSpan UpdateWindow = TimeSpan.FromMinutes(5);
+    // An explicit upgrade reason permits slow imports, but never an unrelated later download.
+    private static readonly TimeSpan UpgradeWindow = TimeSpan.FromHours(24);
 
     public static List<LibraryChangeHistoryEntry> Normalize(IEnumerable<LibraryChangeHistoryEntry> entries)
     {
-        List<LibraryChangeHistoryEntry> orderedEntries = entries
-            .OrderBy((entry) => entry.OccurredAt)
-            .ThenBy((entry) => entry.Kind)
-            .ThenBy((entry) => NormalizeMediaKey(entry), StringComparer.OrdinalIgnoreCase)
-            .ThenBy((entry) => entry.SourceKey, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        List<LibraryChangeHistoryEntry> normalizedEntries = [];
-        Dictionary<string, int> lastIndexByMediaKey = new(StringComparer.OrdinalIgnoreCase);
-
-        foreach (LibraryChangeHistoryEntry entry in orderedEntries)
+        List<LibraryChangeHistoryEntry> result = [];
+        foreach (var group in entries.GroupBy(e => (e.Kind, e.InstanceId, Key(e))))
         {
-            string mediaKey = NormalizeMediaKey(entry);
-            if (lastIndexByMediaKey.TryGetValue(mediaKey, out int previousIndex) &&
-                TryMergeUpdate(normalizedEntries[previousIndex], entry, out LibraryChangeHistoryEntry mergedEntry))
+            List<LibraryChangeHistoryEntry> ordered = group.OrderBy(e => e.OccurredAt)
+                .ThenBy(e => e.HistoryId ?? NumericId(e.SourceKey))
+                .ThenBy(e => e.SourceKey, StringComparer.Ordinal).Select(Copy).ToList();
+            HashSet<int> consumed = [];
+            for (int i = 0; i < ordered.Count; i++)
             {
-                normalizedEntries[previousIndex] = mergedEntry;
-                continue;
+                LibraryChangeHistoryEntry deletion = ordered[i];
+                if (deletion.ChangeType != LibraryChangeType.Deleted || deletion.IsInferred) continue;
+                int partner = -1;
+                for (int j = i + 1; j < ordered.Count; j++)
+                {
+                    if (ordered[j].ChangeType == LibraryChangeType.Changed) continue;
+                    if (!consumed.Contains(j) && CanMerge(deletion, ordered[j])) partner = j;
+                    break;
+                }
+                // Some imports record their deletion just after the import. Only explicit upgrades
+                // can pair backwards; a normal user deletion must stay a deletion.
+                if (partner < 0 && IsUpgrade(deletion))
+                {
+                    for (int j = i - 1; j >= 0; j--)
+                    {
+                        if (ordered[j].ChangeType == LibraryChangeType.Changed) continue;
+                        if (!consumed.Contains(j) && CanMerge(deletion, ordered[j], reversed: true)) partner = j;
+                        break;
+                    }
+                }
+                if (partner < 0) continue;
+                LibraryChangeHistoryEntry import = ordered[partner];
+                LibraryChangeHistoryEntry update = Copy(import);
+                update.SourceKey = $"updated:{import.MediaKey}:{deletion.OccurredAt:O}:{import.OccurredAt:O}";
+                update.ChangeType = LibraryChangeType.Updated;
+                update.SeriesTitle ??= deletion.SeriesTitle;
+                update.FilePath ??= deletion.FilePath;
+                update.IsSizeDeltaKnown = deletion.SizeBytes.HasValue && import.SizeBytes.HasValue;
+                update.DeltaSizeBytes = update.IsSizeDeltaKnown ? import.SizeBytes!.Value - deletion.SizeBytes!.Value : 0;
+                consumed.Add(i);
+                consumed.Add(partner);
+                result.Add(update);
             }
-
-            normalizedEntries.Add(Copy(entry));
-            lastIndexByMediaKey[mediaKey] = normalizedEntries.Count - 1;
+            result.AddRange(ordered.Where((_, index) => !consumed.Contains(index)));
         }
-
-        return normalizedEntries;
+        return result.OrderBy(e => e.OccurredAt).ThenBy(e => e.Kind)
+            .ThenBy(e => e.MediaKey, StringComparer.Ordinal).ThenBy(e => e.HistoryId ?? NumericId(e.SourceKey)).ToList();
     }
 
-    private static bool TryMergeUpdate(
-        LibraryChangeHistoryEntry previousEntry,
-        LibraryChangeHistoryEntry currentEntry,
-        out LibraryChangeHistoryEntry mergedEntry)
+    private static bool CanMerge(LibraryChangeHistoryEntry deletion, LibraryChangeHistoryEntry import, bool reversed = false)
     {
-        mergedEntry = previousEntry;
-
-        if (previousEntry.ChangeType != LibraryChangeType.Deleted ||
-            currentEntry.ChangeType != LibraryChangeType.Added ||
-            previousEntry.Kind != currentEntry.Kind ||
-            previousEntry.InstanceId != currentEntry.InstanceId ||
-            currentEntry.OccurredAt < previousEntry.OccurredAt ||
-            currentEntry.OccurredAt - previousEntry.OccurredAt > UpdateWindow)
-        {
-            return false;
-        }
-
-        mergedEntry = new LibraryChangeHistoryEntry
-        {
-            SourceKey = BuildUpdatedSourceKey(previousEntry, currentEntry),
-            Kind = currentEntry.Kind,
-            InstanceId = currentEntry.InstanceId,
-            InstanceName = currentEntry.InstanceName,
-            OccurredAt = currentEntry.OccurredAt,
-            MediaKey = currentEntry.MediaKey,
-            ChangeType = LibraryChangeType.Updated,
-            EntityTitle = currentEntry.EntityTitle,
-            SeriesTitle = currentEntry.SeriesTitle ?? previousEntry.SeriesTitle,
-            FilePath = currentEntry.FilePath ?? previousEntry.FilePath,
-            SizeBytes = currentEntry.SizeBytes ?? previousEntry.SizeBytes,
-            DeltaSizeBytes = ResolveDeltaSize(previousEntry, currentEntry)
-        };
-
-        return true;
+        if (import.ChangeType != LibraryChangeType.Added || import.IsInferred || import.SourceKey.StartsWith("seed:", StringComparison.Ordinal)) return false;
+        if (!string.IsNullOrEmpty(deletion.DeletionReason) && !IsUpgrade(deletion)) return false;
+        if (deletion.FileId is not null && deletion.FileId == import.FileId) return false;
+        TimeSpan distance = reversed ? deletion.OccurredAt - import.OccurredAt : import.OccurredAt - deletion.OccurredAt;
+        return distance >= TimeSpan.Zero && distance <= (IsUpgrade(deletion) && !reversed ? UpgradeWindow : UpdateWindow);
     }
 
-    private static long ResolveDeltaSize(
-        LibraryChangeHistoryEntry previousEntry,
-        LibraryChangeHistoryEntry currentEntry)
-    {
-        long currentSize = currentEntry.SizeBytes ?? 0;
-        long previousSize = previousEntry.SizeBytes ?? 0;
-        return currentSize - previousSize;
-    }
+    private static bool IsUpgrade(LibraryChangeHistoryEntry entry) =>
+        string.Equals(entry.DeletionReason, "Upgrade", StringComparison.OrdinalIgnoreCase);
 
-    private static string BuildUpdatedSourceKey(
-        LibraryChangeHistoryEntry previousEntry,
-        LibraryChangeHistoryEntry currentEntry)
-    {
-        return $"updated:{currentEntry.MediaKey}:{previousEntry.OccurredAt:O}:{currentEntry.OccurredAt:O}";
-    }
-
-    private static string NormalizeMediaKey(LibraryChangeHistoryEntry entry)
-    {
-        return string.IsNullOrWhiteSpace(entry.MediaKey)
-            ? $"legacy:{entry.SourceKey}"
-            : entry.MediaKey;
-    }
+    private static long NumericId(string key) => long.TryParse(key.AsSpan(key.LastIndexOf(':') + 1), out long id) ? id : long.MaxValue;
+    private static string Key(LibraryChangeHistoryEntry entry) => string.IsNullOrWhiteSpace(entry.MediaKey) ? $"legacy:{entry.SourceKey}" : entry.MediaKey;
 
     private static LibraryChangeHistoryEntry Copy(LibraryChangeHistoryEntry entry)
     {
-        return new LibraryChangeHistoryEntry
-        {
-            SourceKey = entry.SourceKey,
-            Kind = entry.Kind,
-            InstanceId = entry.InstanceId,
-            InstanceName = entry.InstanceName,
-            OccurredAt = entry.OccurredAt,
-            MediaKey = NormalizeMediaKey(entry),
-            ChangeType = entry.ChangeType,
-            EntityTitle = entry.EntityTitle,
-            SeriesTitle = entry.SeriesTitle,
-            FilePath = entry.FilePath,
-            SizeBytes = entry.SizeBytes,
-            DeltaSizeBytes = entry.DeltaSizeBytes
-        };
+        LibraryChangeHistoryEntry copy = JsonSerializer.Deserialize<LibraryChangeHistoryEntry>(JsonSerializer.Serialize(entry))!;
+        copy.MediaKey = Key(entry);
+        return copy;
     }
 }

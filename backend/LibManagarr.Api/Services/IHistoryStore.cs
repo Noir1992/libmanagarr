@@ -15,18 +15,20 @@ public interface IHistoryStore
     Task AppendSnapshotHistoryAsync(ArrApplicationKind kind, string instanceId, string instanceName, DateTimeOffset syncedAt, object payload, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Replaces all persisted library change history entries of the given application kind atomically.
+    /// Replaces the displayed history and, when supplied, its original events in one transaction.
     /// </summary>
-    Task ReplaceLibraryHistoryAsync(ArrApplicationKind kind, IReadOnlyList<LibraryChangeHistoryEntry> entries, CancellationToken cancellationToken);
+    Task ReplaceLibraryHistoryAsync(ArrApplicationKind kind, IReadOnlyList<LibraryChangeHistoryEntry> entries, CancellationToken cancellationToken,
+        IReadOnlyList<LibraryChangeHistoryEntry>? rawEntries = null);
 
     /// <summary>
     /// Loads the persisted library change history, optionally limited to a single application kind.
     /// </summary>
     Task<IReadOnlyList<LibraryChangeHistoryEntry>> GetLibraryHistoryAsync(ArrApplicationKind? kind, CancellationToken cancellationToken);
 
-    /// <summary>
-    /// Indicates whether any library change history exists for the given instance.
-    /// </summary>
+    /// <summary>Original events retained independently of the normalized display history.</summary>
+    Task<IReadOnlyList<LibraryChangeHistoryEntry>> GetLibraryHistoryEventsAsync(ArrApplicationKind kind, CancellationToken cancellationToken);
+
+    /// <summary>Indicates whether any library change history exists for the given instance.</summary>
     Task<bool> HasLibraryHistoryAsync(ArrApplicationKind kind, string instanceId, CancellationToken cancellationToken);
 
     /// <summary>

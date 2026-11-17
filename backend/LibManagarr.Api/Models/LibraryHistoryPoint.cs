@@ -11,4 +11,6 @@ public sealed class LibraryHistoryPoint
     public int DeltaMediaFileCount { get; set; }
 
     public long DeltaSizeBytes { get; set; }
+
+    public bool IsSizeDeltaKnown { get; set; } = true;
 }
