@@ -3,6 +3,7 @@ import { resolve, join } from 'node:path';
 import { mkdir, readFile, writeFile, copyFile, access } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { execute } from './process.mjs';
+import { createServiceImagePuller } from './images.mjs';
 import { measurePhase } from './timing.mjs';
 import { StackSession } from './stack.mjs';
 import { validateBaseline, createBaselineManifest, seedFileNames } from './baseline.mjs';
@@ -64,13 +65,27 @@ let currentArtifacts = artifacts;
 let containerArtifacts = '/artifacts';
 const composeArgs = ['compose', '-f', join(root, 'compose.yaml'), '-p', run];
 const abort = new AbortController();
-const compose = (...args) =>
-  execute('docker', [...composeArgs, ...args], {
+const ensureServiceImages = createServiceImagePuller({
+  images: versions.images,
+  signal: abort.signal,
+  execute: (args, options) =>
+    execute('docker', args, {
+      ...options,
+      cwd: repo,
+      env,
+      logFile: join(currentArtifacts, 'orchestrator.log'),
+      signal: abort.signal,
+    }),
+});
+const compose = async (...args) => {
+  if (args[0] === 'up') await ensureServiceImages(args.slice(1).filter((service) => ['sonarr', 'radarr', 'seerr'].includes(service)));
+  return execute('docker', [...composeArgs, ...args], {
     cwd: repo,
     env,
     logFile: join(currentArtifacts, 'orchestrator.log'),
     signal: args[0] === 'down' ? undefined : abort.signal,
   });
+};
 const helper = (...args) =>
   bootstrap
     ? compose('run', '--rm', '--no-deps', '-e', `E2E_ARTIFACT_DIR=${containerArtifacts}`, 'runner', ...args)

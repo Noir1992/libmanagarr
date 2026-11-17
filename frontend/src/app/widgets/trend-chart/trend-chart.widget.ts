@@ -155,6 +155,9 @@ export class TrendChartWidget {
     this.onChartHoverEnd();
   }
 
+  protected readonly chartWidth: number = CHART_WIDTH;
+  protected readonly chartHeight: number = CHART_HEIGHT;
+
   /* Signals */
   protected readonly hoverTooltip: WritableSignal<TrendChartWidgetTooltipState> = linkedSignal<
     TrendChartModel | null,

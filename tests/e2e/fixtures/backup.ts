@@ -27,7 +27,9 @@ export async function selectArchive(page: Page, path: string) {
   await (await chooser).setFiles(path);
 }
 export async function validateArchive(page: Page, password = backupPassword) {
-  await page.getByLabel('Backup password*', { exact: true }).last().fill(password);
+  // Wait for the import form specifically: immediately after file selection, the export
+  // password can still be the only matching label on the page.
+  await page.locator('#import-backup-password').fill(password);
   const response = page.waitForResponse((response) => response.url().endsWith('/api/backups/import/validate'));
   await page.getByRole('button', { name: 'Check backup', exact: true }).click();
   return response;

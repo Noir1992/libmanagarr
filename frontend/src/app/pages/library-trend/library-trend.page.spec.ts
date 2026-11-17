@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal, WritableSignal } from '@angular/core';
 import { FilterOptionType } from '../../enums/filter-option-type';
 import { LibraryChangeHistoryEntry } from '../../interfaces/library-trend/library-change-history-entry';
+import { LibraryTrendStatisticsResponse } from '../../interfaces/library-trend/library-trend-statistics-response';
 import { By } from '@angular/platform-browser';
 import { PageFilterWidget } from '../../widgets/page-filter/page-filter.widget';
 import { of } from 'rxjs';
@@ -13,6 +14,7 @@ import { LibraryTrendPage } from './library-trend.page';
 describe('LibraryTrendPage', () => {
   let fixture: ComponentFixture<LibraryTrendPage>;
   let apiService: jasmine.SpyObj<LibraryTrendStatisticsApiService>;
+  let statisticsResponse: LibraryTrendStatisticsResponse;
   let sonarrInstancesSignal: WritableSignal<{ id: string; name: string; baseUrl: string; apiKey: string }[]>;
   let radarrInstancesSignal: WritableSignal<{ id: string; name: string; baseUrl: string; apiKey: string }[]>;
 
@@ -55,6 +57,7 @@ describe('LibraryTrendPage', () => {
           'libraryTrend.added': 'Added',
           'libraryTrend.changed': 'Changed',
           'libraryTrend.deleted': 'Deleted',
+          'libraryTrend.updated': 'Updated',
           'libraryTrend.totalMediaFiles': 'Total media files',
           'libraryTrend.totalStorage': 'Total storage',
           'common.noArrInstances': 'No Sonarr/Radarr instances configured.',
@@ -69,45 +72,44 @@ describe('LibraryTrendPage', () => {
       },
     };
 
-    apiService.fetchLibraryTrendStatistics.and.returnValue(
-      of({
-        availableFrom: '2026-04-15T00:00:00.000Z',
-        availableTo: '2026-05-02T10:00:00.000Z',
-        totalMediaFileCount: 42,
-        totalSizeBytes: 1400,
-        points: [
-          {
-            occurredAt: '2026-05-01T10:00:00.000Z',
-            mediaFileCount: 10,
-            totalSizeBytes: 1000,
-            deltaMediaFileCount: 10,
-            deltaSizeBytes: 1000,
-          },
-          {
-            occurredAt: '2026-05-02T10:00:00.000Z',
-            mediaFileCount: 12,
-            totalSizeBytes: 1400,
-            deltaMediaFileCount: 2,
-            deltaSizeBytes: 400,
-          },
-        ],
-        history: [
-          {
-            sourceKey: 'sonarr:1',
-            kind: 'Sonarr',
-            instanceId: 'sonarr-1',
-            instanceName: 'Sonarr Main',
-            occurredAt: '2026-05-01T10:00:00.000Z',
-            changeType: 'Added',
-            entityTitle: 'Episode 1',
-            seriesTitle: 'Sample Series',
-            filePath: '/media/episode-1.mkv',
-            sizeBytes: 1000,
-            deltaSizeBytes: 1000,
-          },
-        ],
-      }),
-    );
+    statisticsResponse = {
+      availableFrom: '2026-04-15T00:00:00.000Z',
+      availableTo: '2026-05-02T10:00:00.000Z',
+      totalMediaFileCount: 42,
+      totalSizeBytes: 1400,
+      points: [
+        {
+          occurredAt: '2026-05-01T10:00:00.000Z',
+          mediaFileCount: 10,
+          totalSizeBytes: 1000,
+          deltaMediaFileCount: 10,
+          deltaSizeBytes: 1000,
+        },
+        {
+          occurredAt: '2026-05-02T10:00:00.000Z',
+          mediaFileCount: 12,
+          totalSizeBytes: 1400,
+          deltaMediaFileCount: 2,
+          deltaSizeBytes: 400,
+        },
+      ],
+      history: [
+        {
+          sourceKey: 'sonarr:1',
+          kind: 'Sonarr',
+          instanceId: 'sonarr-1',
+          instanceName: 'Sonarr Main',
+          occurredAt: '2026-05-01T10:00:00.000Z',
+          changeType: 'Added',
+          entityTitle: 'Episode 1',
+          seriesTitle: 'Sample Series',
+          filePath: '/media/episode-1.mkv',
+          sizeBytes: 1000,
+          deltaSizeBytes: 1000,
+        },
+      ],
+    };
+    apiService.fetchLibraryTrendStatistics.and.returnValue(of(statisticsResponse));
 
     await TestBed.configureTestingModule({
       imports: [LibraryTrendPage],
@@ -225,18 +227,21 @@ describe('LibraryTrendPage', () => {
   }
 
   async function loadPageWithHistory(history: LibraryChangeHistoryEntry[]): Promise<LibraryTrendPage> {
+    apiService.fetchLibraryTrendStatistics.and.returnValue(of({ ...statisticsResponse, history }));
     fixture.detectChanges();
     await TestBed.inject(AppSettingsService).loadInstances();
     await fixture.whenStable();
-    const page: LibraryTrendPage = fixture.componentInstance;
-    const current = fixture.componentInstance['stats']()!;
-    page['stats'].set({ ...current, history });
     fixture.detectChanges();
-    await fixture.whenStable();
-    await new Promise((resolve) => setTimeout(resolve));
+    const page: LibraryTrendPage = fixture.componentInstance;
     const viewport = page['historyViewport']();
-    viewport?.checkViewportSize();
-    viewport?.scrollToIndex(0);
+    if (viewport) {
+      // Give the virtual table a real viewport even in Karma's test iframe.
+      viewport.getElementRef().nativeElement.style.height = '240px';
+      viewport.checkViewportSize();
+      viewport.scrollToIndex(0);
+    }
+    // CDK measures the viewport on one frame and forwards its range to MatTable on the next.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     await fixture.whenStable();
     fixture.detectChanges();
     return page;

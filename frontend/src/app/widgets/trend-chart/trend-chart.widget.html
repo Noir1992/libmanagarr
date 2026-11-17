@@ -89,9 +89,6 @@
 
           @for (tick of chartModel.yTicks; track tick.label + tick.y) {
             <line class="trend-grid-line" x1="72" [attr.y1]="tick.y" x2="936" [attr.y2]="tick.y"></line>
-            <text class="trend-axis-label trend-y-label" x="64" [attr.y]="tick.y + 4" text-anchor="end">
-              {{ tick.label }}
-            </text>
           }
 
           <g [attr.clip-path]="'url(#trend-plot-clip-' + chartId() + ')'">
@@ -113,13 +110,23 @@
               }
             }
           </g>
-
-          @for (label of chartModel.xLabels; track label.label + label.x) {
-            <text class="trend-axis-label trend-x-label" [attr.x]="label.x" y="336" [attr.text-anchor]="label.anchor">
-              {{ label.label }}
-            </text>
-          }
         </svg>
+
+        @for (tick of chartModel.yTicks; track tick.label + tick.y) {
+          <span class="trend-axis-label trend-y-label" [style.top.%]="(tick.y / chartHeight) * 100">
+            {{ tick.label }}
+          </span>
+        }
+        @for (label of chartModel.xLabels; track label.label + label.x) {
+          <span
+            class="trend-axis-label trend-x-label"
+            [class.trend-label-middle]="label.anchor === 'middle'"
+            [class.trend-label-end]="label.anchor === 'end'"
+            [style.left.%]="(label.x / chartWidth) * 100"
+          >
+            {{ label.label }}
+          </span>
+        }
 
         @if (hoverTooltip(); as tooltip) {
           @if (tooltip.chartId === chartId()) {
