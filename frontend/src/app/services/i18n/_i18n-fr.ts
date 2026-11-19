@@ -181,6 +181,8 @@ export const i18nFr: Record<TranslationKey, string> = {
   'filter.episodeRegular': 'Épisodes réguliers',
   'filter.episodeSpecial': 'Épisodes spéciaux',
   'filter.upgradeTarget': 'Objectif de mise à niveau',
+  'filter.upgradeTargetOnlyBelow': 'Uniquement en dessous',
+  'filter.upgradeTargetOnlyAbove': 'Uniquement au-dessus',
   'filter.upgradeTargetBelow': 'Sous le score cible',
   'filter.upgradeTargetReached': 'Score cible atteint/dépassé',
   'filter.audioLanguages': 'Langues audio',

@@ -327,8 +327,8 @@ export class LibraryPage implements OnInit, OnDestroy {
         type: FilterOptionType.SELECT,
         options: [
           { label: allLabel, value: 'all' },
-          { label: this.i18n.t('filter.upgradeTargetBelow'), value: 'below' },
-          { label: this.i18n.t('filter.upgradeTargetReached'), value: 'reached' },
+          { label: this.i18n.t('filter.upgradeTargetOnlyBelow'), value: 'below' },
+          { label: this.i18n.t('filter.upgradeTargetOnlyAbove'), value: 'reached' },
         ],
         selectedValue: 'all',
         onChanged: () => this.loadData(),

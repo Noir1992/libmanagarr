@@ -158,6 +158,8 @@ export type TranslationKey =
   | 'filter.episodeRegular'
   | 'filter.episodeSpecial'
   | 'filter.upgradeTarget'
+  | 'filter.upgradeTargetOnlyBelow'
+  | 'filter.upgradeTargetOnlyAbove'
   | 'filter.upgradeTargetBelow'
   | 'filter.upgradeTargetReached'
   | 'filter.audioLanguages'
