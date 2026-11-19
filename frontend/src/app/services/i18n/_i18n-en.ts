@@ -713,6 +713,7 @@ export const i18nEn: Record<TranslationKey, string> = {
   'symlinks.existingFile.Unavailable': 'Existing episode file could not be verified.',
   'symlinks.existingFile.NoFile': 'Sonarr currently reports no episode file.',
   'symlinks.suggestions.why': 'Why suggested',
+  'symlinks.reason.seriesQualifiedTitle': 'Matching special title and series name',
   'symlinks.reason.identicalTitle': 'Matching titles',
   'symlinks.reason.alternativeTitle': 'Matching alternative title',
   'symlinks.reason.genericWord': 'Only a generic title word differs',

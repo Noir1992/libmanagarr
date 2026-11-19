@@ -685,6 +685,7 @@ export type TranslationKey =
   | 'symlinks.existingFile.Unavailable'
   | 'symlinks.existingFile.NoFile'
   | 'symlinks.suggestions.why'
+  | 'symlinks.reason.seriesQualifiedTitle'
   | 'symlinks.reason.identicalTitle'
   | 'symlinks.reason.alternativeTitle'
   | 'symlinks.reason.genericWord'

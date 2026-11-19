@@ -718,6 +718,7 @@ export const i18nDe: Record<TranslationKey, string> = {
   'symlinks.existingFile.Unavailable': 'Vorhandene Episodendatei konnte nicht geprüft werden.',
   'symlinks.existingFile.NoFile': 'Sonarr meldet aktuell keine Episodendatei.',
   'symlinks.suggestions.why': 'Zuordnungsgründe',
+  'symlinks.reason.seriesQualifiedTitle': 'Special-Titel und Serienname stimmen überein',
   'symlinks.reason.identicalTitle': 'Übereinstimmende Titel',
   'symlinks.reason.alternativeTitle': 'Passender Alternativtitel',
   'symlinks.reason.genericWord': 'Nur ein allgemeines Titelwort weicht ab',

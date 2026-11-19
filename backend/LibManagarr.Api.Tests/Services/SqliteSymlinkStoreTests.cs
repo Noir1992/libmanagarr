@@ -491,7 +491,7 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         Assert.Equal("sonarr-1", state.InstanceId);
         Assert.Equal(ArrApplicationKind.Sonarr, state.Kind);
         Assert.Equal("signature-of-that-pass", state.Signature);
-        Assert.Equal(1, state.MatcherVersion);
+        Assert.Equal(SpecialMovieMatchingRules.MatcherVersion, state.MatcherVersion);
         Assert.Equal(4, state.ConfigRevision);
         Assert.Equal(clock.GetUtcNow(), state.CheckedAt);
         Assert.Equal(["radarr-1", "sonarr-1"], (await store.GetMatchingStatesAsync(CancellationToken.None)).Select(saved => saved.InstanceId));

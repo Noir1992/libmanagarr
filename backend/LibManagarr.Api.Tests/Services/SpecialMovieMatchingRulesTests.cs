@@ -151,6 +151,59 @@ public sealed class SpecialMovieMatchingRulesTests
             series));
     }
 
+    [Theory]
+    [InlineData("Movie: Legend of Crimson", "The Movie - Legend of Crimson")]
+    [InlineData("Legend of Crimson", "Legend of Crimson")]
+    [InlineData("Legend of Crimson", "Movie: Legend of Crimson")]
+    public void Match_ShortSpecialTitleAndSeriesQualifiedMovie_ArePaired(string episodeTitle, string moviePart)
+    {
+        SonarrSeriesSnapshot series = Series("KonoSuba – God’s blessing on this wonderful world!!");
+        SpecialMovieMatch? match = Matched(
+            Special(episodeTitle),
+            Film("Konosuba: God's Blessing on This Wonderful World! " + moviePart),
+            series);
+
+        Assert.NotNull(match);
+        Assert.Equal(SpecialMovieMatchStrength.SeriesQualifiedTitle, match.Strength);
+        Assert.Equal(SpecialMovieMatchingRules.SeriesQualifiedTitleCode, match.Reasons[0].Code);
+        Assert.Contains("legend of crimson", match.Reasons[0].Detail);
+    }
+
+    [Theory]
+    [InlineData("Movie: Legend of Crimson", "Other Series: The Movie - Legend of Crimson")]
+    [InlineData("Movie: Legend of Crimson", "Konosuba: The Movie - Legend of Crimson")]
+    [InlineData("Movie: Legend of Crimson", "Konosuba: God's Blessing on This Wonderful World! The Movie - Legend of Crimson 2")]
+    [InlineData("Movie: Legend of Crimson", "Konosuba: God's Blessing on This Wonderful World! The Movie - Crimson Legend")]
+    [InlineData("Movie: Legend of Crimson", "Konosuba: God's Blessing on This Wonderful World! The Movie - Legend of Crimson Extra")]
+    [InlineData("Movie: Legend of Crimson", "Konosuba: God's Blessing on This Wonderful World! The Movie - Another Story")]
+    [InlineData("Movie", "Konosuba: God's Blessing on This Wonderful World! The Movie")]
+    [InlineData("The Movie", "Konosuba: God's Blessing on This Wonderful World! The Movie")]
+    [InlineData("Movie: 2", "Konosuba: God's Blessing on This Wonderful World! The Movie 2")]
+    public void Match_ShortSpecialTitleWithoutExactMeaningfulMoviePart_IsNotAPair(string episodeTitle, string movieTitle)
+    {
+        Assert.Null(Matched(Special(episodeTitle), Film(movieTitle),
+            Series("KonoSuba – God’s blessing on this wonderful world!!")));
+    }
+
+    [Fact]
+    public void Match_ShortSpecialCanUseASeriesQualifiedAlternativeTitle()
+    {
+        RadarrMovieSnapshot movie = new()
+        {
+            MovieId = 70,
+            Title = "An unrelated main title",
+            AlternativeTitles = ["Kabaneri of the Iron Fortress: The Movie - The Battle of Unato"],
+            HasFile = true,
+            File = DownloadedFile()
+        };
+
+        SpecialMovieMatch? match = Matched(Special("Movie: The Battle of Unato"), movie);
+
+        Assert.NotNull(match);
+        Assert.Equal(SpecialMovieMatchingRules.SeriesQualifiedTitleCode, match.Reasons[0].Code);
+        Assert.Contains("alternative title", match.Reasons[0].Detail);
+    }
+
     [Fact]
     public void Match_DatesApartStillPairAndTheDistanceIsReportedAsAFinding()
     {
