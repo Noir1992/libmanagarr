@@ -55,7 +55,7 @@ public sealed class SymlinkSuggestionServiceTests
         Assert.Equal(900, suggestion.RadarrFileId);
         Assert.Equal(0, suggestion.SeasonNumber);
         Assert.Equal(3, suggestion.EpisodeNumber);
-        Assert.Equal("1", suggestion.MatcherVersion);
+        Assert.Equal(SpecialMovieMatchingRules.MatcherVersion.ToString(System.Globalization.CultureInfo.InvariantCulture), suggestion.MatcherVersion);
         Assert.Contains(SpecialMovieMatchingRules.IdenticalTitleCode, suggestion.Reasons.Select(reason => reason.Code));
         Assert.Equal(Start, suggestion.CreatedAt);
         Assert.Equal(Start, suggestion.UpdatedAt);
@@ -96,6 +96,31 @@ public sealed class SymlinkSuggestionServiceTests
         SymlinkMatchingRun forced = await service.RefreshAsync(force: true, CancellationToken.None);
         Assert.Equal(1, forced.Updated);
         Assert.Equal(Start + TimeSpan.FromMinutes(15), (await store.GetSuggestionsAsync(CancellationToken.None)).Single().UpdatedAt);
+    }
+
+    [Fact]
+    public async Task Refresh_AnOlderMatcherVersionRechecksUnchangedSnapshots()
+    {
+        AppSettings settings = Settings(specials: [Episode(5, "Movie: Legend of Crimson")],
+            movies: [Film("Konosuba: God's Blessing on This Wonderful World! The Movie - Legend of Crimson")],
+            seriesTitle: "KonoSuba – God’s blessing on this wonderful world!!");
+        SymlinkSuggestionService service = Service(settings);
+        Assert.Equal(1, (await service.RefreshAsync(force: false, CancellationToken.None)).Created);
+        foreach (SymlinkMatchingState state in await store.GetMatchingStatesAsync(CancellationToken.None))
+        {
+            await store.SaveMatchingStateAsync(
+                WithRevision(state, state.ConfigRevision, matcherVersion: 1), CancellationToken.None);
+        }
+
+        SymlinkMatchingRun run = await service.RefreshAsync(force: false, CancellationToken.None);
+
+        Assert.Equal(1, run.Updated);
+        SymlinkSuggestion suggestion = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
+        Assert.Equal(SymlinkSuggestionStatus.Pending, suggestion.Status);
+        Assert.Contains(SpecialMovieMatchingRules.SeriesQualifiedTitleCode, suggestion.Reasons.Select(reason => reason.Code));
+        Assert.All(await store.GetMatchingStatesAsync(CancellationToken.None),
+            state => Assert.Equal(SpecialMovieMatchingRules.MatcherVersion, state.MatcherVersion));
+        Assert.False((await service.RefreshAsync(force: false, CancellationToken.None)).DidWork);
     }
 
     [Theory]
@@ -525,7 +550,8 @@ public sealed class SymlinkSuggestionServiceTests
 
     private static AppSettings Settings(
         SonarrEpisodeSnapshot[]? specials = null,
-        RadarrMovieSnapshot[]? movies = null) => new()
+        RadarrMovieSnapshot[]? movies = null,
+        string seriesTitle = SeriesTitle) => new()
     {
         SonarrSnapshots =
         [
@@ -538,7 +564,7 @@ public sealed class SymlinkSuggestionServiceTests
                     new SonarrSeriesSnapshot
                     {
                         SeriesId = 12,
-                        Title = SeriesTitle,
+                        Title = seriesTitle,
                         Seasons = [new SonarrSeasonSnapshot { SeasonNumber = 0, Episodes = [.. specials ?? [Episode(5, SpecialTitle)]] }]
                     }
                 ]

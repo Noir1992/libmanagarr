@@ -12,7 +12,8 @@ namespace LibManagarr.Api.Services;
 public enum SpecialMovieMatchStrength
 {
     IdenticalTitles,
-    GenericWordDifference
+    GenericWordDifference,
+    SeriesQualifiedTitle
 }
 
 /// <summary>
@@ -39,10 +40,11 @@ public sealed record SpecialMovieMatch(
 /// </summary>
 public static class SpecialMovieMatchingRules
 {
-    public const int MatcherVersion = 1;
+    public const int MatcherVersion = 2;
 
     public const string IdenticalTitleCode = "identical-title";
     public const string AlternativeTitleCode = "alternative-title";
+    public const string SeriesQualifiedTitleCode = "series-qualified-title";
     public const string GenericWordCode = "generic-word-difference";
     public const string ReleaseYearMatchCode = "release-year-match";
     public const string ReleaseYearDiffersCode = "release-year-differs";
@@ -109,15 +111,24 @@ public static class SpecialMovieMatchingRules
     }
 
     /// <summary>
-    /// The two defensible forms, most defensible first. Equality of the whole title wins over anything
-    /// derived; a shared series name only counts when both sides also say something besides it — and
-    /// when that something is the same on both sides, the whole titles are already equal above.
+    /// The defensible forms, most defensible first. Equality of the whole title wins over anything
+    /// derived. A short episode title can also match the exact special part of a movie carrying the
+    /// full series name. Only leading format labels are ignored for that comparison.
     /// </summary>
     private static SpecialMovieMatchStrength? Compare(
         string episodeTitle, string episodePart, bool episodeCarriesSeries,
         string movieTitle, string moviePart, bool movieCarriesSeries)
     {
         if (string.Equals(episodeTitle, movieTitle, StringComparison.Ordinal)) return SpecialMovieMatchStrength.IdenticalTitles;
+        if (!episodeCarriesSeries && movieCarriesSeries)
+        {
+            string shortTitle = WithoutMovieLabel(episodePart);
+            string qualifiedPart = WithoutMovieLabel(moviePart);
+            return IsMeaningful(shortTitle) && shortTitle == qualifiedPart
+                ? SpecialMovieMatchStrength.SeriesQualifiedTitle
+                : null;
+        }
+
         if (!episodeCarriesSeries || !movieCarriesSeries) return null;
         return TryGenericWordDifference(episodePart, moviePart) ? SpecialMovieMatchStrength.GenericWordDifference : null;
     }
@@ -180,6 +191,18 @@ public static class SpecialMovieMatchingRules
 
     private static bool IsNumeric(string token) => token.All(character => char.IsAsciiDigit(character));
 
+    /// <summary>Remove a leading format label without discarding identity words or sequel numbers.</summary>
+    private static string WithoutMovieLabel(string title)
+    {
+        foreach (string label in new[] { "the movie", "movie" })
+        {
+            if (title == label) return string.Empty;
+            if (title.StartsWith(label + " ", StringComparison.Ordinal)) return title[(label.Length + 1)..];
+        }
+
+        return title;
+    }
+
     /// <summary>True when the two titles differ by exactly one filler word, whichever side carries it.</summary>
     private static bool TryGenericWordDifference(string left, string right) =>
         HasOneExtraFiller(left, right) || HasOneExtraFiller(right, left);
@@ -206,6 +229,9 @@ public static class SpecialMovieMatchingRules
         string specialPart) =>
         strength switch
         {
+            SpecialMovieMatchStrength.SeriesQualifiedTitle => new SymlinkSuggestionReason(
+                SeriesQualifiedTitleCode,
+                $"The special title '{specialPart}' matches the special part of {(isAlternative ? "an alternative title" : "the title")} of '{movieTitle}' after removing leading movie labels; the movie title carries the full series name."),
             SpecialMovieMatchStrength.GenericWordDifference => new SymlinkSuggestionReason(
                 GenericWordCode,
                 $"'{specialPart}' and '{normalizedMovieTitle}' differ only by a generic word."),

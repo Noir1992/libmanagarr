@@ -720,6 +720,7 @@ export const i18nFr: Record<TranslationKey, string> = {
   'symlinks.existingFile.Unavailable': 'Le fichier existant n’a pas pu être vérifié.',
   'symlinks.existingFile.NoFile': 'Sonarr ne signale actuellement aucun fichier.',
   'symlinks.suggestions.why': 'Motifs de la proposition',
+  'symlinks.reason.seriesQualifiedTitle': 'Titre du spécial et nom de série concordants',
   'symlinks.reason.identicalTitle': 'Titres identiques',
   'symlinks.reason.alternativeTitle': 'Titre alternatif correspondant',
   'symlinks.reason.genericWord': 'Seul un mot générique diffère',

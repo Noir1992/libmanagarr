@@ -9,6 +9,7 @@ type Translate = (key: TranslationKey) => string;
 
 const reasonLabelKeys: Record<string, TranslationKey> = {
   'identical-title': 'symlinks.reason.identicalTitle',
+  'series-qualified-title': 'symlinks.reason.seriesQualifiedTitle',
   'alternative-title': 'symlinks.reason.alternativeTitle',
   'generic-word-difference': 'symlinks.reason.genericWord',
   'release-year-match': 'symlinks.reason.sameYear',
