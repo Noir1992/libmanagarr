@@ -180,6 +180,8 @@ export const i18nDe: Record<TranslationKey, string> = {
   'filter.episodeRegular': 'Reguläre Episoden',
   'filter.episodeSpecial': 'Specials',
   'filter.upgradeTarget': 'Upgrade-Ziel',
+  'filter.upgradeTargetOnlyBelow': 'Nur unter',
+  'filter.upgradeTargetOnlyAbove': 'Nur über',
   'filter.upgradeTargetBelow': 'Unter Zielscore',
   'filter.upgradeTargetReached': 'Zielscore erreicht/überschritten',
   'filter.audioLanguages': 'Audiosprachen',
