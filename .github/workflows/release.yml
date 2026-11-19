@@ -64,7 +64,7 @@ jobs:
 
   release-image:
     name: Publish tested release image
-    needs: [backend-tests, frontend-tests, e2e]
+    needs: [release-version, backend-tests, frontend-tests, e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -82,11 +82,15 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE_NAME }}
-          # From tag v1.2.0 -> :1.2.0, :1.2, :1 and :latest; prereleases get -rc variants instead of :latest.
+          # Always publish the exact version, including four-part calendar revisions such as 26.11.19.1.
+          # SemVer-compatible versions also retain their major/minor aliases.
+          flavor: latest=false
           tags: |
+            type=raw,value=${{ needs.release-version.outputs.version }},priority=1000
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
       - name: Login to GHCR
         uses: docker/login-action@v4
         with:
@@ -97,6 +101,10 @@ jobs:
         env:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
+          if [[ -z "$IMAGE_TAGS" ]]; then
+            echo "::error::No image tags were generated for release '$GITHUB_REF_NAME'."
+            exit 1
+          fi
           while IFS= read -r tag; do
             docker tag libmanagarr:e2e "$tag"
             docker push "$tag"
