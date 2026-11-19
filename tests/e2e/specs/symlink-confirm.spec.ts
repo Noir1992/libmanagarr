@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { apiKey, instanceSettings, login, prepareAccount, syncInstance } from '../fixtures/app.js';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chownSync, readFileSync, renameSync, statSync } from 'node:fs';
+import { chownSync, readFileSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { configureLibrary, expected } from '../fixtures/library.js';
 import {
@@ -69,6 +69,18 @@ test('E15: confirming an offer links the film file that the baseline paired with
   expect(links).toHaveLength(1);
   expect(links[0].sourcePath).toBe(pair.filmFile.path);
   expect(linkTarget(links[0].linkPath)).toEqual({ kind: 'link', resolvesTo: pair.filmFile.path });
+
+  // A missing managed link can be recreated through the UI without deleting its registration or source.
+  unlinkSync(links[0].linkPath);
+  await link.getByRole('button', { name: 'Check', exact: true }).click();
+  await expect(link.getByText('link-lost', { exact: true })).toBeVisible();
+  const repairResponse = page.waitForResponse((response) => response.url().endsWith('/retry') && response.request().method() === 'POST');
+  await link.getByRole('button', { name: 'Repair / resume', exact: true }).click();
+  expect((await repairResponse).ok()).toBe(true);
+  await expect.poll(settled, { timeout: 180_000 }).toBe('Completed');
+  const repaired = (await managedLinks(request))[0];
+  expect(linkTarget(repaired.linkPath)).toEqual({ kind: 'link', resolvesTo: pair.filmFile.path });
+  await expect(link.getByText('link-lost', { exact: true })).toBeHidden();
 
   // Sonarr has to find the linked file itself; the register alone would prove nothing about the volume. The
   // association is read from the episode, because a file row of the instance names no episode of its own.

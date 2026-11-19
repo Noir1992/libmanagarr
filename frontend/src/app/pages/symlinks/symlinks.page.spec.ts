@@ -36,6 +36,7 @@ type SymlinkServiceStub = Pick<
   | 'refreshSuggestions'
   | 'refreshProgress'
   | 'rejectSuggestion'
+  | 'retryLink'
   | 'checkLink'
   | 'setFollowUp'
   | 'deleteLink'
@@ -198,6 +199,7 @@ describe('SymlinksPage', () => {
       refreshSuggestions: jasmine.createSpy('refreshSuggestions').and.resolveTo(createRun()),
       refreshProgress: jasmine.createSpy('refreshProgress').and.resolveTo(),
       rejectSuggestion: jasmine.createSpy('rejectSuggestion').and.resolveTo(createSuggestion({ status: 'Rejected' })),
+      retryLink: jasmine.createSpy('retryLink').and.resolveTo(createLink()),
       checkLink: jasmine.createSpy('checkLink').and.resolveTo(createLink()),
       setFollowUp: jasmine.createSpy('setFollowUp').and.callFake(async (id: string, enabled: boolean, revision: number) => {
         const updated = createLink({ id, autoFollowUp: enabled, revision: revision + 1 });
@@ -618,6 +620,20 @@ describe('SymlinksPage', () => {
         .find((button) => button.textContent?.trim() === 'Edit')
         ?.classList.contains('secondary-button'),
     ).toBeTrue();
+  });
+
+  it('lets an incomplete managed link be repaired and respects the backend edit decision', async () => {
+    stub.links.set([createLink({ operationStatus: 'Conflict', setupStep: 'MetadataMatched', canEdit: true })]);
+    fixture.detectChanges();
+    const buttons = actionButtons(1);
+    const repair = buttons.find((button) => button.textContent?.trim() === 'Repair / resume');
+    expect(repair?.disabled).toBeFalse();
+    expect(buttons.find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBeFalse();
+
+    repair!.click();
+    await settle();
+
+    expect(stub.retryLink).toHaveBeenCalledWith('link-1', 3);
   });
 
   it('looks at the row a person asked about', async () => {

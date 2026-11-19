@@ -10,6 +10,7 @@ export const i18nFr: Record<TranslationKey, string> = {
     'La confirmation active le suivi automatique des changements de fichier Radarr pour cette association. Vous pouvez le désactiver pour chaque lien.',
   'symlinks.create': 'Créer manuellement',
   'symlinks.edit': 'Modifier',
+  'symlinks.repair': 'Réparer / reprendre',
   'symlinks.retry': 'Réessayer',
   'symlinks.movie': 'Fichier du film Radarr',
   'symlinks.special': 'Épisode spécial Sonarr',

@@ -13,6 +13,17 @@ public static class MediaFileValueNormalizer
             ? Unknown : value;
     }
 
+    /// <summary>Compare codec families while retaining the original Arr values for display and naming.</summary>
+    public static bool SameVideoCodec(string? left, string? right) =>
+        string.Equals(VideoCodec(left), VideoCodec(right), StringComparison.OrdinalIgnoreCase);
+
+    private static string VideoCodec(string? value) => Value(value).ToLowerInvariant() switch
+    {
+        "h265" or "h.265" or "x265" or "hevc" => "hevc",
+        "h264" or "h.264" or "x264" or "avc" => "avc",
+        _ => Value(value)
+    };
+
     public static string Container(string? raw)
     {
         string value = Value(raw);

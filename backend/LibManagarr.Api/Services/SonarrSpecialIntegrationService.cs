@@ -471,7 +471,9 @@ public sealed class SonarrSpecialIntegrationService(
             ("audio-codec", expected.AudioCodec, confirmed.AudioCodec),
             ("resolution", expected.Resolution, confirmed.Resolution)
         })
-            if (!string.IsNullOrWhiteSpace(wanted) && !string.Equals(wanted, actual, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(wanted) && !(field == "video-codec"
+                ? MediaFileValueNormalizer.SameVideoCodec(wanted, actual)
+                : string.Equals(wanted, actual, StringComparison.OrdinalIgnoreCase)))
                 Note(link, "metadata-" + field + "-deviation", $"Sonarr reports '{actual ?? "unknown"}' for {field}, expected '{wanted}'.");
 
         if (expected.Quality is not null && !string.Equals(expected.Quality, confirmed.Quality, StringComparison.OrdinalIgnoreCase))
@@ -609,7 +611,11 @@ public sealed class SonarrSpecialIntegrationService(
     {
         // Names the rule set the desired name came from, so a later change of Sonarr's own patterns
         // shows up as a different revision instead of an unexplained filename.
-        string rules = System.Text.Json.JsonSerializer.Serialize(naming);
+        // API property order is not a naming-rule change.
+        string rules = naming is null ? "null" : System.Text.Json.JsonSerializer.Serialize(
+            new SortedDictionary<string, System.Text.Json.JsonElement>(
+                System.Text.Json.JsonSerializer.SerializeToElement(naming).EnumerateObject()
+                    .ToDictionary(property => property.Name, property => property.Value), StringComparer.Ordinal));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rules)))[..12];
     }
 
@@ -656,7 +662,12 @@ public sealed class SonarrSpecialIntegrationService(
         SonarrEpisodeFileResource? file = episode?.EpisodeFileId is int fileId ? await sonarr.FetchEpisodeFileAsync(instance, fileId, token) : null;
         PathMappingResult? mapped = file?.Path is null ? null : await paths.TranslateToLibManagarrPathAsync(instance.Id, ArrApplicationKind.Sonarr, file.Path, token);
         if (mapped?.Success != true || !IsSamePath(mapped.Path!, move.NewPath) || !OwnLink(move.NewPath, link.SourcePath))
-            return Pause(link, "rename-association-unconfirmed", "Sonarr has not assigned the renamed link to the selected episode.");
+        {
+            Note(link, "rename-association-unconfirmed", "Sonarr has not assigned the renamed link to the selected episode.");
+            return command?.Queued is { } queuedAt && clock.GetUtcNow() - queuedAt < CommandWaitBudget
+                ? SymlinkSetupOutcome.Waiting : SymlinkSetupOutcome.Blocked;
+        }
+        link.Findings.RemoveAll(value => value.Code is "rename-association-unconfirmed" or "link-lost" or "naming-outdated");
         link.LinkPath = move.NewPath;
         link.LinkText = files.ReadLinkTarget(move.NewPath)!;
         link.SonarrFileId = file!.Id;

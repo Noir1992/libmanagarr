@@ -21,6 +21,95 @@ public sealed class SymlinkHardeningTests
             CheckedAt = DateTimeOffset.UtcNow, ConfigRevision = settings.Symlinks.Revision }, CancellationToken.None).GetAwaiter().GetResult();
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RepairFindsSonarrsMovedLinkButRefusesAnUnmanagedFile(bool managedLink)
+    {
+        SymlinkService service = Service();
+        SymlinkLink link = await service.CreateAsync(Pair, 4321, settings.Symlinks.Revision, null, CancellationToken.None);
+        string destination = Path.Combine(Path.GetDirectoryName(link.LinkPath)!, "external-rename.mkv");
+        files.Entries.Remove(link.LinkPath);
+        files.Entries[destination] = managedLink ? Path.GetRelativePath(Path.GetDirectoryName(destination)!, link.SourcePath) : null;
+        Dictionary<string, List<string>> routes = SymlinkFixture.HappyRoutes();
+        routes["GET /api/v3/episode/5"] = ["""{"id":5,"episodeFileId":99,"hasFile":true}"""];
+        routes["GET /api/v3/episodefile/99"] = [JsonSerializer.Serialize(new
+        {
+            id = 99, path = SymlinkFixture.SeriesInstance($"{SymlinkFixture.SeriesFolder}/Specials/external-rename.mkv")
+        })];
+        service = Service(new StubArrHandler(routes));
+
+        if (managedLink)
+        {
+            SymlinkLink repaired = (await service.RetryAsync(link.Id, link.Revision, CancellationToken.None))!;
+            Assert.Equal(destination, repaired.LinkPath);
+            Assert.Equal(99, repaired.SonarrFileId);
+            Assert.Equal(SymlinkSetupStep.MonitoringDisabled, repaired.SetupStep);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<ApiProblemException>(() => service.RetryAsync(link.Id, link.Revision, CancellationToken.None));
+            Assert.False(files.IsSymlink(destination));
+        }
+        Assert.False(files.EntryExists(link.LinkPath));
+        Assert.Single(files.CreatedLinks);
+        Assert.Empty(files.Removed);
+    }
+
+    [Fact]
+    public async Task RetryRecreatesAMissingCompletedLinkBeforeTouchingSonarr()
+    {
+        SymlinkService service = Service();
+        SymlinkLink link = await service.CreateAsync(Pair, 4321, settings.Symlinks.Revision, null, CancellationToken.None);
+        link.SetupStep = SymlinkSetupStep.Completed;
+        await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None);
+        files.Entries.Remove(link.LinkPath);
+        link = (await store.GetLinkAsync(link.Id, CancellationToken.None))!;
+
+        SymlinkLink repaired = (await service.RetryAsync(link.Id, link.Revision, CancellationToken.None))!;
+
+        Assert.Equal(SymlinkSetupStep.LinkCreated, repaired.SetupStep);
+        Assert.Null(repaired.SonarrFileId);
+        Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishCreationAsync(repaired, CancellationToken.None));
+        Assert.True(service.ResolvesToSource((await store.GetLinkAsync(link.Id, CancellationToken.None))!));
+        Assert.True(files.EntryExists(link.SourcePath));
+    }
+
+    [Fact]
+    public async Task RetryNeverOverwritesAForeignEntry()
+    {
+        SymlinkService service = Service();
+        SymlinkLink link = await service.CreateAsync(Pair, 4321, settings.Symlinks.Revision, null, CancellationToken.None);
+        files.Entries[link.LinkPath] = null;
+
+        await Assert.ThrowsAsync<ApiProblemException>(() => service.RetryAsync(link.Id, link.Revision, CancellationToken.None));
+
+        Assert.False(files.IsSymlink(link.LinkPath));
+        Assert.Empty(files.Removed);
+    }
+
+    [Fact]
+    public async Task RetryResumesAMovedLinkWithoutRecreatingTheOldPath()
+    {
+        SymlinkService service = Service();
+        SymlinkLink link = await service.CreateAsync(Pair, 4321, settings.Symlinks.Revision, null, CancellationToken.None);
+        string destination = Path.Combine(Path.GetDirectoryName(link.LinkPath)!, "renamed.mkv");
+        link.SetupStep = SymlinkSetupStep.Renamed;
+        link.NamingMove = new(link.LinkPath, destination, Path.GetRelativePath(Path.GetDirectoryName(destination)!, link.SourcePath), "91");
+        files.Entries[destination] = link.NamingMove.LinkText;
+        files.Entries.Remove(link.LinkPath);
+        await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None);
+        link = (await store.GetLinkAsync(link.Id, CancellationToken.None))!;
+
+        SymlinkLink repaired = (await service.RetryAsync(link.Id, link.Revision, CancellationToken.None))!;
+
+        Assert.Equal(SymlinkSetupStep.Renamed, repaired.SetupStep);
+        Assert.NotNull(repaired.NamingMove);
+        Assert.Null(repaired.NamingMove.ScanCommandId);
+        Assert.False(files.EntryExists(link.LinkPath));
+        Assert.True(files.EntryExists(destination));
+    }
+
     [Fact]
     public void UnixColonNamesAreValidWhileWindowsAlternateDataStreamsAreRefused()
     {
@@ -126,12 +215,15 @@ public sealed class SymlinkHardeningTests
         Assert.Empty(await store.GetLinksAsync(CancellationToken.None));
     }
 
-    [Fact]
-    public async Task EditedPairIsReservedAndResumesAfterTheOldSeriesCleanup()
+    [Theory]
+    [InlineData(SymlinkOperationStatus.Active, SymlinkSetupStep.Completed)]
+    [InlineData(SymlinkOperationStatus.Conflict, SymlinkSetupStep.MetadataMatched)]
+    public async Task EditedPairIsReservedAndResumesAfterTheOldSeriesCleanup(SymlinkOperationStatus status, SymlinkSetupStep step)
     {
         SymlinkService service = Service();
         SymlinkLink original = await service.CreateAsync(Pair, 4321, settings.Symlinks.Revision, null, CancellationToken.None);
-        original.SetupStep = SymlinkSetupStep.Completed;
+        original.OperationStatus = status;
+        original.SetupStep = step;
         await store.UpdateLinkAsync(original, original.Revision, CancellationToken.None);
         original = (await store.GetLinkAsync(original.Id, CancellationToken.None))!;
         Dictionary<string, List<string>> routes = SymlinkFixture.HappyRoutes();

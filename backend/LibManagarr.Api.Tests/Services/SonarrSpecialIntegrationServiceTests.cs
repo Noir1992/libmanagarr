@@ -32,6 +32,66 @@ public sealed class SonarrSpecialIntegrationServiceTests
     private readonly FakeTimeProvider clock = new(Start);
 
     [Theory]
+    [InlineData("x265", "h265", true)]
+    [InlineData("HEVC", "h265", true)]
+    [InlineData("H.265", "h265", true)]
+    [InlineData("x264", "h264", true)]
+    [InlineData("x265", "h264", false)]
+    public async Task CodecAliasesDoNotBlockNamingButDifferentCodecsDo(string expectedCodec, string actualCodec, bool equivalent)
+    {
+        Dictionary<string, List<string>> routes = HappyRoutes();
+        routes["GET /api/v3/episodefile/44"] = routes["GET /api/v3/episodefile/44"]
+            .Select(value => value.Replace("h264", actualCodec, StringComparison.Ordinal)).ToList();
+        SymlinkFileMetadata expected = ExpectedFromRadarr();
+        expected.VideoCodec = expectedCodec;
+        SonarrSpecialIntegrationService service = CreateService(new StubArrHandler(routes), new FakeLinkFileSystem());
+        await service.RunSetupAsync(await SeedAsync(SymlinkSetupStep.MonitoringDisabled, expected), CancellationToken.None);
+
+        SymlinkSetupOutcome outcome = await service.RunSetupAsync(await StoredAsync(), CancellationToken.None);
+
+        Assert.Equal(equivalent ? SymlinkSetupOutcome.Waiting : SymlinkSetupOutcome.Blocked, outcome);
+        SymlinkLink link = await StoredAsync();
+        Assert.Equal(equivalent, link.NamingMove is not null);
+        Assert.Equal(!equivalent, link.Findings.Any(value => value.Code == "metadata-video-codec-deviation"));
+    }
+
+    [Fact]
+    public void NamingRevisionIgnoresApiPropertyOrder()
+    {
+        SonarrNamingConfigResource first = JsonSerializer.Deserialize<SonarrNamingConfigResource>(
+            """{"RenameEpisodes":true,"SpecialEpisodeFormat":"Special","replaceIllegalCharacters":true,"colonReplacementFormat":0}""")!;
+        SonarrNamingConfigResource second = JsonSerializer.Deserialize<SonarrNamingConfigResource>(
+            """{"colonReplacementFormat":0,"SpecialEpisodeFormat":"Special","replaceIllegalCharacters":true,"RenameEpisodes":true}""")!;
+        Assert.Equal(SonarrSpecialIntegrationService.NamingRevisionOf(first), SonarrSpecialIntegrationService.NamingRevisionOf(second));
+        second.SpecialEpisodeFormat = "Changed";
+        Assert.NotEqual(SonarrSpecialIntegrationService.NamingRevisionOf(first), SonarrSpecialIntegrationService.NamingRevisionOf(second));
+    }
+
+    [Fact]
+    public async Task CompletedRenameScanWaitsForEpisodeAssociationBeforeFinishing()
+    {
+        Dictionary<string, List<string>> routes = HappyRoutes();
+        routes["GET /api/v3/episode/5"] = ["""{"id":5,"seriesId":12,"episodeFileId":44,"monitored":false}"""];
+        routes["GET /api/v3/episodefile/44"] = [EpisodeFileJson(Instance($"{SeriesFolder}/Specials/{OldName}"), "WFFF")];
+        FakeLinkFileSystem files = new();
+        SonarrSpecialIntegrationService service = CreateService(new StubArrHandler(routes), files);
+        SymlinkLink link = await SeedAsync(SymlinkSetupStep.Renamed);
+        link.SonarrFileId = 44;
+        await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None);
+        Assert.Equal(SymlinkSetupOutcome.Waiting, await service.RunSetupAsync(await StoredAsync(), CancellationToken.None));
+
+        Assert.Equal(SymlinkSetupOutcome.Waiting, await service.RunSetupAsync(await StoredAsync(), CancellationToken.None));
+        Assert.Contains((await StoredAsync()).Findings, finding => finding.Code == "rename-association-unconfirmed");
+        clock.Advance(TimeSpan.FromMinutes(3));
+        Assert.Equal(SymlinkSetupOutcome.Blocked, await service.RunSetupAsync(await StoredAsync(), CancellationToken.None));
+        routes["GET /api/v3/episodefile/44"] = [EpisodeFileJson(Instance($"{SeriesFolder}/Specials/{NewName}"), "WFFF")];
+
+        Assert.Equal(SymlinkSetupOutcome.Completed, await service.RunSetupAsync(await StoredAsync(), CancellationToken.None));
+        Assert.DoesNotContain((await StoredAsync()).Findings, finding => finding.Code == "rename-association-unconfirmed");
+        Assert.Equal(NewLinkPath(), (await StoredAsync()).LinkPath);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task SetupSynchronizesOnlyTheAffectedSeriesAfterNamingAndRetriesAFailedSync(bool failFirst)

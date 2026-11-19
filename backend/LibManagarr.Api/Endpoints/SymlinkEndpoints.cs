@@ -556,6 +556,7 @@ public static class SymlinkEndpoints
             LinkPath = link.LinkPath,
             LinkText = link.LinkText,
             SourcePath = link.SourcePath,
+            CanEdit = SymlinkService.CanEdit(link),
             OperationStatus = link.OperationStatus,
             SetupStep = link.SetupStep,
             Findings = [.. link.Findings],

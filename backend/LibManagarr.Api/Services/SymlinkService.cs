@@ -1571,14 +1571,18 @@ public sealed class SymlinkService(
         return command.Completed ? null : commandId;
     }
 
+    public static bool CanEdit(SymlinkLink link) =>
+        link.OperationStatus is SymlinkOperationStatus.Active or SymlinkOperationStatus.Pending or SymlinkOperationStatus.Conflict
+        && link.PendingUpdate is null && link.NamingMove is null && !WaitsForRestoreCheck(link);
+
     public async Task<SymlinkLink?> EditAsync(string id, SaveSymlinkLinkRequest request, CancellationToken token)
     {
         await RequireEnabledAsync(token);
         SymlinkLink? link = await store.GetLinkAsync(id, token);
         if (link is null) return null;
         if (link.Revision != request.Revision) throw StaleRevision();
-        if (link.OperationStatus != SymlinkOperationStatus.Active || link.SetupStep != SymlinkSetupStep.Completed)
-            throw Conflict("The current operation is not complete.", "Resolve or retry it before changing the pairing.");
+        if (!CanEdit(link))
+            throw Conflict("A source update, rename or deletion is still pending.", "Finish or retry it before changing the pairing.");
         AppSettings snapshot = await settings.GetSnapshotAsync(token);
         if (snapshot.Symlinks.Revision != request.ConfigRevision) throw StaleRevision();
         SpecialMoviePair pair = request.ToPair();
@@ -1605,6 +1609,12 @@ public sealed class SymlinkService(
         if (files.EntryExists(link.LinkPath) && !IsOwnLinkAt(link, link.LinkPath)
             && !(link.PendingUpdate is { } pending && IsOwnLinkAt(new SymlinkLink { SourcePath = pending.SourcePath, LinkText = pending.LinkText }, link.LinkPath)))
             throw Conflict("The entry is foreign or was changed externally.", "Resolve the conflict at the registered path first.");
+        if (link.NamingMove is null && link.PendingUpdate is null
+            && link.OperationStatus is not (SymlinkOperationStatus.DeletePending or SymlinkOperationStatus.CleanupPending)
+            && !files.EntryExists(link.LinkPath))
+        {
+            await RecoverMissingLinkAsync(link, token);
+        }
         link.SonarrScanCommandId = null;
         link.SonarrRenameCommandId = null;
         if (link.NamingMove is { } move) link.NamingMove = move with { ScanCommandId = null };
@@ -1619,6 +1629,39 @@ public sealed class SymlinkService(
         if (!await store.UpdateLinkAsync(link, revision, token)) throw StaleRevision();
         setupRequests.Request();
         return await store.GetLinkAsync(id, token);
+    }
+
+    private async Task RecoverMissingLinkAsync(SymlinkLink link, CancellationToken token)
+    {
+        AppSettings snapshot = await settings.GetSnapshotAsync(token);
+        ArrInstanceSettings instance = snapshot.SonarrInstances.FirstOrDefault(value => value.Id == link.SonarrInstanceId)
+            ?? throw UnavailableException("The Sonarr instance needed to locate the missing link is unavailable.");
+        SonarrEpisodeResource? episode = await sonarr.FetchEpisodeAsync(instance, link.SonarrEpisodeId, token);
+        if (episode?.Id != link.SonarrEpisodeId)
+            throw Conflict("The selected episode is missing.", "Select an existing episode before repairing the link.");
+        SonarrEpisodeFileResource? file = episode.EpisodeFileId is > 0
+            ? await sonarr.FetchEpisodeFileAsync(instance, episode.EpisodeFileId.Value, token) : null;
+        if (file?.Path is { } instancePath)
+        {
+            PathMappingResult mapped = await paths.TranslateToLibManagarrPathAsync(instance.Id, ArrApplicationKind.Sonarr, instancePath, token);
+            if (!mapped.Success) throw Conflict("The episode file path cannot be translated.", mapped.Failure!);
+            if (files.EntryExists(mapped.Path!))
+            {
+                MediaStorageArea? area = snapshot.Symlinks.FindStorageArea(link.StorageAreaId);
+                if (area is null || !ArrPathRules.IsWithinRoot(area.SeriesRoot, mapped.Path!)
+                    || !files.IsSymlink(mapped.Path!) || !SymlinkPathGuard.ResolvesTo(files, mapped.Path!, link.SourcePath))
+                    throw Conflict("Sonarr's episode file is not the missing managed link.", "The existing file was left untouched.");
+                SymlinkPathGuard.CheckParents(files, mapped.Path!);
+                link.LinkPath = mapped.Path!;
+                link.LinkText = files.ReadLinkTarget(mapped.Path!)!;
+                link.SonarrFileId = file.Id;
+                link.SetupStep = SymlinkSetupStep.MonitoringDisabled;
+                return;
+            }
+        }
+        link.SonarrFileId = null;
+        link.ConfirmedMetadata = null;
+        link.SetupStep = SymlinkSetupStep.LinkCreated;
     }
 
     private async Task EnsureEpisodeFreeAsync(SpecialMoviePair pair, string? exceptId, CancellationToken token)

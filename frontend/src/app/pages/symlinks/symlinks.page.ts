@@ -365,6 +365,15 @@ export class SymlinksPage implements OnInit {
    * The look a person asks for on one row. It writes nothing of its own, so the only answer that has to
    * reach the screen is the row the check left behind — which the service already put back in the list.
    */
+  protected async repairAsync(link: SymlinkLink): Promise<void> {
+    if (this.linkLocked(link)) return;
+    try {
+      await this.symlinks.retryLink(link.id, link.revision);
+    } catch {
+      // The action state carries the refusal; foreign files remain untouched.
+    }
+  }
+
   protected async checkAsync(link: SymlinkLink): Promise<void> {
     if (this.linkLocked(link)) return;
     try {

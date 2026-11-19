@@ -283,7 +283,18 @@
                         type="button"
                         mat-stroked-button
                         class="secondary-button"
-                        [disabled]="linkLocked(link) || link.operationStatus !== 'Active' || link.setupStep !== 'Completed'"
+                        [disabled]="linkLocked(link)"
+                        (click)="repairAsync(link)"
+                      >
+                        {{ t('symlinks.repair') }}
+                      </button>
+                      <button
+                        type="button"
+                        mat-stroked-button
+                        class="secondary-button"
+                        [disabled]="
+                          linkLocked(link) || !(link.canEdit ?? (link.operationStatus === 'Active' && link.setupStep === 'Completed'))
+                        "
                         (click)="edit(link)"
                       >
                         {{ t('symlinks.edit') }}

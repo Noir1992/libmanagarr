@@ -33,6 +33,23 @@ public sealed class SymlinkHealthServiceTests
     private readonly FakeLinkFileSystem files = new();
 
     [Fact]
+    public async Task PendingRenameChecksTheNewLinkRatherThanReportingTheOldPathLost()
+    {
+        SymlinkLink link = await SeedEntryAsync("link-1", setupStep: SymlinkSetupStep.Renamed);
+        string destination = Path.Combine(Path.GetDirectoryName(link.LinkPath)!, "renamed.mkv");
+        link.NamingMove = new(link.LinkPath, destination, Path.GetRelativePath(Path.GetDirectoryName(destination)!, link.SourcePath), "91");
+        files.Entries[destination] = link.NamingMove.LinkText;
+        files.Entries.Remove(link.LinkPath);
+        await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None);
+
+        await Health().CheckAllAsync(CancellationToken.None);
+
+        Assert.DoesNotContain((await StoredAsync(link.Id)).Findings, finding => finding.Code == "link-lost");
+        Assert.False(files.EntryExists(link.LinkPath));
+        Assert.True(files.EntryExists(destination));
+    }
+
+    [Fact]
     public async Task TheEntryStandingExactlyAsItWasLeftIsStampedAndSaysNothing()
     {
         await SeedEntryAsync("link-1");
