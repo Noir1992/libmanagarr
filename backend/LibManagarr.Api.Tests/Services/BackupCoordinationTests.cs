@@ -7,6 +7,35 @@ namespace LibManagarr.Api.Tests.Services;
 public sealed class BackupCoordinationTests
 {
     [Fact]
+    public async Task ConcurrentStoreWritersLeaveNoScopesBehindForBackup()
+    {
+        BackupOperationCoordinator coordinator = new(TimeProvider.System);
+        BackupWriteGate gate = new(coordinator);
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(15));
+        Task[] writers = Enumerable.Range(0, 16).Select(_ => Task.Run(async () =>
+        {
+            for (int iteration = 0; iteration < 2_000; iteration++)
+            {
+                await gate.WaitAsync(deadline.Token);
+                try
+                {
+                    await Task.Yield();
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            }
+        }, deadline.Token)).ToArray();
+
+        await Task.WhenAll(writers);
+
+        // Every writer finished, so an export must be able to capture a consistent snapshot immediately.
+        using IOperationLease lease = await coordinator.PauseWritersAsync(
+            TimeSpan.FromMilliseconds(100), keepPausedAfterRelease: false, deadline.Token);
+    }
+
+    [Fact]
     public async Task WritersWaitForTheLease_AndResumeAfterItIsReleased()
     {
         BackupOperationCoordinator coordinator = new(TimeProvider.System);

@@ -37,9 +37,10 @@ public sealed class BackupWriteGate(BackupOperationCoordinator coordinator)
 
     public void Release()
     {
-        inner.Release();
+        // Retire this holder before another waiter can publish its scope into the shared field.
         IWriteScope? scope = held;
         held = null;
         scope?.Dispose();
+        inner.Release();
     }
 }
