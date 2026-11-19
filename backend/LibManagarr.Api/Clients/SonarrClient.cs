@@ -223,7 +223,7 @@ public sealed class SonarrClient(HttpClient httpClient)
             $"{NormalizeBaseUrl(instance.BaseUrl)}/api/v3/episodefile/{episodeFileId}");
         request.Headers.Add("X-Api-Key", instance.ApiKey);
         using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
-        if (response.StatusCode != System.Net.HttpStatusCode.NotFound) response.EnsureSuccessStatusCode();
+        if (response.StatusCode != System.Net.HttpStatusCode.NotFound) EnsureSuccessResponse(response, request);
     }
 
     public async Task<IReadOnlyList<SonarrEpisodeFileResource>> FetchEpisodeFilesAsync(
@@ -338,7 +338,7 @@ public sealed class SonarrClient(HttpClient httpClient)
         request.Headers.Add("X-Api-Key", instance.ApiKey);
 
         using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        EnsureSuccessResponse(response, request);
 
         string body = await response.Content.ReadAsStringAsync(cancellationToken);
         return string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body);
@@ -356,7 +356,7 @@ public sealed class SonarrClient(HttpClient httpClient)
         request.Content = new StringContent(node.ToJsonString(), Encoding.UTF8, "application/json");
 
         using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        EnsureSuccessResponse(response, request);
 
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken);
     }
@@ -401,7 +401,7 @@ public sealed class SonarrClient(HttpClient httpClient)
         request.Headers.Add("X-Api-Key", instance.ApiKey);
 
         using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        EnsureSuccessResponse(response, request);
 
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken);
     }
@@ -419,9 +419,18 @@ public sealed class SonarrClient(HttpClient httpClient)
         request.Content = JsonContent.Create(body);
 
         using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        EnsureSuccessResponse(response, request);
 
         return await response.Content.ReadFromJsonAsync<T>(cancellationToken);
+    }
+
+    private static void EnsureSuccessResponse(HttpResponseMessage response, HttpRequestMessage request)
+    {
+        if (response.IsSuccessStatusCode) return;
+        // Keep the method and API path, but never include credentials, API keys or response bodies.
+        throw new HttpRequestException(
+            $"Sonarr returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}) for {request.Method} {request.RequestUri!.AbsolutePath}.",
+            null, response.StatusCode);
     }
 
     /// <summary>Wire shape of Sonarr's command endpoint; fields it does not take stay absent.</summary>

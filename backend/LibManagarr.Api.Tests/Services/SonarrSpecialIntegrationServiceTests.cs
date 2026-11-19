@@ -32,6 +32,35 @@ public sealed class SonarrSpecialIntegrationServiceTests
     private readonly FakeTimeProvider clock = new(Start);
 
     [Theory]
+    [InlineData(HttpStatusCode.NotFound, "sonarr-resource-not-found", SymlinkSetupOutcome.Blocked)]
+    [InlineData(HttpStatusCode.Forbidden, "sonarr-access-denied", SymlinkSetupOutcome.Blocked)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "sonarr-api-error", SymlinkSetupOutcome.Waiting)]
+    public async Task HttpResponsesAreNotReportedAsAnUnreachableInstance(HttpStatusCode status, string code, SymlinkSetupOutcome expected)
+    {
+        StubArrHandler handler = new(HappyRoutes())
+        {
+            Throws = new HttpRequestException("GET /api/v3/episode/5", null, status)
+        };
+        SonarrSpecialIntegrationService service = CreateService(handler, new FakeLinkFileSystem());
+        SymlinkLink link = await SeedAsync(SymlinkSetupStep.MonitoringDisabled);
+        link.Findings.Add(new SymlinkFinding("arr-unreachable", "Old transport failure", Start));
+
+        Assert.Equal(expected, await service.RunSetupAsync(link, CancellationToken.None));
+
+        SymlinkLink stopped = await StoredAsync();
+        SymlinkFinding finding = Assert.Single(stopped.Findings);
+        Assert.Equal(code, finding.Code);
+        Assert.Contains("MonitoringDisabled", finding.Detail);
+        Assert.Contains("episode 5", finding.Detail);
+        Assert.Contains("/api/v3/episode/5", finding.Detail);
+        Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stopped.SetupStep);
+
+        SonarrSpecialIntegrationService recovered = CreateService(new StubArrHandler(HappyRoutes()), new FakeLinkFileSystem());
+        Assert.Equal(SymlinkSetupOutcome.Waiting, await recovered.RunSetupAsync(stopped, CancellationToken.None));
+        Assert.DoesNotContain((await StoredAsync()).Findings, value => value.Code == code);
+    }
+
+    [Theory]
     [InlineData("x265", "h265", true)]
     [InlineData("HEVC", "h265", true)]
     [InlineData("H.265", "h265", true)]

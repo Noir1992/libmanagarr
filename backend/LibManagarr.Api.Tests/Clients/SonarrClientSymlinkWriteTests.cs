@@ -11,6 +11,31 @@ namespace LibManagarr.Api.Tests.Clients;
 // client does not model.
 public sealed class SonarrClientSymlinkWriteTests
 {
+    [Fact]
+    public async Task MissingFileReportsTheApiPathAndMethodWithoutExposingTheApiKey()
+    {
+        SonarrClient client = new(new HttpClient(new StubArrHandler([], HttpStatusCode.NotFound)));
+
+        HttpRequestException failure = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.FetchEpisodeFileAsync(CreateSonarr(), 278, CancellationToken.None));
+
+        Assert.Equal(HttpStatusCode.NotFound, failure.StatusCode);
+        Assert.Contains("GET /api/v3/episodefile/278", failure.Message);
+        Assert.DoesNotContain("secret", failure.Message);
+    }
+
+    [Fact]
+    public async Task CommandFailureReportsThePostEndpoint()
+    {
+        SonarrClient client = new(new HttpClient(new StubArrHandler([], HttpStatusCode.NotFound)));
+
+        HttpRequestException failure = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.StartRescanSeriesAsync(CreateSonarr(), 12, CancellationToken.None));
+
+        Assert.Equal(HttpStatusCode.NotFound, failure.StatusCode);
+        Assert.Contains("POST /api/v3/command", failure.Message);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.NoContent)]
     [InlineData(HttpStatusCode.NotFound)]
