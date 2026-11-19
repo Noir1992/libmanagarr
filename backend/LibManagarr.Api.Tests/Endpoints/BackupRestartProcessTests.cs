@@ -43,7 +43,8 @@ public sealed class BackupRestartProcessTests
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         using HttpClientHandler handler = new() { CookieContainer = new CookieContainer() };
-        using HttpClient client = new(handler) { BaseAddress = new Uri($"http://127.0.0.1:{port}"), Timeout = TimeSpan.FromSeconds(3) };
+        // Encrypted backup exports can take longer on a busy CI runner; only readiness probes need a short timeout.
+        using HttpClient client = new(handler) { BaseAddress = new Uri($"http://127.0.0.1:{port}"), Timeout = TimeSpan.FromSeconds(30) };
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(75));
         const string accountPassword = "a-strong-local-account-password";
         const string archivePassword = "a-strong-backup-password";
@@ -119,7 +120,9 @@ public sealed class BackupRestartProcessTests
             Assert.False(process.HasExited, "The backend exited instead of starting.");
             try
             {
-                using HttpResponseMessage response = await client.GetAsync(path, token);
+                using CancellationTokenSource probe = CancellationTokenSource.CreateLinkedTokenSource(token);
+                probe.CancelAfter(TimeSpan.FromSeconds(3));
+                using HttpResponseMessage response = await client.GetAsync(path, probe.Token);
                 if (response.IsSuccessStatusCode) return;
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !token.IsCancellationRequested) { }
@@ -135,10 +138,12 @@ public sealed class BackupRestartProcessTests
             Assert.False(process.HasExited, "The backend exited instead of restarting automatically.");
             try
             {
-                using HttpResponseMessage response = await client.GetAsync("/api/backups/status", token);
+                using CancellationTokenSource probe = CancellationTokenSource.CreateLinkedTokenSource(token);
+                probe.CancelAfter(TimeSpan.FromSeconds(3));
+                using HttpResponseMessage response = await client.GetAsync("/api/backups/status", probe.Token);
                 if (response.IsSuccessStatusCode)
                 {
-                    BackupStatusDto? status = await response.Content.ReadFromJsonAsync<BackupStatusDto>(token);
+                    BackupStatusDto? status = await response.Content.ReadFromJsonAsync<BackupStatusDto>(probe.Token);
                     if (status?.OperationId == operationId && status.Phase == "Restored") return;
                     Assert.NotEqual("RestoreRolledBack", status?.Phase);
                 }
