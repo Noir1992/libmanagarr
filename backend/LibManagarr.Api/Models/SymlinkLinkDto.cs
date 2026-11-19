@@ -43,6 +43,8 @@ public sealed class SymlinkLinkDto
 
     public string SourcePath { get; set; } = string.Empty;
 
+    public bool CanEdit { get; set; }
+
     public SymlinkOperationStatus OperationStatus { get; set; }
 
     /// <summary>Which setup step still is open; null means nothing was ever started on the Sonarr side.</summary>

@@ -10,6 +10,7 @@ export const i18nDe: Record<TranslationKey, string> = {
     'Bestätigen erlaubt die automatische Nachführung späterer Radarr-Dateiwechsel für diese Zuordnung. Sie kann pro Link deaktiviert werden.',
   'symlinks.create': 'Manuell anlegen',
   'symlinks.edit': 'Bearbeiten',
+  'symlinks.repair': 'Reparieren / fortsetzen',
   'symlinks.retry': 'Erneut versuchen',
   'symlinks.movie': 'Radarr-Filmdatei',
   'symlinks.special': 'Sonarr-Special',

@@ -10,6 +10,7 @@ export const i18nEn: Record<TranslationKey, string> = {
     'Confirming enables automatic follow-up of later Radarr file changes for this pair. You can disable it per link.',
   'symlinks.create': 'Create manually',
   'symlinks.edit': 'Edit',
+  'symlinks.repair': 'Repair / resume',
   'symlinks.retry': 'Retry setup',
   'symlinks.movie': 'Radarr movie file',
   'symlinks.special': 'Sonarr special',

@@ -38,6 +38,7 @@ export interface SymlinkLink {
   linkPath: string;
   linkText: string;
   sourcePath: string;
+  canEdit?: boolean;
   operationStatus: SymlinkOperationStatus;
   setupStep: SymlinkSetupStep | null;
   findings: SymlinkFinding[];

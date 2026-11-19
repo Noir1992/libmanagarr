@@ -221,7 +221,7 @@ public sealed class SymlinkHealthService(
                 if ((expected.Quality is not null && !string.Equals(expected.Quality, episode.File.Quality, StringComparison.OrdinalIgnoreCase))
                     || (expected.QualityRevision is not null && expected.QualityRevision != episode.File.QualityRevision))
                     findings.Add(Finding("metadata-quality-deviation", "The Sonarr quality differs from the selected source."));
-                if ((expected.VideoCodec is not null && expected.VideoCodec != episode.File.VideoCodec)
+                if ((expected.VideoCodec is not null && !MediaFileValueNormalizer.SameVideoCodec(expected.VideoCodec, episode.File.VideoCodec))
                     || (expected.AudioCodec is not null && expected.AudioCodec != episode.File.AudioCodec)
                     || (expected.Resolution is not null && expected.Resolution != episode.File.Resolution))
                     findings.Add(Finding("metadata-media-info-deviation", "The Sonarr MediaInfo differs from the selected source."));
@@ -310,35 +310,40 @@ public sealed class SymlinkHealthService(
                            && !SymlinkService.WaitsForRestoreCheck(row);
         if (!claimsALink) return;
 
-        if (!files.EntryExists(row.LinkPath))
+        string linkPath = row.NamingMove is { } move && files.EntryExists(move.NewPath)
+            ? move.NewPath : row.LinkPath;
+
+        if (!files.EntryExists(linkPath))
         {
             findings.Add(Finding(LinkLostCode,
-                $"'{row.LinkPath}' is not there anymore, although this entry was proven standing there."));
+                $"'{linkPath}' is not there anymore, although this entry was proven standing there."));
             return;
         }
 
-        if (!files.IsSymlink(row.LinkPath))
+        if (!files.IsSymlink(linkPath))
         {
             findings.Add(Finding(EntryNotALinkCode,
-                $"'{row.LinkPath}' is a regular file rather than the managed link, so this entry no longer speaks for what stands there."));
+                $"'{linkPath}' is a regular file rather than the managed link, so this entry no longer speaks for what stands there."));
             return;
         }
 
-        if (!links.ResolvesToSource(row))
+        string expectedLinkText = row.NamingMove is { } pending && linkPath == pending.NewPath
+            ? pending.LinkText : row.LinkText;
+        if (files.ReadLinkTarget(linkPath) != expectedLinkText || !SymlinkPathGuard.ResolvesTo(files, linkPath, row.SourcePath))
         {
             findings.Add(Finding(LinkMovedCode,
-                $"'{row.LinkPath}' points at '{files.ReadLinkTarget(row.LinkPath) ?? "nothing"}' instead of the chosen file '{row.SourcePath}'."));
+                $"'{linkPath}' points at '{files.ReadLinkTarget(linkPath) ?? "nothing"}' instead of the chosen file '{row.SourcePath}'."));
             return;
         }
 
         try
         {
-            files.OpenForRead(row.LinkPath);
+            files.OpenForRead(linkPath);
         }
         catch (UnauthorizedAccessException exception)
         {
             findings.Add(Finding(AccessDeniedCode,
-                $"'{row.LinkPath}' is the right link but could not be opened for reading: {exception.Message}"));
+                $"'{linkPath}' is the right link but could not be opened for reading: {exception.Message}"));
         }
         catch (IOException exception)
         {
@@ -348,12 +353,12 @@ public sealed class SymlinkHealthService(
             if (RootUnreadable(row, snapshot))
             {
                 findings.Add(Finding(StorageUnreachableCode,
-                    $"'{row.LinkPath}' could not be read and the roots of its storage area are unreadable too, so this is reported as a share that is offline rather than as a file that is gone."));
+                    $"'{linkPath}' could not be read and the roots of its storage area are unreadable too, so this is reported as a share that is offline rather than as a file that is gone."));
                 return;
             }
 
             findings.Add(Finding(SourceMissingCode,
-                $"'{row.LinkPath}' is the right link, but the file it leads to could not be opened: {exception.Message}"));
+                $"'{linkPath}' is the right link, but the file it leads to could not be opened: {exception.Message}"));
         }
     }
 

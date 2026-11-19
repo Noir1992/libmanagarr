@@ -600,6 +600,7 @@ export type TranslationKey =
   | 'symlinks.followUpConsent'
   | 'symlinks.create'
   | 'symlinks.edit'
+  | 'symlinks.repair'
   | 'symlinks.retry'
   | 'symlinks.movie'
   | 'symlinks.special'
