@@ -82,7 +82,7 @@ test('E15: confirming an offer links the film file that the baseline paired with
 
   // A missing managed link can be recreated through the UI without deleting its registration or source.
   unlinkSync(links[0].linkPath);
-  await mutation(request, 'post', '/api/tasks/symlinkHealthCheck/run', null);
+  await mutation(request, 'post', '/api/settings/tasks/symlinkHealthCheck/run', null);
   await page.reload();
   await expect(link.getByText('link-lost', { exact: true })).toBeVisible();
   const repairResponse = page.waitForResponse((response) => response.url().endsWith('/retry') && response.request().method() === 'POST');
