@@ -222,7 +222,19 @@
       <section class="card">
         <header class="card-header">
           <h2 class="card-title" id="symlinks-links-title">{{ linksTitle() }}</h2>
-          <span class="card-subtitle">({{ links().length }})</span>
+          <span class="managed-links-summary">
+            <span class="card-subtitle">({{ links().length }})</span>
+            @if (managedLinkWarningText(); as warningText) {
+              <app-info-icon
+                class="managed-links-warning"
+                iconName="warning"
+                tone="warning"
+                size="big"
+                [messageText]="warningText"
+                [wide]="true"
+              />
+            }
+          </span>
           <div class="card-header-actions">
             <button
               type="button"
@@ -270,7 +282,12 @@
                         </button>
                         <p class="item-title" [id]="'link-title-' + link.id">
                           {{ link.radarrMovieTitle ?? t('common.na') }}
-                          <span class="item-episode">{{ specialLabel(link.episodeNumber) }}</span>
+                          <span class="item-episode managed-special">
+                            <span>{{ specialLabel(link.episodeNumber) }}</span>
+                            @if (linkInformation(link); as information) {
+                              <app-info-icon [messageText]="information" />
+                            }
+                          </span>
                         </p>
                       </div>
                       <span [class]="operationStatusClass(link)">{{ operationStatus(link) }}</span>
@@ -287,13 +304,11 @@
                       </dl>
                     }
 
-                    @for (finding of link.findings; track finding.code + $index) {
-                      @if (finding.code !== 'renaming-disabled') {
-                        <p class="item-warning">
-                          <span class="finding-code">{{ finding.code }}</span>
-                          {{ finding.detail ?? t('common.na') }}
-                        </p>
-                      }
+                    @for (finding of warningFindings(link); track finding.code + $index) {
+                      <p class="item-warning">
+                        <span class="finding-code">{{ finding.code }}</span>
+                        {{ finding.detail ?? t('common.na') }}
+                      </p>
                     }
 
                     @if (linkState(link.id).error; as actionError) {
@@ -310,7 +325,10 @@
                             [disabled]="linkLocked(link)"
                             (click)="repairAsync(link)"
                           >
-                            {{ t('symlinks.repair') }}
+                            <span class="button-content">
+                              <span>{{ t('symlinks.repair') }}</span>
+                              <app-feedback-icon [state]="repairing().has(link.id) ? 'loading' : null" variant="inline" />
+                            </span>
                           </button>
                         }
                         <button
@@ -397,10 +415,13 @@
                         type="button"
                         mat-stroked-button
                         class="secondary-button"
-                        [disabled]="!featureEnabled()"
+                        [disabled]="!featureEnabled() || reactivating().has(rejectionKey(rejection))"
                         (click)="reactivateAsync(rejection)"
                       >
-                        {{ t('symlinks.rejections.reactivate') }}
+                        <span class="button-content">
+                          <span>{{ t('symlinks.rejections.reactivate') }}</span>
+                          <app-feedback-icon [state]="reactivating().has(rejectionKey(rejection)) ? 'loading' : null" variant="inline" />
+                        </span>
                       </button>
                     </div>
                   </li>

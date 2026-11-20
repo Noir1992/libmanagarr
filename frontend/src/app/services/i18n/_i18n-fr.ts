@@ -678,6 +678,7 @@ export const i18nFr: Record<TranslationKey, string> = {
   'symlinks.links.monitoringDisabled': "L'épisode lié n'est plus surveillé dans Sonarr, afin qu'il ne soit pas téléchargé deux fois.",
   'symlinks.links.setupStep': 'Étape : {step}',
   'symlinks.links.title': 'Liens gérés',
+  'symlinks.links.warningSummary': 'Liens gérés avec des avertissements :\n{links}',
   'symlinks.loadError': "Les listes n'ont pas pu être chargées.",
   'symlinks.needsConfiguration':
     'Configurez le dossier multimédia commun dans les paramètres des liens symboliques avant de créer des liens.',

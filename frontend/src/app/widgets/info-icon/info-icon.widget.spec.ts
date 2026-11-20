@@ -28,6 +28,16 @@ describe('InfoIconWidget', () => {
     expect(button?.textContent?.trim()).toBe('info');
   });
 
+  it('supports a warning trigger while retaining the info default', () => {
+    fixture.componentRef.setInput('iconName', 'warning');
+    fixture.componentRef.setInput('tone', 'warning');
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(button.textContent?.trim()).toBe('warning');
+    expect(button.classList).toContain('warning');
+    expect(button.getAttribute('aria-label')).toBe('Log path info message');
+  });
+
   it('places the popover below the icon when neither side fits', () => {
     const component = fixture.componentInstance;
 

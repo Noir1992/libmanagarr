@@ -673,6 +673,7 @@ export const i18nEn: Record<TranslationKey, string> = {
   'symlinks.links.monitoringDisabled': 'The linked episode is no longer monitored in Sonarr, so it is not downloaded a second time.',
   'symlinks.links.setupStep': 'Step: {step}',
   'symlinks.links.title': 'Managed links',
+  'symlinks.links.warningSummary': 'Managed links with warnings:\n{links}',
   'symlinks.loadError': 'The lists could not be loaded.',
   'symlinks.needsConfiguration': 'Configure the shared media directory in the symlink settings before creating links.',
   'symlinks.operation.Active': 'Active',

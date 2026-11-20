@@ -609,7 +609,10 @@ public sealed class SonarrSpecialIntegrationService(
     {
         link.Findings.RemoveAll(existing => existing.Code == code);
         link.Findings.Add(new SymlinkFinding(code, detail, clock.GetUtcNow()));
-        logger.LogWarning("Symlink link {LinkId} stopped with {Code}: {Detail}", link.Id, code, detail);
+        if (code == "language-mapping-unavailable")
+            logger.LogInformation("Symlink link {LinkId}: {Code}: {Detail}", link.Id, code, detail);
+        else
+            logger.LogWarning("Symlink link {LinkId} stopped with {Code}: {Detail}", link.Id, code, detail);
     }
 
     /// <summary>

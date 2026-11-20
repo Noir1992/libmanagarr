@@ -676,6 +676,7 @@ export const i18nDe: Record<TranslationKey, string> = {
     'Die verknüpfte Folge wird in Sonarr nicht mehr überwacht, damit sie nicht ein zweites Mal geladen wird.',
   'symlinks.links.setupStep': 'Schritt: {step}',
   'symlinks.links.title': 'Verwaltete Links',
+  'symlinks.links.warningSummary': 'Verwaltete Links mit Warnungen:\n{links}',
   'symlinks.loadError': 'Die Listen konnten nicht geladen werden.',
   'symlinks.needsConfiguration':
     'Konfiguriere vor dem Anlegen von Verknüpfungen das gemeinsame Medienverzeichnis in den Symlink-Einstellungen.',

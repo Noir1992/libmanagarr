@@ -5,7 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatInputModule } from '@angular/material/input';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { SymlinkLink } from '../../interfaces/symlinks/symlink-link';
+import { SymlinkFinding, SymlinkLink } from '../../interfaces/symlinks/symlink-link';
 import { SymlinkRejection } from '../../interfaces/symlinks/symlink-decisions';
 import {
   SymlinkSuggestion,
@@ -165,7 +165,15 @@ export class SymlinksPage implements OnInit {
       ),
     ),
   );
+  protected readonly managedLinkWarningText = computed(() => {
+    const affected = this.sortRows(this.symlinks.links())
+      .filter((link) => this.warningFindings(link).length > 0)
+      .map((link) => `${link.radarrMovieTitle ?? this.t('common.na')} — ${this.specialLabel(link.episodeNumber)}`);
+    return affected.length > 0 ? this.t('symlinks.links.warningSummary', { links: affected.join('\n') }) : '';
+  });
   protected readonly rejections = computed(() => this.sortRows(this.symlinks.rejections()));
+  protected readonly reactivating = signal<ReadonlySet<string>>(new Set());
+  protected readonly repairing = signal<ReadonlySet<string>>(new Set());
   protected readonly loading = this.symlinks.overviewLoading;
   protected readonly loadError = this.symlinks.overviewError;
   protected readonly settingsFailed = this.symlinks.settingsError;
@@ -353,7 +361,7 @@ export class SymlinksPage implements OnInit {
   }
 
   protected linkLocked(link: SymlinkLink): boolean {
-    return !this.featureEnabled() || this.isDeleting(link) || this.linkState(link.id).busy === true;
+    return !this.featureEnabled() || this.isDeleting(link) || this.repairing().has(link.id) || this.linkState(link.id).busy === true;
   }
 
   protected linkState(id: string): SymlinkActionState {
@@ -429,20 +437,45 @@ export class SymlinksPage implements OnInit {
     }
   }
 
+  protected isInformationalFinding(finding: SymlinkFinding): boolean {
+    return finding.code === 'language-mapping-unavailable';
+  }
+
+  protected warningFindings(link: SymlinkLink): SymlinkFinding[] {
+    return link.findings.filter((finding) => finding.code !== 'renaming-disabled' && !this.isInformationalFinding(finding));
+  }
+
+  protected linkInformation(link: SymlinkLink): string {
+    return link.findings
+      .filter((finding) => this.isInformationalFinding(finding))
+      .map((finding) => finding.detail ?? finding.code)
+      .join('\n');
+  }
+
   protected needsRepair(link: SymlinkLink): boolean {
     return (
       link.operationStatus === 'Conflict' ||
       !!this.linkState(link.id).error ||
-      link.findings.some((finding) => !['renaming-disabled', 'source-replaced', 'restored-unchecked'].includes(finding.code))
+      link.findings.some(
+        (finding) =>
+          !this.isInformationalFinding(finding) && !['renaming-disabled', 'source-replaced', 'restored-unchecked'].includes(finding.code),
+      )
     );
   }
 
   protected async repairAsync(link: SymlinkLink): Promise<void> {
     if (this.linkLocked(link)) return;
+    this.repairing.update((pending) => new Set([...pending, link.id]));
     try {
       await this.symlinks.retryLink(link.id, link.revision);
     } catch {
       // The action state carries the refusal; foreign files remain untouched.
+    } finally {
+      this.repairing.update((pending) => {
+        const remaining = new Set(pending);
+        remaining.delete(link.id);
+        return remaining;
+      });
     }
   }
 
@@ -457,6 +490,9 @@ export class SymlinksPage implements OnInit {
   }
 
   protected async reactivateAsync(rejection: SymlinkRejection): Promise<void> {
+    const key = this.rejectionKey(rejection);
+    if (!this.featureEnabled() || this.reactivating().has(key)) return;
+    this.reactivating.update((pending) => new Set([...pending, key]));
     try {
       await this.symlinks.reactivateRejection({
         radarrInstanceId: rejection.radarrInstanceId,
@@ -468,6 +504,12 @@ export class SymlinksPage implements OnInit {
     } catch (error) {
       // The archive has no row of its own to put a sentence on, so the section above reports it.
       this.symlinks.overviewError.set(error instanceof Error ? error.message : this.t('symlinks.actionError'));
+    } finally {
+      this.reactivating.update((pending) => {
+        const remaining = new Set(pending);
+        remaining.delete(key);
+        return remaining;
+      });
     }
   }
 

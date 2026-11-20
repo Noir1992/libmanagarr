@@ -228,6 +228,52 @@ describe('SymlinksPage', () => {
     globalThis.localStorage.removeItem('expanded:symlinks');
   });
 
+  it('shows a warning next to the managed count and lists affected links on click, even while collapsed', async () => {
+    stub.links.set([
+      createLink({ radarrMovieTitle: 'Broken Movie' }),
+      createLink({ id: 'second', radarrMovieTitle: 'Other Movie', episodeNumber: 7 }),
+      createLink({ id: 'healthy', radarrMovieTitle: 'Healthy Movie', findings: [] }),
+    ]);
+    fixture.componentInstance['toggleSection']('links');
+    fixture.detectChanges();
+
+    expect(element.querySelectorAll('.card-header .managed-links-warning').length).toBe(1);
+    const summary = cards()[1].querySelector('.managed-links-summary');
+    expect(summary?.querySelector('.card-subtitle')?.textContent).toBe('(3)');
+    expect(summary?.querySelector('.managed-links-warning')).not.toBeNull();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    const trigger = summary?.querySelector('button') as HTMLButtonElement;
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    fixture.detectChanges();
+    expect(overlay.querySelector('.info-popover')).toBeNull();
+    trigger.click();
+    await settle();
+    const text = overlay.querySelector('.info-popover')?.textContent ?? '';
+    expect(text).toContain('Broken Movie — Special 4');
+    expect(text).toContain('Other Movie — Special 7');
+    expect(text).not.toContain('Healthy Movie');
+    (overlay.querySelector('.cdk-overlay-backdrop') as HTMLElement).click();
+    await settle();
+    expect(overlay.querySelector('.info-popover')).toBeNull();
+
+    stub.links.set([createLink({ findings: [] })]);
+    fixture.detectChanges();
+    expect(element.querySelector('.managed-links-warning')).toBeNull();
+  });
+
+  it('does not flag informational findings or hidden renaming notices in the managed header', () => {
+    stub.links.set([
+      createLink({
+        findings: [
+          { code: 'language-mapping-unavailable', detail: 'Telugu is not writable.', detectedAt: '2026-11-20T12:00:00Z' },
+          { code: 'renaming-disabled', detail: 'Renaming disabled.', detectedAt: '2026-11-20T12:00:00Z' },
+        ],
+      }),
+    ]);
+    fixture.detectChanges();
+    expect(element.querySelector('.managed-links-warning')).toBeNull();
+  });
+
   it('offers only alphabetical and created sorting next to the filter, with the Library direction toggle', async () => {
     expect(element.querySelector('app-page-filter')?.nextElementSibling?.tagName.toLowerCase()).toBe('app-sort-control');
     const menu = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatMenuHarness);
@@ -372,7 +418,7 @@ describe('SymlinksPage', () => {
     expect(rowText(0)).toContain('Another Movie');
     expect(cards()[0].textContent).not.toContain('The Special Movie');
     expect(rowText(1)).toContain('Another Movie');
-    expect(cards()[1].textContent).not.toContain('The Special Movie');
+    expect(rowText(1)).not.toContain('The Special Movie');
 
     filter('status').onChanged('Active');
     fixture.detectChanges();
@@ -388,7 +434,7 @@ describe('SymlinksPage', () => {
     expect(rowText(0)).toContain('The Special Movie');
     expect(rowText(1)).toContain('The Special Movie');
     expect(cards()[0].textContent).not.toContain('Another Movie');
-    expect(cards()[1].textContent).not.toContain('Another Movie');
+    expect(rowText(1)).not.toContain('Another Movie');
   });
 
   it('restores the shared filters when the page is reopened before rows arrive', async () => {
@@ -405,7 +451,7 @@ describe('SymlinksPage', () => {
 
     expect(rowText(0)).toBe('');
     expect(rowText(1)).toContain('Another Movie');
-    expect(cards()[1].textContent).not.toContain('The Special Movie');
+    expect(rowText(1)).not.toContain('The Special Movie');
 
     expect(element.querySelectorAll('.filter-bubble-remove').length).toBe(2);
     for (let remaining = 2; remaining > 0; remaining--) {
@@ -752,6 +798,37 @@ describe('SymlinksPage', () => {
     expect(stub.retryLink).toHaveBeenCalledWith('link-1', 3);
   });
 
+  for (const fails of [false, true]) {
+    it(`shows Repair feedback and prevents duplicate requests until ${fails ? 'failure' : 'success'}`, async () => {
+      const link = createLink({ operationStatus: 'Conflict', setupStep: 'MetadataMatched', canEdit: true });
+      stub.links.set([link]);
+      let resolve: ((value: SymlinkLink) => void) | undefined;
+      let reject: ((error: Error) => void) | undefined;
+      (stub.retryLink as jasmine.Spy).and.returnValue(
+        new Promise<SymlinkLink>((done, refused) => {
+          resolve = done;
+          reject = refused;
+        }),
+      );
+      fixture.detectChanges();
+      const button = actionButtons(1).find((candidate) => candidate.textContent?.trim() === 'Repair')!;
+      button.click();
+      fixture.detectChanges();
+      expect(button.disabled).toBeTrue();
+      expect(button.textContent).toContain('Repair');
+      expect(button.querySelector('.feedback-icon.spinning')).not.toBeNull();
+      expect(actionButtons(1).every((candidate) => candidate.disabled)).toBeTrue();
+      await fixture.componentInstance['repairAsync'](link);
+      expect(stub.retryLink).toHaveBeenCalledTimes(1);
+
+      if (fails) reject?.(new Error('Repair was refused.'));
+      else resolve?.(link);
+      await settle();
+      expect(button.disabled).toBeFalse();
+      expect(button.querySelector('.feedback-icon.spinning')).toBeNull();
+    });
+  }
+
   it('retains a locked deletion and swaps it for its suggestion after polling completes', async () => {
     fixture.destroy();
     spyOnProperty(globalThis.document, 'hidden', 'get').and.returnValue(false);
@@ -849,6 +926,46 @@ describe('SymlinksPage', () => {
     });
   }
 
+  for (const hasError of [false, true]) {
+    it(`shows unsupported languages as information ${hasError ? 'alongside an actual repairable issue' : 'without offering Repair'}`, () => {
+      const information = {
+        code: 'language-mapping-unavailable',
+        detail: 'Sonarr cannot represent Telugu. Other metadata was transferred.',
+        detectedAt: '2026-11-05T18:30:00Z',
+      };
+      stub.links.set([
+        createLink({
+          operationStatus: 'Active',
+          setupStep: 'Completed',
+          findings: hasError
+            ? [information, { code: 'link-lost', detail: 'Missing link', detectedAt: information.detectedAt }]
+            : [information],
+        }),
+      ]);
+      fixture.detectChanges();
+
+      const info = fixture.debugElement.query(By.css('.managed-heading app-info-icon')).componentInstance as InfoIconWidget;
+      expect(info.messageText()).toBe(information.detail);
+      const special = cards()[1].querySelector('.item-title .managed-special');
+      expect(special?.textContent).toContain('Special 4');
+      expect(special?.querySelector('app-info-icon')).not.toBeNull();
+      expect(cards()[1].querySelectorAll('.item-warning').length).toBe(hasError ? 1 : 0);
+      expect(cards()[1].querySelector('.item-warning')?.textContent ?? '').not.toContain(information.code);
+      expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBe(hasError);
+    });
+  }
+
+  it('keeps Repair available for a conflict even when its only finding is informational', () => {
+    stub.links.set([
+      createLink({
+        operationStatus: 'Conflict',
+        findings: [{ code: 'language-mapping-unavailable', detail: 'Sonarr cannot represent Telugu.', detectedAt: '' }],
+      }),
+    ]);
+    fixture.detectChanges();
+    expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBeTrue();
+  });
+
   it('offers Repair after a missing-link finding', () => {
     stub.links.set([createLink({ findings: [{ code: 'link-lost', detail: 'Missing link', detectedAt: '2026-11-05T18:30:00Z' }] })]);
     fixture.detectChanges();
@@ -893,6 +1010,37 @@ describe('SymlinksPage', () => {
       sonarrEpisodeId: 555,
     });
   });
+
+  for (const fails of [false, true]) {
+    it(`shows feedback and prevents duplicate release requests until ${fails ? 'failure' : 'success'}`, async () => {
+      const rejection = createRejection();
+      stub.rejections.set([rejection]);
+      let resolve: (() => void) | undefined;
+      let reject: ((error: Error) => void) | undefined;
+      (stub.reactivateRejection as jasmine.Spy).and.returnValue(
+        new Promise<void>((done, refused) => {
+          resolve = done;
+          reject = refused;
+        }),
+      );
+      fixture.detectChanges();
+      const button = actionButtons(2)[0];
+      button.click();
+      fixture.detectChanges();
+      expect(button.disabled).toBeTrue();
+      expect(button.textContent).toContain('Release again');
+      expect(button.querySelector('.feedback-icon.spinning')).not.toBeNull();
+      await fixture.componentInstance['reactivateAsync'](rejection);
+      expect(stub.reactivateRejection).toHaveBeenCalledTimes(1);
+
+      if (fails) reject?.(new Error('The archive is busy.'));
+      else resolve?.();
+      await settle();
+      expect(button.disabled).toBeFalse();
+      expect(button.querySelector('.feedback-icon.spinning')).toBeNull();
+      if (fails) expect(stub.overviewError()).toBe('The archive is busy.');
+    });
+  }
 
   it('reports a decline that could not be lifted where the list sits', async () => {
     stub.rejections.set([createRejection()]);

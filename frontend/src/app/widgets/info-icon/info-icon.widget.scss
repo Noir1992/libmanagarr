@@ -1,3 +1,8 @@
+button.warning {
+  --mat-icon-button-icon-color: var(--theme-warning-color);
+  color: var(--theme-warning-color);
+}
+
 .info-popover,
 .info-popover-ghost {
   position: relative;
@@ -13,6 +18,7 @@
     margin: 0;
     color: var(--theme-muted);
     font-size: 13px;
+    white-space: pre-line;
   }
 }
 

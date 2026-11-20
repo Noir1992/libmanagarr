@@ -644,6 +644,7 @@ export type TranslationKey =
   | 'symlinks.links.monitoringDisabled'
   | 'symlinks.links.setupStep'
   | 'symlinks.links.title'
+  | 'symlinks.links.warningSummary'
   | 'symlinks.loadError'
   | 'symlinks.needsConfiguration'
   | 'symlinks.operation.Active'

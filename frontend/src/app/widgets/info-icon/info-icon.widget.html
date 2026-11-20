@@ -3,12 +3,14 @@
   mat-icon-button
   [disabled]="disabled()"
   class="material-symbols-outlined {{ size() }}"
+  [class.warning]="tone() === 'warning'"
+  [attr.aria-label]="messageText()"
   cdkOverlayOrigin
   #origin="cdkOverlayOrigin"
   [attr.aria-expanded]="isOpen()"
   (click)="toggle()"
 >
-  info
+  {{ iconName() }}
 </button>
 
 <div class="info-popover-ghost" [class.info-popover--wide]="wide()" #measurePanel aria-hidden="true">
