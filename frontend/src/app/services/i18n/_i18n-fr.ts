@@ -654,7 +654,8 @@ export const i18nFr: Record<TranslationKey, string> = {
   'symlinks.confirm.repairTitle': 'Réparer et adopter le lien symbolique',
   'symlinks.confirm.repairRun': 'Réparer et adopter',
   'symlinks.confirm.repairTarget': 'Nouvelle cible du lien',
-  'symlinks.confirm.repairExplanation': 'Le lien symbolique cassé sera corrigé et adopté. Sonarr analysera ensuite la série, mettra à jour les métadonnées du fichier et appliquera ses règles de nommage.',
+  'symlinks.confirm.repairExplanation':
+    'Le lien symbolique cassé sera corrigé et adopté. Sonarr analysera ensuite la série, mettra à jour les métadonnées du fichier et appliquera ses règles de nommage.',
   'symlinks.confirm.adoptExplanation':
     'Le lien existant pointe déjà vers le film choisi. La confirmation l’ajoute à la gestion sans le recréer, le déplacer ou le renommer. L’association du fichier et le suivi dans Sonarr sont conservés.',
   'symlinks.confirm.title': 'Ce que le lien créerait',

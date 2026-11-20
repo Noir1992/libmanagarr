@@ -649,7 +649,8 @@ export const i18nEn: Record<TranslationKey, string> = {
   'symlinks.confirm.repairTitle': 'Repair and adopt symlink',
   'symlinks.confirm.repairRun': 'Repair and adopt',
   'symlinks.confirm.repairTarget': 'New link target',
-  'symlinks.confirm.repairExplanation': 'The broken symlink will be retargeted and adopted. Sonarr then rescans the series, updates file metadata and applies its naming rules.',
+  'symlinks.confirm.repairExplanation':
+    'The broken symlink will be retargeted and adopted. Sonarr then rescans the series, updates file metadata and applies its naming rules.',
   'symlinks.confirm.adoptExplanation':
     'The existing symlink already points to the selected movie. Confirming registers it for management without recreating, moving or renaming it. The current Sonarr file assignment and monitoring setting are retained.',
   'symlinks.confirm.title': 'What the link would create',

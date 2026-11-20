@@ -651,7 +651,8 @@ export const i18nDe: Record<TranslationKey, string> = {
   'symlinks.confirm.repairTitle': 'Symlink reparieren und übernehmen',
   'symlinks.confirm.repairRun': 'Reparieren und übernehmen',
   'symlinks.confirm.repairTarget': 'Neues Link-Ziel',
-  'symlinks.confirm.repairExplanation': 'Der defekte Symlink wird auf das neue Ziel umgestellt und übernommen. Anschließend liest Sonarr die Serie neu ein, gleicht die Dateidaten ab und wendet seine Namensregeln an.',
+  'symlinks.confirm.repairExplanation':
+    'Der defekte Symlink wird auf das neue Ziel umgestellt und übernommen. Anschließend liest Sonarr die Serie neu ein, gleicht die Dateidaten ab und wendet seine Namensregeln an.',
   'symlinks.confirm.adoptExplanation':
     'Der vorhandene Symlink zeigt bereits auf den ausgewählten Film. Beim Bestätigen wird er in die Verwaltung aufgenommen, ohne ihn neu anzulegen, zu verschieben oder umzubenennen. Dateizuordnung und Monitoring-Einstellung in Sonarr bleiben erhalten.',
   'symlinks.confirm.title': 'Was die Verknüpfung anlegen würde',
