@@ -33,6 +33,7 @@ export const scenarios = [
   { id: 'E14', services: ['sonarr', 'radarr'], mutates: [], name: 'codec-statistics', suite: 'full' },
   { id: 'E15', services: ['sonarr', 'radarr'], mutates: ['sonarr', 'radarr', 'media'], name: 'symlink-confirm', suite: 'full' },
   { id: 'E16', services: ['sonarr', 'radarr'], mutates: ['media'], name: 'symlink-decline', suite: 'full' },
+  { id: 'E17', services: ['sonarr', 'radarr'], mutates: ['media'], name: 'localized-media-titles', suite: 'full' },
 ].map((scenario) => Object.freeze({ ...scenario, spec: `specs/${scenario.name}.spec.ts`, initialState: 'fresh-app-and-verified-seed' }));
 
 export function parseOptions(args) {

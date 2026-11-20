@@ -24,6 +24,24 @@ public sealed class SymlinkSuggestionServiceTests
     private readonly InMemorySymlinkStore store = new();
 
     [Fact]
+    public async Task DisplayLanguageChanges_KeepSuggestionIdentityRevisionAndDecision()
+    {
+        AppSettings settings = Settings();
+        settings.RadarrSnapshots[0].Movies[0].Titles.Translations["de"] = new() { Title = "Deutscher Titel" };
+        await Service(settings).RefreshAsync(force: false, CancellationToken.None);
+        SymlinkSuggestion original = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
+        await Service(settings).RejectAsync(original.Id, "Keep declined", CancellationToken.None);
+        SymlinkSuggestion declined = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
+        settings.Language = AppLanguage.De;
+        Assert.False((await Service(settings).RefreshAsync(force: false, CancellationToken.None)).DidWork);
+        SymlinkSuggestion after = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
+        Assert.Equal(declined.Id, after.Id);
+        Assert.Equal(declined.Revision, after.Revision);
+        Assert.Equal(SymlinkSuggestionStatus.Rejected, after.Status);
+        Assert.Equal(declined.Pair, after.Pair);
+    }
+
+    [Fact]
     public async Task Disabled_LeavesSuggestionsUnchangedUntilReenabled()
     {
         AppSettings settings = Settings();

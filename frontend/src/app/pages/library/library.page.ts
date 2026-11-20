@@ -1,3 +1,4 @@
+import { MediaTitlesService } from '../../services/media-titles.service';
 import { SearchClearWidget } from '../../widgets/search-clear/search-clear.widget';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
@@ -164,7 +165,12 @@ export class LibraryPage implements OnInit, OnDestroy {
     }
 
     return this.radarrInstanceTables()
-      .map((table) => ({ ...table, movies: table.movies.filter((movie) => movie.title.toLocaleLowerCase().includes(query)) }))
+      .map((table) => ({
+        ...table,
+        movies: table.movies.filter((movie) =>
+          [movie.title, ...(movie.searchTitles ?? [])].some((title) => title.toLocaleLowerCase().includes(query)),
+        ),
+      }))
       .filter((table) => table.movies.length > 0);
   });
   protected readonly visibleSonarrTables: Signal<SonarrLibraryTable[]> = computed((): SonarrLibraryTable[] => {
@@ -174,7 +180,12 @@ export class LibraryPage implements OnInit, OnDestroy {
     }
 
     return this.sonarrInstanceTables()
-      .map((table) => ({ ...table, series: table.series.filter((series) => series.title.toLocaleLowerCase().includes(query)) }))
+      .map((table) => ({
+        ...table,
+        series: table.series.filter((series) =>
+          [series.title, ...(series.searchTitles ?? [])].some((title) => title.toLocaleLowerCase().includes(query)),
+        ),
+      }))
       .filter((table) => table.series.length > 0);
   });
   protected readonly noInstancesConfigured: Signal<boolean> = computed(
@@ -608,16 +619,18 @@ export class LibraryPage implements OnInit, OnDestroy {
   private filterValuesSequence = 0;
   private readonly cancelFilterValues = new Subject<void>();
 
+  private readonly mediaTitles = inject(MediaTitlesService);
+
   constructor() {
-    let previousRules = JSON.stringify(this.appSettingsService.titleSorting());
+    let previousRules = JSON.stringify([this.appSettingsService.titleSorting(), this.mediaTitles.revision()]);
     effect(() => {
-      const rules = JSON.stringify(this.appSettingsService.titleSorting());
+      const rules = JSON.stringify([this.appSettingsService.titleSorting(), this.mediaTitles.revision()]);
       if (rules === previousRules) return;
       previousRules = rules;
       // Reload through the same cancellation/sequence path used by filter and sort changes.
       // Before the first load, initialization will already request the current persisted rules.
       untracked(() => {
-        if (!this.destroyed && this.loadSequence > 0) this.loadData();
+        if (!this.destroyed && this.loadSequence > 0) this.loadData(true);
       });
     });
   }
@@ -771,6 +784,7 @@ export class LibraryPage implements OnInit, OnDestroy {
       url: instance ? `${normalizeBaseUrl(instance.baseUrl)}/movie/${row.movieTitleSlug}` : '',
       id: row.movieId,
       title: row.movieTitle,
+      searchTitles: row.searchTitles,
       titleSlug: row.movieTitleSlug,
       qualityProfileName: row.qualityProfileName,
       upgradeUntilCustomFormatScore: row.upgradeUntilCustomFormatScore ?? null,
@@ -816,6 +830,7 @@ export class LibraryPage implements OnInit, OnDestroy {
       url: instance ? `${normalizeBaseUrl(instance.baseUrl)}/series/${row.seriesTitleSlug}` : '',
       id: row.seriesId,
       title: row.seriesTitle,
+      searchTitles: row.searchTitles,
       titleSlug: row.seriesTitleSlug,
       qualityProfileName: row.qualityProfileName,
       upgradeUntilCustomFormatScore: row.upgradeUntilCustomFormatScore ?? null,
@@ -855,12 +870,12 @@ export class LibraryPage implements OnInit, OnDestroy {
     this.debounceTimer = setTimeout(() => this.loadData(), 200);
   }
 
-  private loadData(): void {
+  private loadData(preserveRows = false): void {
     if (this.destroyed) return;
     clearTimeout(this.debounceTimer);
     this.activeRequest?.unsubscribe();
     const sequence = ++this.loadSequence;
-    this.prepareLoadState();
+    this.prepareLoadState(preserveRows);
 
     const filter: LibraryRequestFilter = this.buildLibraryRequestFilters();
     const calls: { [key: string]: Observable<RadarrLibraryBatchResponse | SonarrLibraryBatchResponse> } = {};
@@ -895,6 +910,16 @@ export class LibraryPage implements OnInit, OnDestroy {
           }
         }
 
+        if (preserveRows) {
+          const radarrIds = new Set(
+            (response['radarr'] as RadarrLibraryBatchResponse | undefined)?.instances.map((value) => value.instanceId),
+          );
+          const sonarrIds = new Set(
+            (response['sonarr'] as SonarrLibraryBatchResponse | undefined)?.instances.map((value) => value.instanceId),
+          );
+          this.radarrInstanceTables.update((tables) => tables.filter((table) => radarrIds.has(table.instanceId)));
+          this.sonarrInstanceTables.update((tables) => tables.filter((table) => sonarrIds.has(table.instanceId)));
+        }
         this.filteredCounts.set(
           Object.values(response).reduce((counts, result) => this.mergeFilterCounts(counts, result.counts), {} as LibraryFilterCounts),
         );
@@ -907,11 +932,13 @@ export class LibraryPage implements OnInit, OnDestroy {
     });
   }
 
-  private prepareLoadState(): void {
+  private prepareLoadState(preserveRows = false): void {
     this.loading.set(true);
     this.loadError.set(null);
-    this.sonarrInstanceTables.set([]);
-    this.radarrInstanceTables.set([]);
+    if (!preserveRows) {
+      this.sonarrInstanceTables.set([]);
+      this.radarrInstanceTables.set([]);
+    }
   }
 
   private restoreViewMode(): void {

@@ -2,7 +2,11 @@ namespace LibManagarr.Api.Models;
 
 public sealed class RadarrMovieSnapshot
 {
+    public int? TmdbId { get; init; }
+
     public int MovieId { get; init; }
+
+    public MediaTitles Titles { get; set; } = new();
 
     public string Title { get; init; } = string.Empty;
 

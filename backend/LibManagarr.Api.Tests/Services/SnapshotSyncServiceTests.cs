@@ -242,6 +242,11 @@ public sealed class SnapshotSyncServiceTests
         Assert.Single(historyStore.SnapshotHistory);
         Assert.Single(historyStore.RadarrLibraryHistory);
         Assert.Equal(1, settingsService.SaveCount);
+        movie.Titles.Translations["de"] = new() { Title = "Der Wüstenplanet", RetryAt = DateTimeOffset.UtcNow.AddDays(7) };
+        await service.SyncAsync(new SyncInstanceRequest { Kind = ArrApplicationKind.Radarr, InstanceId = "radarr-main" }, CancellationToken.None);
+        RadarrMovieSnapshot refreshed = Assert.Single(Assert.Single(settingsService.CurrentSettings.RadarrSnapshots).Movies);
+        Assert.Equal("Der Wüstenplanet", refreshed.Titles.Translations["de"].Title);
+        Assert.Equal("Dune", refreshed.Title);
     }
 
     [Fact]

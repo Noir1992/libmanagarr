@@ -2,7 +2,12 @@ namespace LibManagarr.Api.Models;
 
 public sealed class SonarrSeriesResource
 {
+    public string? OriginalTitle { get; init; }
+    public IReadOnlyList<ArrTitleTranslation>? Translations { get; init; }
+
     public int Id { get; init; }
+
+    public int? TvdbId { get; init; }
 
     public string Title { get; init; } = string.Empty;
 

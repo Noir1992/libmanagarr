@@ -1,3 +1,4 @@
+import { MediaTitlesService } from '../../services/media-titles.service';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
@@ -105,6 +106,7 @@ describe('LibraryPage title search', () => {
     );
     TestBed.configureTestingModule({
       providers: [
+        { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
         { provide: SonarrApiService, useValue: sonarr },
         { provide: RadarrApiService, useValue: radarr },
         { provide: AppI18nService, useValue: { t: (key: string) => key } },
@@ -123,6 +125,17 @@ describe('LibraryPage title search', () => {
     page = TestBed.runInInjectionContext(() => new LibraryPage());
     await page['loadFilterValues']();
     page['loadData']();
+  });
+
+  it('finds source and alternative titles after localization', () => {
+    const table = page['radarrInstanceTables']()[0];
+    const movie = table.movies[0];
+    page['radarrInstanceTables'].set([
+      { ...table, movies: [{ ...movie, title: 'Deutscher Titel', searchTitles: ['Original title', 'English alias'] }] },
+    ]);
+    page['titleSearch'].set('english alias');
+    expect(page['visibleRadarrTables']()[0].movies[0].title).toBe('Deutscher Titel');
+    expect(page['gridItems']().some((item) => item.title === 'Deutscher Titel')).toBeTrue();
   });
 
   it('shows all loaded entries when no search is set', () => {

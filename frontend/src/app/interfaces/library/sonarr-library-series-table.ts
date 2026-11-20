@@ -2,6 +2,7 @@ import { LibraryStatus } from './library-status';
 import { SonarrLibrarySeasonTable } from './sonarr-library-season-table';
 
 export interface SonarrLibrarySeriesTable {
+  searchTitles?: string[];
   url: string;
   id: number;
   title: string;

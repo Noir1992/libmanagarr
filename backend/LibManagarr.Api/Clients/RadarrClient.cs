@@ -93,6 +93,8 @@ public sealed class RadarrClient(HttpClient httpClient)
             snapshots.Add(new RadarrMovieSnapshot
             {
                 MovieId = movie.Id!.Value,
+                TmdbId = movie.TmdbId,
+                Titles = new MediaTitles { OriginalTitle = movie.OriginalTitle },
                 Title = movie.Title,
                 TitleSlug = movie.TitleSlug,
                 AlternativeTitles = (movie.AlternativeTitles ?? [])
@@ -153,6 +155,14 @@ public sealed class RadarrClient(HttpClient httpClient)
         int movieId,
         CancellationToken cancellationToken) =>
         await GetAsync<List<RadarrMovieFileResource>>(instance, $"/api/v3/moviefile?movieId={movieId}", cancellationToken) ?? [];
+
+    public async Task<IReadOnlyList<ArrTitleLanguage>> FetchTitleLanguagesAsync(ArrInstanceSettings instance, CancellationToken token) =>
+        await GetAsync<List<ArrTitleLanguage>>(instance, "/api/v3/language", token)
+        ?? throw new HttpRequestException("Radarr returned no languages response.");
+
+    public async Task<IReadOnlyList<RadarrMovieResource>> FetchTitlesAsync(ArrInstanceSettings instance, int languageId, CancellationToken token) =>
+        await GetAsync<List<RadarrMovieResource>>(instance, $"/api/v3/movie?languageId={languageId}&excludeLocalCovers=true", token)
+        ?? throw new HttpRequestException("Radarr returned no titles response.");
 
     private async Task<T?> GetAsync<T>(
         ArrInstanceSettings instance,

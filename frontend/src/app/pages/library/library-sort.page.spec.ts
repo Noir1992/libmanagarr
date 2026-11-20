@@ -1,3 +1,4 @@
+import { MediaTitlesService } from '../../services/media-titles.service';
 import { signal, WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject } from 'rxjs';
@@ -35,6 +36,7 @@ describe('LibraryPage sorting', () => {
     titleSorting = signal({ enabled: false, ignoredLeadingWords: [] });
     TestBed.configureTestingModule({
       providers: [
+        { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
         {
           provide: AppSettingsService,
           useValue: {
@@ -128,6 +130,40 @@ describe('LibraryPage sorting', () => {
     });
     expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
     expect(sonarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
+  });
+
+  it('keeps table components mounted while translated titles are loading', () => {
+    TestBed.tick();
+    page['loadData']();
+    fill();
+    const response = new Subject<RadarrLibraryBatchResponse>();
+    radarr.fetchLibrary.and.returnValue(response);
+    const revision = TestBed.inject(MediaTitlesService).revision as WritableSignal<string>;
+    revision.set('de:translated');
+    TestBed.tick();
+    expect(page['radarrInstanceTables']()[0].movies).toHaveSize(2);
+    expect(page['sonarrInstanceTables']()[0].series).toHaveSize(2);
+    response.next({ syncedAt: null, instances: [{ instanceId: 'r', instanceName: 'Radarr', rows: [movie(1, 'Übersetzt', null, null)] }] });
+    response.complete();
+    expect(page['radarrInstanceTables']()[0].movies[0].title).toBe('Übersetzt');
+    expect(page['sonarrInstanceTables']()).toEqual([]);
+  });
+
+  it('reloads after language changes and enrichment while keeping sort and search', () => {
+    const revision = TestBed.inject(MediaTitlesService).revision as WritableSignal<string>;
+    TestBed.tick();
+    page['sortDirection'].set(LibrarySortDirection.DESCENDING);
+    page['titleSearch'].set('alias');
+    page['loadData']();
+    radarr.fetchLibrary.calls.reset();
+    revision.set('de:0');
+    TestBed.tick();
+    expect(radarr.fetchLibrary).toHaveBeenCalledTimes(1);
+    revision.set('de:1');
+    TestBed.tick();
+    expect(radarr.fetchLibrary).toHaveBeenCalledTimes(2);
+    expect(page['sortDirection']()).toBe(LibrarySortDirection.DESCENDING);
+    expect(page['titleSearch']()).toBe('alias');
   });
 
   it('sends the selected field and direction', () => {

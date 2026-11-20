@@ -4,6 +4,7 @@ import { ExistingLinkConfirmation } from './symlink-link';
 export interface SymlinkRejection {
   radarrInstanceId: string;
   radarrMovieId: number;
+  searchTitles?: string[];
   radarrMovieTitle: string | null;
   sonarrInstanceId: string;
   sonarrSeriesId: number;

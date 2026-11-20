@@ -62,12 +62,12 @@ public static class SymlinkEndpoints
         return TypedResults.Ok<object>(new
         {
             Movies = snapshot.RadarrSnapshots.SelectMany(instance => instance.Movies.Where(movie => movie.File.Id.HasValue)
-                .Select(movie => new { instance.InstanceId, instance.InstanceName, movie.MovieId, movie.Title, FileId = movie.File.Id, movie.File.Path })),
+                .Select(movie => new { instance.InstanceId, instance.InstanceName, movie.MovieId, Title = MediaTitleResolver.Resolve(movie.Title, movie.Titles, snapshot.Language), FileId = movie.File.Id, movie.File.Path })),
             Specials = snapshot.SonarrSnapshots.SelectMany(instance => instance.Series.SelectMany(series =>
                 series.Seasons.Where(season => season.SeasonNumber == 0).SelectMany(season => season.Episodes.Select(episode => new
                 {
-                    instance.InstanceId, instance.InstanceName, series.SeriesId, SeriesTitle = series.Title,
-                    episode.EpisodeId, episode.EpisodeNumber, episode.Title, episode.HasFile
+                    instance.InstanceId, instance.InstanceName, series.SeriesId, SeriesTitle = MediaTitleResolver.Resolve(series.Title, series.Titles, snapshot.Language),
+                    episode.EpisodeId, episode.EpisodeNumber, Title = MediaTitleResolver.Resolve(episode.Title, episode.Titles, snapshot.Language), episode.HasFile
                 }))))
         });
     }
@@ -215,6 +215,7 @@ public static class SymlinkEndpoints
                 RadarrInstanceId = rejection.Pair.RadarrInstanceId,
                 RadarrMovieId = rejection.Pair.RadarrMovieId,
                 RadarrMovieTitle = titles.MovieTitle(rejection.Pair),
+                SearchTitles = titles.SearchTitles(rejection.Pair),
                 SonarrInstanceId = rejection.Pair.SonarrInstanceId,
                 SonarrSeriesId = rejection.Pair.SonarrSeriesId,
                 SonarrSeriesTitle = titles.SeriesTitle(rejection.Pair),
@@ -512,6 +513,7 @@ public static class SymlinkEndpoints
             RadarrInstanceName = titles.InstanceName(suggestion.Pair.RadarrInstanceId),
             RadarrMovieId = suggestion.Pair.RadarrMovieId,
             RadarrMovieTitle = titles.MovieTitle(suggestion.Pair),
+            SearchTitles = titles.SearchTitles(suggestion.Pair),
             RadarrFileId = suggestion.RadarrFileId,
             RadarrFilePath = titles.SourcePath(suggestion.Pair, suggestion.RadarrFileId),
             SonarrInstanceId = suggestion.Pair.SonarrInstanceId,
@@ -544,6 +546,7 @@ public static class SymlinkEndpoints
             RadarrInstanceName = titles.InstanceName(link.RadarrInstanceId),
             RadarrMovieId = link.RadarrMovieId,
             RadarrMovieTitle = titles.MovieTitle(link.Pair),
+            SearchTitles = titles.SearchTitles(link.Pair),
             RadarrFileId = link.RadarrFileId,
             SonarrInstanceId = link.SonarrInstanceId,
             SonarrInstanceName = titles.InstanceName(link.SonarrInstanceId),
@@ -599,6 +602,13 @@ public static class SymlinkEndpoints
     {
         private readonly Dictionary<(string InstanceId, int MovieId), MovieTitles> movies = [];
         private readonly Dictionary<string, string> instances = [];
+        private readonly Dictionary<(string InstanceId, int MovieId), IReadOnlyList<string>> movieSearch = [];
+        private readonly Dictionary<(string InstanceId, int SeriesId, int EpisodeId), IReadOnlyList<string>> episodeSearch = [];
+        public IReadOnlyList<string> SearchTitles(SpecialMoviePair pair) =>
+            (movieSearch.GetValueOrDefault((pair.RadarrInstanceId, pair.RadarrMovieId)) ?? [])
+                .Concat(episodeSearch.GetValueOrDefault((pair.SonarrInstanceId, pair.SonarrSeriesId, pair.SonarrEpisodeId)) ?? [])
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
         public string? InstanceName(string id) => instances.GetValueOrDefault(id);
         private readonly Dictionary<(string InstanceId, int SeriesId, int EpisodeId), EpisodeTitles> episodes = [];
 
@@ -610,7 +620,8 @@ public static class SymlinkEndpoints
             {
                 foreach (RadarrMovieSnapshot movie in radarr.Movies)
                 {
-                    titles.movies[(radarr.InstanceId, movie.MovieId)] = new MovieTitles(movie.Title, movie.File.Id, movie.File.Path);
+                    titles.movieSearch[(radarr.InstanceId, movie.MovieId)] = MediaTitleResolver.Candidates(movie.Title, movie.Titles, settings.Language, movie.AlternativeTitles);
+                    titles.movies[(radarr.InstanceId, movie.MovieId)] = new MovieTitles(MediaTitleResolver.Resolve(movie.Title, movie.Titles, settings.Language), movie.File.Id, movie.File.Path);
                 }
             }
 
@@ -622,8 +633,12 @@ public static class SymlinkEndpoints
                     {
                         foreach (SonarrEpisodeSnapshot episode in season.Episodes)
                         {
+                            titles.episodeSearch[(sonarr.InstanceId, series.SeriesId, episode.EpisodeId)] =
+                                MediaTitleResolver.Candidates(series.Title, series.Titles, settings.Language)
+                                    .Concat(MediaTitleResolver.Candidates(episode.Title, episode.Titles, settings.Language)).ToArray();
                             titles.episodes[(sonarr.InstanceId, series.SeriesId, episode.EpisodeId)] =
-                                new EpisodeTitles(series.Title, episode.Title, series.Path);
+                                new EpisodeTitles(MediaTitleResolver.Resolve(series.Title, series.Titles, settings.Language),
+                                    MediaTitleResolver.Resolve(episode.Title, episode.Titles, settings.Language), series.Path);
                         }
                     }
                 }

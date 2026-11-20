@@ -1,6 +1,7 @@
 import { LibraryMediaDetails } from './library-media-details';
 
 export interface RadarrLibraryMovieTable {
+  searchTitles?: string[];
   url: string;
   id: number;
   title: string;

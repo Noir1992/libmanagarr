@@ -145,7 +145,9 @@ public sealed class SonarrClient(HttpClient httpClient)
                 new SonarrSeriesSnapshot
                 {
                     SeriesId = seriesResource.Id,
+                    TvdbId = seriesResource.TvdbId,
                     Title = seriesResource.Title,
+                    Titles = ReadSeriesTitles(seriesResource),
                     TitleSlug = seriesResource.TitleSlug,
                     Path = seriesResource.Path,
                     PosterRemoteUrl = seriesResource.GetPosterRemoteUrl(),
@@ -453,6 +455,25 @@ public sealed class SonarrClient(HttpClient httpClient)
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         [JsonPropertyName("files")]
         public IReadOnlyList<int>? FileIds { get; init; }
+    }
+
+    private static MediaTitles ReadSeriesTitles(SonarrSeriesResource series)
+    {
+        MediaTitles result = new() { OriginalTitle = series.OriginalTitle };
+        foreach (ArrTitleTranslation translation in series.Translations ?? [])
+        {
+            string? code = translation.Language?.Name?.ToLowerInvariant() switch
+            {
+                "english" => "en", "german" => "de", "french" => "fr", _ => null
+            };
+            if (code is null || string.IsNullOrWhiteSpace(translation.Title)) continue;
+            result.Translations[code] = new MediaTitleTranslation
+            {
+                Title = translation.Title.Trim(), Source = "sonarr:translations", Status = MediaTitleFetchStatus.Available,
+                CheckedAt = DateTimeOffset.UtcNow, RetryAt = DateTimeOffset.UtcNow.AddDays(7)
+            };
+        }
+        return result;
     }
 
     private static SonarrEpisodeSnapshot MapEpisodeSnapshot(

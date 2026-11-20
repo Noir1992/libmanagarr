@@ -2,6 +2,8 @@ namespace LibManagarr.Api.Models;
 
 public sealed class SonarrLibraryEntryResponse
 {
+    public IReadOnlyList<string> SearchTitles { get; init; } = [];
+
     public string InstanceName { get; init; } = string.Empty;
 
     public int SeriesId { get; init; }

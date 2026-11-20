@@ -4,6 +4,8 @@ namespace LibManagarr.Api.Models;
 
 public sealed class RadarrMovieResource
 {
+    public int? TmdbId { get; init; }
+
     public int? Id { get; set; }
 
     public string Title { get; init; } = string.Empty;

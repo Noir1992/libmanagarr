@@ -150,7 +150,8 @@ public static class RadarrEndpoints
                     {
                         InstanceName = snapshot.InstanceName,
                         MovieId = m.MovieId,
-                        MovieTitle = m.Title,
+                        MovieTitle = MediaTitleResolver.Resolve(m.Title, m.Titles, settings.Language),
+                        SearchTitles = MediaTitleResolver.Candidates(m.Title, m.Titles, settings.Language, m.AlternativeTitles),
                         MovieTitleSlug = m.TitleSlug,
                         QualityProfileName = m.Profile.Name,
                         UpgradeUntilCustomFormatScore = m.Profile.UpgradeUntilCustomFormatScore,
@@ -258,7 +259,8 @@ public static class RadarrEndpoints
                 {
                     InstanceName = snapshot.InstanceName,
                     MovieId = m.MovieId,
-                    MovieTitle = m.Title,
+                    MovieTitle = MediaTitleResolver.Resolve(m.Title, m.Titles, settings.Language),
+                        SearchTitles = MediaTitleResolver.Candidates(m.Title, m.Titles, settings.Language, m.AlternativeTitles),
                     MovieTitleSlug = m.TitleSlug,
                     QualityProfileName = m.Profile.Name,
                     UpgradeUntilCustomFormatScore = m.Profile.UpgradeUntilCustomFormatScore,

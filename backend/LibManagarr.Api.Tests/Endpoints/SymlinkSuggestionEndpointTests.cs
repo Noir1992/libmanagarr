@@ -28,6 +28,26 @@ public sealed class SymlinkSuggestionEndpointTests
     private static readonly DateTimeOffset Start = new(2026, 11, 6, 9, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task LanguageChange_ProjectsSavedTitlesWithoutChangingTheStoredSuggestion()
+    {
+        AppSettings settings = Settings();
+        settings.RadarrSnapshots[0].Movies[0].Titles.Translations["de"] = new() { Title = "Film auf Deutsch" };
+        settings.SonarrSnapshots[0].Series[0].Titles.Translations["de"] = new() { Title = "Serie auf Deutsch" };
+        settings.SonarrSnapshots[0].Series[0].Seasons[0].Episodes[0].Titles.Translations["de"] = new() { Title = "Special auf Deutsch" };
+        InMemorySymlinkStore store = await Store(suggestion());
+        SymlinkSuggestionDto before = Assert.Single(await GetSuggestions(settings, store));
+        settings.Language = AppLanguage.De;
+        SymlinkSuggestionDto after = Assert.Single(await GetSuggestions(settings, store));
+        Assert.Equal("Film auf Deutsch", after.RadarrMovieTitle);
+        Assert.Equal("Serie auf Deutsch", after.SonarrSeriesTitle);
+        Assert.Equal("Special auf Deutsch", after.SonarrEpisodeTitle);
+        Assert.Equal(before.Id, after.Id);
+        Assert.Equal(before.Revision, after.Revision);
+        Assert.Equal(before.RadarrFilePath, after.RadarrFilePath);
+        Assert.Equal(before.Status, after.Status);
+    }
+
+    [Fact]
     public async Task MissingMediaRootDisablesSymlinksAndHidesStoredSuggestionsFromTheMenu()
     {
         AppSettings settings = Settings();
