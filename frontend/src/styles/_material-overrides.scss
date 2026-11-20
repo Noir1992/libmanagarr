@@ -203,6 +203,11 @@ mat-select {
   }
 }
 
+// Keep the symlink picker's sticky search flush with the panel from its first scroll position.
+.mat-mdc-select-panel.symlink-choice-panel {
+  padding-block: 0;
+}
+
 .filter-option-with-count .mdc-list-item__primary-text {
   flex: 1;
   min-width: 0;

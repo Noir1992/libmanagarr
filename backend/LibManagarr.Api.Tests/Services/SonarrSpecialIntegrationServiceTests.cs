@@ -431,6 +431,48 @@ public sealed class SonarrSpecialIntegrationServiceTests
         Assert.Equal("sonarr-instance-missing", Assert.Single(stored.Findings).Code);
     }
 
+    [Theory]
+    [InlineData("und")]
+    [InlineData("Undetermined")]
+    [InlineData("Unknown")]
+    [InlineData("Original")]
+    public async Task StoredLanguagePlaceholdersDoNotBlockMetadataConfirmation(string placeholder)
+    {
+        SonarrSpecialIntegrationService service = CreateService(new StubArrHandler(HappyRoutes()), new FakeLinkFileSystem());
+        SymlinkFileMetadata expected = ExpectedFromRadarr();
+        expected.Languages.Add(placeholder);
+        await service.RunSetupAsync(await SeedAsync(SymlinkSetupStep.MonitoringDisabled, expected), CancellationToken.None);
+
+        Assert.Equal(SymlinkSetupOutcome.Waiting, await service.RunSetupAsync(await StoredAsync(), CancellationToken.None));
+
+        SymlinkLink link = await StoredAsync();
+        Assert.Equal(SymlinkSetupStep.Renamed, link.SetupStep);
+        Assert.Empty(link.Findings);
+    }
+
+    [Fact]
+    public async Task UnsupportedAudioLanguageIsRecordedWithoutBlockingSetupCompletion()
+    {
+        Dictionary<string, List<string>> routes = HappyRoutes();
+        routes["GET /api/v3/language"] = ["""[{"id":4,"name":"German"}]"""];
+        StubArrHandler handler = new(routes);
+        SonarrSpecialIntegrationService service = CreateService(handler, new FakeLinkFileSystem());
+        SymlinkFileMetadata expected = ExpectedFromRadarr();
+        expected.Languages.Add("Telugu");
+        await service.RunSetupAsync(await SeedAsync(SymlinkSetupStep.MonitoringDisabled, expected), CancellationToken.None);
+        await service.RunSetupAsync(await StoredAsync(), CancellationToken.None);
+        Assert.Equal(SymlinkSetupOutcome.Completed, await service.RunSetupAsync(await StoredAsync(), CancellationToken.None));
+
+        SymlinkLink link = await StoredAsync();
+        Assert.Equal(SymlinkSetupStep.Completed, link.SetupStep);
+        Assert.Contains("Telugu", link.ExpectedMetadata!.Languages);
+        Assert.Equal(["German"], link.ConfirmedMetadata!.Languages);
+        Assert.Equal(["Telugu"], link.ConfirmedMetadata.UnmappedLanguages);
+        SymlinkFinding warning = Assert.Single(link.Findings);
+        Assert.Equal("language-mapping-unavailable", warning.Code);
+        Assert.Contains("Telugu", warning.Detail);
+    }
+
     [Fact]
     public async Task MissingOneExpectedLanguagePreventsCompletionEvenWhenAnotherLanguageMatches()
     {

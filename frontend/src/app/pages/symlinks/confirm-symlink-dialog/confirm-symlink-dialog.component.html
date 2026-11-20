@@ -1,4 +1,14 @@
-<h2 mat-dialog-title class="dialog-title">{{ t(plan()?.adoptsExisting ? 'symlinks.confirm.adoptTitle' : 'symlinks.confirm.title') }}</h2>
+<h2 mat-dialog-title class="dialog-title">
+  {{
+    t(
+      plan()?.canRepairExisting
+        ? 'symlinks.confirm.repairTitle'
+        : plan()?.adoptsExisting
+          ? 'symlinks.confirm.adoptTitle'
+          : 'symlinks.confirm.title'
+    )
+  }}
+</h2>
 
 <mat-dialog-content class="dialog-content">
   @if (loading()) {
@@ -28,6 +38,10 @@
       <dd class="plan-path">{{ proposed.draft.sourcePath || t('common.na') }}</dd>
       <dt>{{ t('symlinks.linkText') }}</dt>
       <dd class="plan-path">{{ proposed.draft.linkText || t('common.na') }}</dd>
+      @if (proposed.canRepairExisting) {
+        <dt>{{ t('symlinks.confirm.repairTarget') }}</dt>
+        <dd class="plan-path">{{ proposed.repairLinkText }}</dd>
+      }
       <dt>{{ t('symlinks.releaseGroup') }}</dt>
       <dd>{{ proposed.draft.expectedMetadata?.releaseGroup ?? t('common.na') }}</dd>
       <dt>{{ t('symlinks.languages') }}</dt>
@@ -35,6 +49,9 @@
       <dt>{{ t('symlinks.quality') }}</dt>
       <dd>{{ proposed.draft.expectedMetadata?.quality ?? t('common.na') }}</dd>
     </dl>
+    @if (proposed.canRepairExisting) {
+      <p>{{ t('symlinks.confirm.repairExplanation') }}</p>
+    }
     @if (proposed.adoptsExisting) {
       <p>{{ t('symlinks.confirm.adoptExplanation') }}</p>
     }
@@ -54,7 +71,7 @@
       </ul>
     }
 
-    @if (!proposed.runnable) {
+    @if (!proposed.runnable && !proposed.canRepairExisting) {
       <p class="plan-refused">{{ t('symlinks.confirm.notRunnable') }}</p>
     }
   }
@@ -66,11 +83,19 @@
     type="button"
     mat-stroked-button
     class="secondary-button"
-    [disabled]="loading() || busy() || plan()?.runnable !== true"
+    [disabled]="loading() || busy() || (plan()?.runnable !== true && plan()?.canRepairExisting !== true)"
     (click)="confirmAsync()"
   >
     <span class="button-content">
-      <span>{{ t(plan()?.adoptsExisting ? 'symlinks.confirm.adoptRun' : 'symlinks.confirm.run') }}</span>
+      <span>{{
+        t(
+          plan()?.canRepairExisting
+            ? 'symlinks.confirm.repairRun'
+            : plan()?.adoptsExisting
+              ? 'symlinks.confirm.adoptRun'
+              : 'symlinks.confirm.run'
+        )
+      }}</span>
       <app-feedback-icon [state]="busy() ? 'loading' : null" variant="inline" />
     </span>
   </button>

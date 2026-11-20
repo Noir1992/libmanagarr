@@ -128,4 +128,4 @@ public sealed class ConfirmSuggestionRequest
     public ExistingLinkConfirmation? ExistingLink { get; set; }
 }
 
-public sealed record ExistingLinkConfirmation(string Path, string LinkText, int SonarrFileId);
+public sealed record ExistingLinkConfirmation(string Path, string LinkText, int SonarrFileId, bool Repair = false);

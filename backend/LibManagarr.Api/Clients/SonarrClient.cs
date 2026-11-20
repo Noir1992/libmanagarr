@@ -237,10 +237,12 @@ public sealed class SonarrClient(HttpClient httpClient)
         CancellationToken cancellationToken) =>
         await GetAsync<SonarrNamingConfigResource>(instance, "/api/v3/config/naming", cancellationToken);
 
-    public async Task SetMappedEpisodeFileMetadataAsync(
+    public async Task<IReadOnlyList<string>> SetMappedEpisodeFileMetadataAsync(
         ArrInstanceSettings instance, int fileId, SymlinkFileMetadata expected, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(expected.ReleaseGroup) && string.IsNullOrWhiteSpace(expected.Quality) && expected.Languages.Count == 0) return;
+        string[] expectedLanguages = MediaFileLanguageHelper.CollectLanguageNames(expected.Languages.ToArray())
+            .Where(MediaFileLanguageHelper.IsSpecificLanguage).ToArray();
+        if (string.IsNullOrWhiteSpace(expected.ReleaseGroup) && string.IsNullOrWhiteSpace(expected.Quality) && expectedLanguages.Length == 0) return [];
         JsonNode document = await GetNodeAsync(instance, $"/api/v3/episodefile/{fileId}", cancellationToken)
             ?? throw new InvalidOperationException("Sonarr returned no episode file.");
         // Resolve identities in the destination instance; Radarr IDs have no meaning here.
@@ -261,25 +263,32 @@ public sealed class SonarrClient(HttpClient httpClient)
             document["quality"] ??= new JsonObject();
             document["quality"]!["revision"] = JsonSerializer.SerializeToNode(expected.QualityRevision, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         }
-        if (expected.Languages.Count > 0 && !new HashSet<string>(expected.Languages, StringComparer.OrdinalIgnoreCase).SetEquals(currentLanguages))
+        List<string> unmappedLanguages = [];
+        if (expectedLanguages.Length > 0 && !new HashSet<string>(expectedLanguages, StringComparer.OrdinalIgnoreCase).SetEquals(currentLanguages))
         {
             JsonArray available = await GetNodeAsync(instance, "/api/v3/language", cancellationToken) as JsonArray
                 ?? throw new InvalidOperationException("Sonarr returned no languages.");
             JsonArray mapped = [];
-            foreach (string name in expected.Languages)
+            foreach (string name in expectedLanguages)
             {
                 JsonNode? language = available.SingleOrDefault(value =>
                     string.Equals(value?["name"]?.GetValue<string>(), name, StringComparison.OrdinalIgnoreCase));
                 if (language is null || language["id"]?.GetValue<int>() is not > 0
                     || string.Equals(name, "Original", StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"Sonarr has no writable language named '{name}'.");
+                {
+                    unmappedLanguages.Add(name);
+                    continue;
+                }
                 mapped.Add(language.DeepClone());
             }
-            document["languages"] = mapped;
+            // An unavailable vocabulary must not erase existing language data. Report the
+            // limitation separately while still allowing quality and release group to be updated.
+            if (mapped.Count > 0) document["languages"] = mapped;
         }
         if (!string.IsNullOrWhiteSpace(expected.ReleaseGroup)) document["releaseGroup"] = expected.ReleaseGroup;
         // The bulk endpoint supports languages as well as quality and release group.
         await PutNodeAsync<JsonNode>(instance, "/api/v3/episodefile/bulk", new JsonArray(document), cancellationToken);
+        return unmappedLanguages;
     }
 
     /// <summary>The names Sonarr's own rules would give the files of a series, per existing episode file.</summary>

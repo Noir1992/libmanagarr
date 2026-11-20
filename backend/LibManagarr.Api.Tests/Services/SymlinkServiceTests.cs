@@ -488,7 +488,7 @@ public sealed class SymlinkServiceTests
     }
 
     [Fact]
-    public async Task FollowingLaterUpgradesCanBeWithdrawnPerEntry()
+    public async Task FollowingLaterUpgradesCannotBeDisabledByLegacyClients()
     {
         SymlinkLink link = await SeedLinkAsync();
         SymlinkService service = CreateService(new StubArrHandler(HappyRoutes()), new FakeLinkFileSystem());
@@ -496,9 +496,9 @@ public sealed class SymlinkServiceTests
         SymlinkLink? updated = await service.SetAutoFollowUpAsync(link.Id, enabled: false, link.Revision, CancellationToken.None);
 
         Assert.NotNull(updated);
-        Assert.False(updated!.AutoFollowUp);
+        Assert.True(updated!.AutoFollowUp);
         Assert.Equal(link.Revision + 1, updated.Revision);
-        Assert.False((await StoredAsync(link.Id)).AutoFollowUp);
+        Assert.True((await StoredAsync(link.Id)).AutoFollowUp);
     }
 
     [Fact]

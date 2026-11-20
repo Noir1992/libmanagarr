@@ -255,6 +255,31 @@ describe('ConfirmSymlinkDialogComponent', () => {
     });
   });
 
+  it('shows both targets and explicitly confirms repairing a broken link', async () => {
+    previewLink.and.resolveTo({
+      runnable: false,
+      canRepairExisting: true,
+      repairLinkText: '../../../movies/correct.mkv',
+      draft: createDraft({ sonarrFileId: 88, sourceVersion: 'source-v1', linkPath: '/series/special.mkv', linkText: '/wrong/movie.mkv' }),
+      blockers: [{ code: 'existing-link-repair-required', detail: 'Broken symlink', detectedAt: '' }],
+      warnings: [],
+    });
+    await open();
+    expect(element.querySelector('.dialog-title')?.textContent).toContain('Repair and adopt symlink');
+    expect(element.querySelector('.dialog-content')?.textContent).toContain('/wrong/movie.mkv');
+    expect(element.querySelector('.dialog-content')?.textContent).toContain('../../../movies/correct.mkv');
+    expect(actionButtons()[1].disabled).toBeFalse();
+    expect(actionButtons()[1].textContent).toContain('Repair and adopt');
+    actionButtons()[1].click();
+    await settle();
+    expect(confirmSuggestion).toHaveBeenCalledWith('suggestion-1', 7, 'source-v1', {
+      path: '/series/special.mkv',
+      linkText: '/wrong/movie.mkv',
+      sonarrFileId: 88,
+      repair: true,
+    });
+  });
+
   it('keeps the window open and says so when the write was refused', async () => {
     await open();
     confirmSuggestion.and.rejectWith(new Error('The path configuration moved.'));

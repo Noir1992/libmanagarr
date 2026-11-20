@@ -19,7 +19,9 @@ public sealed record SymlinkLinkPlan(
     IReadOnlyList<SymlinkFinding> Warnings)
 {
     public bool Runnable => Blockers.Count == 0;
-    public bool AdoptsExisting => Draft.SonarrFileId.HasValue && Draft.SetupStep == SymlinkSetupStep.Completed;
+    public bool AdoptsExisting => Runnable && Draft.SonarrFileId.HasValue && Draft.SetupStep == SymlinkSetupStep.Completed;
+    public bool CanRepairExisting => Draft.SonarrFileId.HasValue && Blockers.Count == 1
+        && Blockers[0].Code == "existing-link-repair-required";
 }
 
 /// <summary>
@@ -149,7 +151,11 @@ public sealed class SymlinkService(
         (SymlinkLink draft, List<Obstacle> blockers, _) = await PlannedAsync(pair, radarrFileId, replaces: null, cancellationToken);
         if (expectedSourceVersion is not null && expectedSourceVersion != draft.SourceVersion)
             throw Conflict("The source changed after the preview.", "Refresh the preview before confirming.");
-        if (blockers.Count > 0)
+        bool repairing = draft.SonarrFileId.HasValue && blockers.Count == 1
+            && blockers[0].Finding.Code == "existing-link-repair-required";
+        if (existingLink?.Repair == true && !repairing)
+            throw Conflict("The repair preview is no longer current.", "Refresh the preview before repairing the link.");
+        if (blockers.Count > 0 && !(repairing && existingLink?.Repair == true))
         {
             Obstacle blocker = blockers[0];
             throw new ApiProblemException(blocker.StatusCode, "The link cannot be created", blocker.Finding.Detail!);
@@ -165,6 +171,19 @@ public sealed class SymlinkService(
         draft.Id = UuidV7.Create();
         draft.SuggestionId = suggestionId;
         draft.UpdatedAt = clock.GetUtcNow();
+        if (adopting && repairing)
+        {
+            // Reserve both the explicitly confirmed old link and the intended replacement before
+            // touching disk. The ordinary update journal makes this resumable after a restart.
+            draft.PendingUpdate = new(draft.RadarrFileId, draft.StorageAreaId, draft.SourcePath, draft.LinkPath,
+                Path.GetRelativePath(Path.GetDirectoryName(draft.LinkPath)!, draft.SourcePath),
+                draft.SeasonNumber, draft.EpisodeNumber, draft.ExpectedMetadata, draft.SourceVersion, RepairAdoption: true);
+            draft.OperationStatus = SymlinkOperationStatus.Updating;
+            await store.InsertLinkAsync(draft, cancellationToken);
+            await FinishUpdateAsync(draft, cancellationToken);
+            setupRequests.Request();
+            return (await store.GetLinkAsync(draft.Id, cancellationToken))!;
+        }
         if (adopting)
         {
             if (!ResolvesToSource(draft)) throw Conflict("The existing symlink changed before adoption.", "Nothing was adopted or modified.");
@@ -224,11 +243,8 @@ public sealed class SymlinkService(
     }
 
     /// <summary>
-    /// The one decision a confirmed entry leaves to the user afterwards: whether later Radarr upgrades of
-    /// this source keep being followed. Every other field belongs to the pairing or to the file system.
-    /// Turning it on says so about the file that is current right now, too — an entry that is already
-    /// behind is marked for its new source in the same write, so switching following on is enough to start
-    /// it and does not wait for the library to be synchronized again.
+    /// Compatibility for older clients: source upgrades are always followed, including for entries
+    /// saved with the former switch disabled. Requests can no longer turn following off.
     /// </summary>
     public async Task<SymlinkLink?> SetAutoFollowUpAsync(
         string id,
@@ -241,9 +257,9 @@ public sealed class SymlinkService(
         if (link is null) return null;
         if (link.Revision != expectedRevision) throw StaleRevision();
 
-        link.AutoFollowUp = enabled;
+        link.AutoFollowUp = true;
         link.UpdatedAt = clock.GetUtcNow();
-        if (enabled && link.OperationStatus == SymlinkOperationStatus.Active && link.SetupStep == SymlinkSetupStep.Completed)
+        if (link.OperationStatus == SymlinkOperationStatus.Active && link.SetupStep == SymlinkSetupStep.Completed)
         {
             AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
             MediaFileSnapshot? current = SnapshotFileOf(snapshot, link);
@@ -340,15 +356,9 @@ public sealed class SymlinkService(
         return false;
     }
 
-    /// <summary>
-    /// Whether a row is owed the way onto its movie's newest file: a person has to have asked for it, and
-    /// the entry has to be standing on its own feet. A row that is still being set up, one that stopped for
-    /// a person and one whose following was switched off are left alone — the first two because their own
-    /// pass reports about them, the last because that is the switch doing what it promises.
-    /// </summary>
+    /// <summary>Every active entry follows source upgrades, regardless of the legacy stored flag.</summary>
     private static bool FollowsUpgrades(SymlinkLink link) =>
-        link.AutoFollowUp
-        && link.OperationStatus == SymlinkOperationStatus.Active;
+        link.OperationStatus == SymlinkOperationStatus.Active;
 
     /// <summary>
     /// Writes the answer that this entry is owed the way onto the file its movie has now. It is one method
@@ -384,6 +394,7 @@ public sealed class SymlinkService(
             }
             link.NamingMove = null;
         }
+        link.AutoFollowUp = true;
         link.OperationStatus = SymlinkOperationStatus.Updating;
         // Back to the file half: the entry has to be pointed at the new source before Sonarr is told about
         // it again, which is the same point a creation starts from.
@@ -657,6 +668,47 @@ public sealed class SymlinkService(
         return SymlinkSetupOutcome.Completed;
     }
 
+    private async Task<SymlinkSetupOutcome> FinishRepairAdoptionAsync(
+        SymlinkLink link, SymlinkSourceUpdate repair, CancellationToken token)
+    {
+        string previousText = link.LinkText;
+        try
+        {
+            // A regular file, a removed link or a changed target is never this consent's to replace.
+            string? actual = files.ReadLinkTarget(link.LinkPath);
+            if (actual != previousText && actual != repair.LinkText)
+            {
+                await MarkConflictAsync(link, "repair-link-changed", "The confirmed symlink changed before repair. Nothing was overwritten.", token);
+                return SymlinkSetupOutcome.Blocked;
+            }
+            files.OpenForRead(repair.SourcePath);
+            if (actual == previousText) files.ReplaceFileSymlink(link.LinkPath, previousText, repair.LinkText);
+            link.LinkText = repair.LinkText;
+            if (!ResolvesToSource(link)) throw new IOException("The repaired symlink could not be verified.");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            link.LinkText = previousText;
+            await MarkConflictAsync(link, "repair-link-failed", exception.Message, token);
+            return SymlinkSetupOutcome.Blocked;
+        }
+        // Register the repaired link, but leave Sonarr's rescan and metadata confirmation owed.
+        // The episode file described the previous target and is no longer confirmed evidence.
+        await MarkSuggestionAsync(link.SuggestionId, SymlinkSuggestionStatus.Completed, link.Id, null, token);
+        link.PendingUpdate = null;
+        link.OperationStatus = SymlinkOperationStatus.Active;
+        link.SetupStep = SymlinkSetupStep.MonitoringDisabled;
+        link.ConfirmedMetadata = null;
+        link.SonarrScanCommandId = null;
+        link.SonarrRenameCommandId = null;
+        link.Findings.Clear();
+        link.UpdatedAt = clock.GetUtcNow();
+        if (!await store.UpdateLinkAsync(link, link.Revision, token)) return SymlinkSetupOutcome.Blocked;
+        setupRequests.Request();
+        logger.LogInformation("Repaired and adopted symlink {LinkId} at {LinkPath}; Sonarr file synchronization is queued.", link.Id, link.LinkPath);
+        return SymlinkSetupOutcome.Completed;
+    }
+
     /// <summary>
     /// Follows one entry onto the file its movie has now. The pair is read live the same way a preview
     /// reads it — with the entry's own link and Sonarr file counted as ours rather than as an obstacle —
@@ -670,6 +722,8 @@ public sealed class SymlinkService(
     {
         if (!await IsEnabledAsync(cancellationToken)) return SymlinkSetupOutcome.Waiting;
         if (!await MutationReadyAsync(link, cancellationToken)) return SymlinkSetupOutcome.Waiting;
+        if (link.PendingUpdate is { RepairAdoption: true } repair)
+            return await FinishRepairAdoptionAsync(link, repair, cancellationToken);
         SymlinkLink draft;
         if (link.PendingUpdate is SymlinkSourceUpdate pending)
         {
@@ -1203,7 +1257,8 @@ public sealed class SymlinkService(
             draft.LinkText = check.LinkText ?? files.ReadLinkTarget(existingPath) ?? string.Empty;
             draft.DesiredFilename = Path.GetFileName(existingPath);
         }
-        if (check?.Status != ExistingEpisodeFileStatus.Matches || check.SonarrFileId is not int fileId
+        bool repairable = check?.Status == ExistingEpisodeFileStatus.BrokenSymlink;
+        if (check is null || (check.Status != ExistingEpisodeFileStatus.Matches && !repairable) || check.SonarrFileId is not int fileId
             || check.LinkText is null || check.EpisodePath is null)
             return ConflictFinding("sonarr-episode-has-file", check?.Detail ?? "The existing episode file could not be verified.");
         if (!ArrPathRules.IsWithinRoot(seriesPath, check.EpisodePath))
@@ -1215,7 +1270,8 @@ public sealed class SymlinkService(
         if (file?.Id != fileId || file.Path is null)
             return ConflictFinding("existing-link-changed", "Sonarr no longer returns the verified episode file.");
         PathMappingResult currentPath = await paths.TranslateToLibManagarrPathAsync(instance.Id, ArrApplicationKind.Sonarr, file.Path, token);
-        if (!currentPath.Success || !IsSameLocalPath(currentPath.Path!, draft.LinkPath) || !ResolvesToSource(draft))
+        if (!currentPath.Success || !IsSameLocalPath(currentPath.Path!, draft.LinkPath)
+            || files.ReadLinkTarget(draft.LinkPath) != check.LinkText || (!repairable && !ResolvesToSource(draft)))
             return ConflictFinding("existing-link-changed", "The verified episode file or symlink changed while planning. Refresh the preview.");
         SonarrNamingConfigResource? naming = await sonarr.FetchNamingConfigAsync(instance, token);
         if (naming?.RenameEpisodes is null)
@@ -1227,6 +1283,20 @@ public sealed class SymlinkService(
         draft.NamingRevision = SonarrSpecialIntegrationService.NamingRevisionOf(naming);
         draft.AppliedFilename = Path.GetFileName(draft.LinkPath);
         draft.SetupStep = SymlinkSetupStep.Completed;
+        if (repairable)
+        {
+            try
+            {
+                SymlinkPathGuard.CheckParents(files, draft.LinkPath);
+                SymlinkPathGuard.CheckParents(files, draft.SourcePath);
+                files.OpenForRead(draft.SourcePath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return ConflictFinding("repair-source-unreadable", exception.Message);
+            }
+            return ConflictFinding("existing-link-repair-required", check.Detail);
+        }
         return null;
     }
 
@@ -1421,6 +1491,7 @@ public sealed class SymlinkService(
         [
             .. MediaFileLanguageHelper.CollectLanguageNames(file.Languages)
                 .Concat(MediaFileLanguageHelper.CollectLanguageNames(file.MediaInfo?.AudioLanguages))
+                .Where(MediaFileLanguageHelper.IsSpecificLanguage)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
         ],
         Quality = file.Quality?.Quality?.Name,
@@ -1607,6 +1678,7 @@ public sealed class SymlinkService(
         if (link is null) return null;
         if (link.Revision != revision) throw StaleRevision();
         if (files.EntryExists(link.LinkPath) && !IsOwnLinkAt(link, link.LinkPath)
+            && !(link.PendingUpdate is { RepairAdoption: true } && files.ReadLinkTarget(link.LinkPath) == link.LinkText)
             && !(link.PendingUpdate is { } pending && IsOwnLinkAt(new SymlinkLink { SourcePath = pending.SourcePath, LinkText = pending.LinkText }, link.LinkPath)))
             throw Conflict("The entry is foreign or was changed externally.", "Resolve the conflict at the registered path first.");
         if (link.NamingMove is null && link.PendingUpdate is null

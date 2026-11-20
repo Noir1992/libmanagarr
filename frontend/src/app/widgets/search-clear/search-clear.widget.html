@@ -1,0 +1,10 @@
+<button
+  type="button"
+  mat-icon-button
+  class="clear-search"
+  [attr.aria-label]="accessibleLabel()"
+  [title]="accessibleLabel()"
+  (click)="cleared.emit()"
+>
+  <span class="clear-search-icon" aria-hidden="true"></span>
+</button>

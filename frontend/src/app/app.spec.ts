@@ -343,24 +343,29 @@ describe('App', () => {
     fixture.detectChanges();
 
     const scrollButton: HTMLElement | null = compiled.querySelector<HTMLElement>('.scroll-to-top');
+    const sharedBorder = document.createElement('div');
+    sharedBorder.style.border = '1px solid var(--theme-border-color)';
+    compiled.append(sharedBorder);
 
     try {
       document.documentElement.dataset['theme'] = 'light';
       const lightStyle: CSSStyleDeclaration = getComputedStyle(scrollButton as HTMLElement);
       const lightBorder: string = lightStyle.borderTopColor;
+      const lightSharedBorder = getComputedStyle(sharedBorder).borderTopColor;
 
       document.documentElement.dataset['theme'] = 'dark';
       const darkStyle: CSSStyleDeclaration = getComputedStyle(scrollButton as HTMLElement);
 
       // Light keeps the shared border token; dark swaps to the lightened elevated variant.
-      expect(lightBorder).toBe('rgba(43, 60, 74, 0.14)');
-      expect(darkStyle.borderTopColor).not.toBe('rgba(196, 210, 223, 0.14)');
+      expect(lightBorder).toBe(lightSharedBorder);
+      expect(darkStyle.borderTopColor).not.toBe(getComputedStyle(sharedBorder).borderTopColor);
       expect(darkStyle.borderTopColor).not.toBe(lightBorder);
 
       // Both themes must render the elevation shadow.
       expect(lightStyle.boxShadow).not.toBe('none');
       expect(darkStyle.boxShadow).not.toBe('none');
     } finally {
+      sharedBorder.remove();
       if (originalTheme === undefined) delete document.documentElement.dataset['theme'];
       else document.documentElement.dataset['theme'] = originalTheme;
     }

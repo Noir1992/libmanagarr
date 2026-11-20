@@ -1,3 +1,7 @@
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
+import { MatMenuHarness } from '@angular/material/menu/testing';
+import { LibrarySortDirection } from '../../enums/library-sort-direction';
+import { LibrarySortField } from '../../enums/library-sort-field';
 import { signal, WritableSignal } from '@angular/core';
 import { OverlayContainer } from '@angular/cdk/overlay';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -11,7 +15,7 @@ import { InfoIconWidget } from '../../widgets/info-icon/info-icon.widget';
 import { SymlinkSettings } from '../../interfaces/symlinks/symlink-settings';
 import { SymlinkRejection } from '../../interfaces/symlinks/symlink-decisions';
 import { SymlinkLink } from '../../interfaces/symlinks/symlink-link';
-import { ExistingEpisodeFileCheck, SymlinkMatchingRun, SymlinkSuggestion } from '../../interfaces/symlinks/symlink-suggestion';
+import { ExistingEpisodeFileCheck, SymlinkSuggestion } from '../../interfaces/symlinks/symlink-suggestion';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { SymlinkActionState, SymlinkService } from '../../services/symlink.service';
 import { ConfirmSymlinkDialogComponent } from './confirm-symlink-dialog/confirm-symlink-dialog.component';
@@ -28,12 +32,9 @@ type SymlinkServiceStub = Pick<
   | 'linkStates'
   | 'overviewLoading'
   | 'overviewError'
-  | 'refreshing'
-  | 'lastRun'
   | 'settingsError'
   | 'loadOverview'
   | 'loadSettings'
-  | 'refreshSuggestions'
   | 'refreshProgress'
   | 'rejectSuggestion'
   | 'retryLink'
@@ -142,10 +143,6 @@ function createRejection(overrides: Partial<SymlinkRejection> = {}): SymlinkReje
   };
 }
 
-function createRun(overrides: Partial<SymlinkMatchingRun> = {}): SymlinkMatchingRun {
-  return { instancesConsidered: 2, created: 1, updated: 0, markedStale: 0, skippedRejected: 0, didWork: true, ...overrides };
-}
-
 describe('SymlinksPage', () => {
   let fixture: ComponentFixture<SymlinksPage>;
   let element: HTMLElement;
@@ -157,7 +154,6 @@ describe('SymlinksPage', () => {
     suggestionStates: WritableSignal<Record<string, SymlinkActionState>>;
     linkStates: WritableSignal<Record<string, SymlinkActionState>>;
     overviewError: WritableSignal<string | null>;
-    lastRun: WritableSignal<SymlinkMatchingRun | null>;
   };
   let dialog: jasmine.SpyObj<MatDialog>;
 
@@ -182,6 +178,8 @@ describe('SymlinksPage', () => {
 
   beforeEach(async () => {
     globalThis.localStorage.removeItem('filters:symlinks');
+    globalThis.localStorage.removeItem('sort:symlinks');
+    globalThis.localStorage.removeItem('expanded:symlinks');
     stub = {
       settings: signal<SymlinkSettings | null>(createSettings()),
       suggestions: signal<SymlinkSuggestion[]>([]),
@@ -191,12 +189,9 @@ describe('SymlinksPage', () => {
       linkStates: signal<Record<string, SymlinkActionState>>({}),
       overviewLoading: signal(false),
       overviewError: signal<string | null>(null),
-      refreshing: signal(false),
-      lastRun: signal<SymlinkMatchingRun | null>(null),
       settingsError: signal<string | null>(null),
       loadOverview: jasmine.createSpy('loadOverview').and.resolveTo(),
       loadSettings: jasmine.createSpy('loadSettings').and.resolveTo(),
-      refreshSuggestions: jasmine.createSpy('refreshSuggestions').and.resolveTo(createRun()),
       refreshProgress: jasmine.createSpy('refreshProgress').and.resolveTo(),
       rejectSuggestion: jasmine.createSpy('rejectSuggestion').and.resolveTo(createSuggestion({ status: 'Rejected' })),
       retryLink: jasmine.createSpy('retryLink').and.resolveTo(createLink()),
@@ -221,10 +216,191 @@ describe('SymlinksPage', () => {
     element = fixture.nativeElement as HTMLElement;
     fixture.detectChanges();
     await settle();
+    // Existing row-action tests exercise the contents of all three sections.
+    fixture.componentInstance['toggleSection']('links');
+    fixture.componentInstance['toggleSection']('rejections');
+    fixture.detectChanges();
   });
 
   afterEach(() => {
     globalThis.localStorage.removeItem('filters:symlinks');
+    globalThis.localStorage.removeItem('sort:symlinks');
+    globalThis.localStorage.removeItem('expanded:symlinks');
+  });
+
+  it('shows a warning next to the managed count and lists affected links on click, even while collapsed', async () => {
+    stub.links.set([
+      createLink({ radarrMovieTitle: 'Broken Movie' }),
+      createLink({ id: 'second', radarrMovieTitle: 'Other Movie', episodeNumber: 7 }),
+      createLink({ id: 'healthy', radarrMovieTitle: 'Healthy Movie', findings: [] }),
+    ]);
+    fixture.componentInstance['toggleSection']('links');
+    fixture.detectChanges();
+
+    expect(element.querySelectorAll('.card-header .managed-links-warning').length).toBe(1);
+    const summary = cards()[1].querySelector('.managed-links-summary');
+    expect(summary?.querySelector('.card-subtitle')?.textContent).toBe('(3)');
+    expect(summary?.querySelector('.managed-links-warning')).not.toBeNull();
+    const overlay = TestBed.inject(OverlayContainer).getContainerElement();
+    const trigger = summary?.querySelector('button') as HTMLButtonElement;
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    fixture.detectChanges();
+    expect(overlay.querySelector('.info-popover')).toBeNull();
+    trigger.click();
+    await settle();
+    const text = overlay.querySelector('.info-popover')?.textContent ?? '';
+    expect(text).toContain('Broken Movie — Special 4');
+    expect(text).toContain('Other Movie — Special 7');
+    expect(text).not.toContain('Healthy Movie');
+    (overlay.querySelector('.cdk-overlay-backdrop') as HTMLElement).click();
+    await settle();
+    expect(overlay.querySelector('.info-popover')).toBeNull();
+
+    stub.links.set([createLink({ findings: [] })]);
+    fixture.detectChanges();
+    expect(element.querySelector('.managed-links-warning')).toBeNull();
+  });
+
+  it('does not flag informational findings or hidden renaming notices in the managed header', () => {
+    stub.links.set([
+      createLink({
+        findings: [
+          { code: 'language-mapping-unavailable', detail: 'Telugu is not writable.', detectedAt: '2026-11-20T12:00:00Z' },
+          { code: 'renaming-disabled', detail: 'Renaming disabled.', detectedAt: '2026-11-20T12:00:00Z' },
+        ],
+      }),
+    ]);
+    fixture.detectChanges();
+    expect(element.querySelector('.managed-links-warning')).toBeNull();
+  });
+
+  it('offers only alphabetical and created sorting next to the filter, with the Library direction toggle', async () => {
+    expect(element.querySelector('app-page-filter')?.nextElementSibling?.tagName.toLowerCase()).toBe('app-sort-control');
+    const menu = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatMenuHarness);
+    await menu.open();
+    const items = await menu.getItems();
+    expect(items.length).toBe(2);
+    expect(await items[0].getText()).toContain('Alphabetical');
+    expect(await items[0].getText()).toContain('arrow_upward');
+    expect(await items[1].getText()).toContain('Created');
+    expect(await items[1].getText()).not.toContain('arrow_');
+    await items[1].click();
+    await menu.open();
+    await (await menu.getItems())[0].click();
+    expect(fixture.componentInstance['sortField']()).toBe(LibrarySortField.ALPHABETICAL);
+    expect(fixture.componentInstance['sortDirection']()).toBe(LibrarySortDirection.ASCENDING);
+    await menu.open();
+    await (await menu.getItems())[0].click();
+    expect(fixture.componentInstance['sortDirection']()).toBe(LibrarySortDirection.DESCENDING);
+    expect(globalThis.localStorage.getItem('sort:symlinks')).toBe('alphabetical:descending');
+  });
+
+  for (const [field, direction, expected] of [
+    [LibrarySortField.ALPHABETICAL, LibrarySortDirection.ASCENDING, ['alpha', 'zulu']],
+    [LibrarySortField.ALPHABETICAL, LibrarySortDirection.DESCENDING, ['zulu', 'alpha']],
+    [LibrarySortField.ADDED, LibrarySortDirection.ASCENDING, ['zulu', 'alpha']],
+    [LibrarySortField.ADDED, LibrarySortDirection.DESCENDING, ['alpha', 'zulu']],
+  ] as const) {
+    it(`sorts all lists by ${field} ${direction} independently of the server order`, () => {
+      const rows = [
+        { id: 'zulu', radarrMovieTitle: 'Zulu', createdAt: '2026-11-01T10:00:00Z' },
+        { id: 'alpha', radarrMovieTitle: 'Alpha', createdAt: '2026-11-02T10:00:00Z' },
+      ];
+      stub.links.set(rows.map((row) => createLink(row)));
+      stub.suggestions.set(rows.map((row) => createSuggestion(row)));
+      stub.rejections.set(rows.map((row, index) => createRejection({ ...row, radarrMovieId: index })));
+      const component = fixture.componentInstance;
+      component['onSortFieldChanged'](field);
+      component['onSortDirectionChanged'](direction);
+      expect(component['links']().map((row) => row.id)).toEqual([...expected]);
+      expect(component['offeredSuggestions']().map((row) => row.id)).toEqual([...expected]);
+      expect(component['rejections']().map((row) => row.radarrMovieTitle?.toLowerCase())).toEqual([...expected]);
+      stub.links.update((links) => [...links].reverse().map((link) => ({ ...link, revision: link.revision + 1 })));
+      expect(component['links']().map((row) => row.id)).toEqual([...expected]);
+    });
+  }
+
+  it('restores the chosen ordering after reopening the page', async () => {
+    fixture.componentInstance['onSortFieldChanged'](LibrarySortField.ALPHABETICAL);
+    fixture.componentInstance['onSortDirectionChanged'](LibrarySortDirection.DESCENDING);
+    fixture.destroy();
+    fixture = TestBed.createComponent(SymlinksPage);
+    fixture.detectChanges();
+    await settle();
+    expect(fixture.componentInstance['sortField']()).toBe(LibrarySortField.ALPHABETICAL);
+    expect(fixture.componentInstance['sortDirection']()).toBe(LibrarySortDirection.DESCENDING);
+  });
+
+  it('starts with hidden paths and uses the Library icon rotation for each link independently', async () => {
+    stub.links.set([createLink({ id: 'first' }), createLink({ id: 'second' })]);
+    fixture.detectChanges();
+    const rows = Array.from(cards()[1].querySelectorAll<HTMLElement>('.item'));
+    const toggle = rows[0].querySelector<HTMLButtonElement>('.link-details-toggle')!;
+    const icon = toggle.querySelector('.collapse-icon')!;
+    expect(toggle.classList.contains('mat-mdc-icon-button')).toBeTrue();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(icon.textContent?.trim()).toBe('expand_more');
+    expect(icon.classList.contains('is-collapsed')).toBeTrue();
+    expect(rows[0].querySelector('.item-facts')).toBeNull();
+    toggle.click();
+    await settle();
+    const details = rows[0].querySelector<HTMLElement>('.item-facts')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(icon.classList.contains('is-collapsed')).toBeFalse();
+    expect(toggle.getAttribute('aria-controls')).toBe(details.id);
+    expect(getComputedStyle(details).display).toBe('grid');
+    expect(rows[1].querySelector('.item-facts')).toBeNull();
+    stub.links.update((links) => links.map((link) => ({ ...link, revision: link.revision + 1 })));
+    fixture.detectChanges();
+    expect(rows[0].querySelector('.item-facts')).toBe(details);
+    toggle.click();
+    await settle();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(icon.classList.contains('is-collapsed')).toBeTrue();
+  });
+
+  it('defaults to only Suggestions open and alphabetical ascending, and saves those defaults', async () => {
+    fixture.destroy();
+    globalThis.localStorage.removeItem('expanded:symlinks');
+    globalThis.localStorage.removeItem('sort:symlinks');
+    fixture = TestBed.createComponent(SymlinksPage);
+    element = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+    await settle();
+    expect(cards()[0].querySelector('.card-content')).not.toBeNull();
+    expect(cards()[1].querySelector('.card-content')).toBeNull();
+    expect(cards()[2].querySelector('.card-content')).toBeNull();
+    expect(globalThis.localStorage.getItem('sort:symlinks')).toBe('alphabetical:ascending');
+    expect(JSON.parse(globalThis.localStorage.getItem('expanded:symlinks')!)).toEqual({
+      suggestions: true,
+      links: false,
+      rejections: false,
+    });
+  });
+
+  it('remembers independently toggled sections across page visits', async () => {
+    const toggle = cards()[0].querySelector<HTMLButtonElement>('.section-toggle')!;
+    toggle.click();
+    await settle();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.querySelector('.collapse-icon')?.classList.contains('is-collapsed')).toBeTrue();
+    fixture.destroy();
+    fixture = TestBed.createComponent(SymlinksPage);
+    element = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+    await settle();
+    expect(cards()[0].querySelector('.card-content')).toBeNull();
+    expect(cards()[1].querySelector('.card-content')).not.toBeNull();
+    expect(cards()[2].querySelector('.card-content')).not.toBeNull();
+  });
+
+  it('ignores malformed stored section state and restores the defaults', async () => {
+    fixture.destroy();
+    globalThis.localStorage.setItem('expanded:symlinks', '{broken');
+    fixture = TestBed.createComponent(SymlinksPage);
+    fixture.detectChanges();
+    await settle();
+    expect(fixture.componentInstance['expandedSections']()).toEqual({ suggestions: true, links: false, rejections: false });
   });
 
   it('filters offers and links together through the shared filter widget and title search', async () => {
@@ -242,7 +418,7 @@ describe('SymlinksPage', () => {
     expect(rowText(0)).toContain('Another Movie');
     expect(cards()[0].textContent).not.toContain('The Special Movie');
     expect(rowText(1)).toContain('Another Movie');
-    expect(cards()[1].textContent).not.toContain('The Special Movie');
+    expect(rowText(1)).not.toContain('The Special Movie');
 
     filter('status').onChanged('Active');
     fixture.detectChanges();
@@ -258,7 +434,13 @@ describe('SymlinksPage', () => {
     expect(rowText(0)).toContain('The Special Movie');
     expect(rowText(1)).toContain('The Special Movie');
     expect(cards()[0].textContent).not.toContain('Another Movie');
-    expect(cards()[1].textContent).not.toContain('Another Movie');
+    expect(rowText(1)).not.toContain('Another Movie');
+    (element.querySelector('.symlink-search app-search-clear button') as HTMLButtonElement).click();
+    await settle();
+    expect(search.value).toBe('');
+    expect(document.activeElement).toBe(search);
+    expect(element.querySelector('.symlink-search app-search-clear')).toBeNull();
+    expect(cards()[1].querySelectorAll('.item').length).toBe(2);
   });
 
   it('restores the shared filters when the page is reopened before rows arrive', async () => {
@@ -275,7 +457,7 @@ describe('SymlinksPage', () => {
 
     expect(rowText(0)).toBe('');
     expect(rowText(1)).toContain('Another Movie');
-    expect(cards()[1].textContent).not.toContain('The Special Movie');
+    expect(rowText(1)).not.toContain('The Special Movie');
 
     expect(element.querySelectorAll('.filter-bubble-remove').length).toBe(2);
     for (let remaining = 2; remaining > 0; remaining--) {
@@ -519,20 +701,6 @@ describe('SymlinksPage', () => {
     expect(cards()[0].textContent).toContain('No open suggestions');
   });
 
-  it('runs matching without displaying an additional result summary', async () => {
-    (stub.refreshSuggestions as jasmine.Spy).and.callFake(async (): Promise<SymlinkMatchingRun> => {
-      const run: SymlinkMatchingRun = createRun({ didWork: false, created: 0 });
-      stub.lastRun.set(run);
-      return run;
-    });
-    const refresh: HTMLButtonElement = cards()[0].querySelector('.card-header-actions button') as HTMLButtonElement;
-    refresh.click();
-    await settle();
-
-    expect(stub.refreshSuggestions).toHaveBeenCalledTimes(1);
-    expect(cards()[0].querySelector('.card-subtitle')).toBeNull();
-  });
-
   it('puts the current configuration revision into the confirmation', () => {
     stub.suggestions.set([createSuggestion()]);
     fixture.detectChanges();
@@ -600,7 +768,7 @@ describe('SymlinksPage', () => {
     fixture.detectChanges();
 
     const text: string = rowText(1);
-    expect(text).toContain('/data/series/the-series/season-00/s00e04.mkv');
+    expect(text).not.toContain('/data/series/the-series/season-00/s00e04.mkv');
     expect(text).toContain('The size differs from the expected one.');
     expect(text).toContain('Updating');
     expect(text).not.toContain('Step:');
@@ -626,7 +794,7 @@ describe('SymlinksPage', () => {
     stub.links.set([createLink({ operationStatus: 'Conflict', setupStep: 'MetadataMatched', canEdit: true })]);
     fixture.detectChanges();
     const buttons = actionButtons(1);
-    const repair = buttons.find((button) => button.textContent?.trim() === 'Repair / resume');
+    const repair = buttons.find((button) => button.textContent?.trim() === 'Repair');
     expect(repair?.disabled).toBeFalse();
     expect(buttons.find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBeFalse();
 
@@ -636,14 +804,52 @@ describe('SymlinksPage', () => {
     expect(stub.retryLink).toHaveBeenCalledWith('link-1', 3);
   });
 
-  it('looks at the row a person asked about', async () => {
-    stub.links.set([createLink()]);
+  for (const fails of [false, true]) {
+    it(`shows Repair feedback and prevents duplicate requests until ${fails ? 'failure' : 'success'}`, async () => {
+      const link = createLink({ operationStatus: 'Conflict', setupStep: 'MetadataMatched', canEdit: true });
+      stub.links.set([link]);
+      let resolve: ((value: SymlinkLink) => void) | undefined;
+      let reject: ((error: Error) => void) | undefined;
+      (stub.retryLink as jasmine.Spy).and.returnValue(
+        new Promise<SymlinkLink>((done, refused) => {
+          resolve = done;
+          reject = refused;
+        }),
+      );
+      fixture.detectChanges();
+      const button = actionButtons(1).find((candidate) => candidate.textContent?.trim() === 'Repair')!;
+      button.click();
+      fixture.detectChanges();
+      expect(button.disabled).toBeTrue();
+      expect(button.textContent).toContain('Repair');
+      expect(button.querySelector('.feedback-icon.spinning')).not.toBeNull();
+      expect(actionButtons(1).every((candidate) => candidate.disabled)).toBeTrue();
+      await fixture.componentInstance['repairAsync'](link);
+      expect(stub.retryLink).toHaveBeenCalledTimes(1);
+
+      if (fails) reject?.(new Error('Repair was refused.'));
+      else resolve?.(link);
+      await settle();
+      expect(button.disabled).toBeFalse();
+      expect(button.querySelector('.feedback-icon.spinning')).toBeNull();
+    });
+  }
+
+  it('keeps Repair visible and spinning after acceptance while the background worker is running', async () => {
+    stub.links.set([createLink({ findings: [], setupStep: 'RescanRequested' })]);
+    stub.linkStates.set({ 'link-1': { busy: true, repairing: true } });
     fixture.detectChanges();
+    const button = actionButtons(1).find((candidate) => candidate.textContent?.includes('Repair'))!;
+    expect(button).toBeDefined();
+    expect(button.disabled).toBeTrue();
+    expect(button.querySelector('.feedback-icon.spinning')).not.toBeNull();
+    await fixture.componentInstance['repairAsync'](createLink());
+    expect(stub.retryLink).not.toHaveBeenCalled();
 
-    actionButtons(1)[0].click();
-    await settle();
-
-    expect(stub.checkLink).toHaveBeenCalledWith('link-1');
+    stub.linkStates.set({ 'link-1': { busy: false } });
+    stub.links.set([createLink({ findings: [], setupStep: 'Completed' })]);
+    fixture.detectChanges();
+    expect(actionButtons(1).some((candidate) => candidate.textContent?.includes('Repair'))).toBeFalse();
   });
 
   it('retains a locked deletion and swaps it for its suggestion after polling completes', async () => {
@@ -681,14 +887,12 @@ describe('SymlinksPage', () => {
       if (phase === 'request') stub.linkStates.set({ 'link-1': { deleting: true, busy: true } });
       fixture.detectChanges();
       const row = cards()[1].querySelector('.item')!;
-      expect(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).every((button) => button.disabled)).toBeTrue();
+      expect(Array.from(row.querySelectorAll<HTMLButtonElement>('.item-actions button')).every((button) => button.disabled)).toBeTrue();
       expect(row.getAttribute('aria-busy')).toBe('true');
       expect(row.querySelector('.danger-button .feedback-icon.spinning')).not.toBeNull();
       expect(cards()[0].querySelector('.item')).toBeNull();
       const confirm = spyOn(globalThis, 'confirm');
       const component = fixture.componentInstance;
-      await component['checkAsync'](stub.links()[0]);
-      await component['setFollowUpAsync'](stub.links()[0], false);
       await component['deleteAsync'](stub.links()[0]);
       component['edit'](stub.links()[0]);
       expect(stub.checkLink).not.toHaveBeenCalled();
@@ -700,7 +904,7 @@ describe('SymlinksPage', () => {
       if (phase === 'request') {
         stub.linkStates.set({ 'link-1': { deleting: true, busy: false } });
         fixture.detectChanges();
-        expect(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).every((button) => button.disabled)).toBeTrue();
+        expect(Array.from(row.querySelectorAll<HTMLButtonElement>('.item-actions button')).every((button) => button.disabled)).toBeTrue();
       }
     });
   }
@@ -717,89 +921,78 @@ describe('SymlinksPage', () => {
     expect(actionButtons(1).every((button) => button.disabled)).toBeTrue();
   });
 
-  it('says when the last look at the row was', () => {
-    stub.links.set([createLink({ lastCheckedAt: '2026-11-05T18:30:00.000Z', lastSuccessfulCheckAt: '2026-11-05T18:30:00.000Z' })]);
-    fixture.detectChanges();
-
-    // Two equal stamps are the same look: it ran, and it had nothing to say, so there is nothing to add.
-    expect(rowText(1)).toContain('Last checked');
-    expect(rowText(1)).not.toContain('Nothing to report since');
-  });
-
-  it('names the last quiet look while the row carries a complaint again', () => {
+  it('omits the manual check and check timestamps even when the task has checked the row', () => {
     stub.links.set([createLink({ lastCheckedAt: '2026-11-05T18:30:00.000Z', lastSuccessfulCheckAt: '2026-11-01T09:00:00.000Z' })]);
     fixture.detectChanges();
 
-    expect(rowText(1)).toContain('Last checked');
-    expect(rowText(1)).toContain('Nothing to report since');
-  });
-
-  it('says nothing about a check that never ran', () => {
-    stub.links.set([createLink({ lastCheckedAt: null, lastSuccessfulCheckAt: null })]);
-    fixture.detectChanges();
-
+    expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Check')).toBeFalse();
     expect(rowText(1)).not.toContain('Last checked');
+    expect(rowText(1)).not.toContain('Nothing to report since');
   });
 
-  it('shows the enabled-by-default follow-up switch directly below the first row', () => {
-    stub.links.set([createLink()]);
-    fixture.detectChanges();
-    const row = cards()[1].querySelector('.item')!;
-    const followUp = row.querySelector('.follow-up-control')!;
-    expect(row.querySelector('.item-head')?.nextElementSibling).toBe(followUp);
-    expect(followUp.querySelector('button[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
-    expect(actionButtons(1).some((button) => button.textContent?.includes('source upgrades'))).toBeFalse();
-  });
-
-  it('enables following with the stored row revision through the switch', async () => {
+  it('has no source-upgrade switch, including for legacy entries', () => {
     stub.links.set([createLink({ autoFollowUp: false })]);
     fixture.detectChanges();
-    const toggle = cards()[1].querySelector('.follow-up-control button[role="switch"]') as HTMLButtonElement;
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-    toggle.click();
-    await settle();
-    expect(stub.setFollowUp).toHaveBeenCalledWith('link-1', true, 3);
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(cards()[1].querySelector('mat-slide-toggle')).toBeNull();
+    expect(stub.setFollowUp).not.toHaveBeenCalled();
   });
 
-  it('disables following with the switch', async () => {
-    stub.links.set([createLink()]);
+  for (const state of [
+    { operationStatus: 'Active' as const, setupStep: 'Completed' as const },
+    { operationStatus: 'Active' as const, setupStep: 'RescanRequested' as const },
+    { operationStatus: 'Updating' as const, setupStep: 'LinkCreated' as const },
+  ]) {
+    it(`hides Repair during normal ${state.operationStatus}/${state.setupStep} progress`, () => {
+      stub.links.set([createLink({ ...state, findings: [] })]);
+      fixture.detectChanges();
+      expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBeFalse();
+    });
+  }
+
+  for (const hasError of [false, true]) {
+    it(`shows unsupported languages as information ${hasError ? 'alongside an actual repairable issue' : 'without offering Repair'}`, () => {
+      const information = {
+        code: 'language-mapping-unavailable',
+        detail: 'Sonarr cannot represent Telugu. Other metadata was transferred.',
+        detectedAt: '2026-11-05T18:30:00Z',
+      };
+      stub.links.set([
+        createLink({
+          operationStatus: 'Active',
+          setupStep: 'Completed',
+          findings: hasError
+            ? [information, { code: 'link-lost', detail: 'Missing link', detectedAt: information.detectedAt }]
+            : [information],
+        }),
+      ]);
+      fixture.detectChanges();
+
+      const info = fixture.debugElement.query(By.css('.managed-heading app-info-icon')).componentInstance as InfoIconWidget;
+      expect(info.messageText()).toBe(information.detail);
+      const special = cards()[1].querySelector('.item-title .managed-special');
+      expect(special?.textContent).toContain('Special 4');
+      expect(special?.querySelector('app-info-icon')).not.toBeNull();
+      expect(cards()[1].querySelectorAll('.item-warning').length).toBe(hasError ? 1 : 0);
+      expect(cards()[1].querySelector('.item-warning')?.textContent ?? '').not.toContain(information.code);
+      expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBe(hasError);
+    });
+  }
+
+  it('keeps Repair available for a conflict even when its only finding is informational', () => {
+    stub.links.set([
+      createLink({
+        operationStatus: 'Conflict',
+        findings: [{ code: 'language-mapping-unavailable', detail: 'Sonarr cannot represent Telugu.', detectedAt: '' }],
+      }),
+    ]);
     fixture.detectChanges();
-    const toggle = cards()[1].querySelector('.follow-up-control button[role="switch"]') as HTMLButtonElement;
-    toggle.click();
-    await settle();
-    expect(stub.setFollowUp).toHaveBeenCalledWith('link-1', false, 3);
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBeTrue();
   });
 
-  it('retains the saved switch state when an update fails', async () => {
-    stub.links.set([createLink()]);
-    (stub.setFollowUp as jasmine.Spy).and.rejectWith(new Error('Update failed.'));
+  it('offers Repair after a missing-link finding', () => {
+    stub.links.set([createLink({ findings: [{ code: 'link-lost', detail: 'Missing link', detectedAt: '2026-11-05T18:30:00Z' }] })]);
     fixture.detectChanges();
-    const toggle = cards()[1].querySelector('.follow-up-control button[role="switch"]') as HTMLButtonElement;
-    toggle.click();
-    await settle();
-    expect(stub.setFollowUp).toHaveBeenCalledWith('link-1', false, 3);
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
-  });
-
-  it('disables the follow-up switch while an action on the row is running', () => {
-    stub.links.set([createLink()]);
-    stub.linkStates.set({ 'link-1': { busy: true } });
-    fixture.detectChanges();
-    expect((cards()[1].querySelector('.follow-up-control button[role="switch"]') as HTMLButtonElement).disabled).toBeTrue();
-  });
-
-  it('explains upgrades, broken old targets and queued work in the info popup', () => {
-    stub.links.set([createLink()]);
-    fixture.detectChanges();
-    (cards()[1].querySelector('.follow-up-control app-info-icon button') as HTMLButtonElement).click();
-    fixture.detectChanges();
-    const text = TestBed.inject(OverlayContainer).getContainerElement().querySelector('.info-popover')?.textContent ?? '';
-    expect(text).toContain('1080p');
-    expect(text).toContain('2160p');
-    expect(text).toContain('can break if Radarr deletes');
-    expect(text).toContain('does not cancel updates already queued');
+    expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBeTrue();
   });
 
   it('only deletes a link after the question was answered', async () => {
@@ -840,6 +1033,37 @@ describe('SymlinksPage', () => {
       sonarrEpisodeId: 555,
     });
   });
+
+  for (const fails of [false, true]) {
+    it(`shows feedback and prevents duplicate release requests until ${fails ? 'failure' : 'success'}`, async () => {
+      const rejection = createRejection();
+      stub.rejections.set([rejection]);
+      let resolve: (() => void) | undefined;
+      let reject: ((error: Error) => void) | undefined;
+      (stub.reactivateRejection as jasmine.Spy).and.returnValue(
+        new Promise<void>((done, refused) => {
+          resolve = done;
+          reject = refused;
+        }),
+      );
+      fixture.detectChanges();
+      const button = actionButtons(2)[0];
+      button.click();
+      fixture.detectChanges();
+      expect(button.disabled).toBeTrue();
+      expect(button.textContent).toContain('Release again');
+      expect(button.querySelector('.feedback-icon.spinning')).not.toBeNull();
+      await fixture.componentInstance['reactivateAsync'](rejection);
+      expect(stub.reactivateRejection).toHaveBeenCalledTimes(1);
+
+      if (fails) reject?.(new Error('The archive is busy.'));
+      else resolve?.();
+      await settle();
+      expect(button.disabled).toBeFalse();
+      expect(button.querySelector('.feedback-icon.spinning')).toBeNull();
+      if (fails) expect(stub.overviewError()).toBe('The archive is busy.');
+    });
+  }
 
   it('reports a decline that could not be lifted where the list sits', async () => {
     stub.rejections.set([createRejection()]);

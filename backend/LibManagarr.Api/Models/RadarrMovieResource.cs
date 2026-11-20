@@ -8,6 +8,8 @@ public sealed class RadarrMovieResource
 
     public string Title { get; init; } = string.Empty;
 
+    public string? OriginalTitle { get; init; }
+
     public string TitleSlug { get; init; } = string.Empty;
 
     public int? QualityProfileId { get; set; }
@@ -33,6 +35,7 @@ public sealed class RadarrMovieResource
 
     public IReadOnlyList<RadarrMovieImage>? Images { get; init; }
 
+    [JsonPropertyName("alternateTitles")]
     public IReadOnlyList<RadarrAlternativeTitleResource>? AlternativeTitles { get; init; }
 
     public IReadOnlyList<string>? Genres { get; init; }

@@ -1,3 +1,4 @@
+import { SearchClearWidget } from '../../../widgets/search-clear/search-clear.widget';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { disabled, form, FormField } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
@@ -25,7 +26,7 @@ function groupByInstance<T extends { instanceId: string; instanceName: string }>
 
 @Component({
   selector: 'app-edit-symlink-dialog',
-  imports: [FormField, MatButtonModule, MatDialogModule, MatInputModule, MatSelectModule],
+  imports: [SearchClearWidget, FormField, MatButtonModule, MatDialogModule, MatInputModule, MatSelectModule],
   templateUrl: './edit-symlink-dialog.component.html',
   styleUrl: './edit-symlink-dialog.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -87,6 +88,11 @@ export class EditSymlinkDialogComponent {
 
   protected t(key: TranslationKey, replace?: Record<string, string>): string {
     return this.i18n.t(key, replace);
+  }
+
+  protected onSearchKeydown(event: KeyboardEvent): void {
+    // Let the select handle navigation and dismissal; typing, spaces and Home/End belong to the search.
+    if (!['Escape', 'Tab', 'ArrowDown', 'ArrowUp'].includes(event.key)) event.stopPropagation();
   }
 
   protected clearSearch(field: 'movie' | 'special'): void {

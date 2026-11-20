@@ -8,6 +8,19 @@ public static class MediaFileLanguageHelper
 {
     private static readonly IReadOnlyDictionary<string, string> LanguageAliases = BuildLanguageAliases();
 
+    private static readonly HashSet<string> LanguagePlaceholders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Unknown", "und", "Undetermined", "Original", "mul", "Multiple languages",
+        "zxx", "No linguistic content"
+    };
+
+    /// <summary>Only concrete audio-language labels can be transferred or required as metadata.</summary>
+    public static bool IsSpecificLanguage(string? label)
+    {
+        string? normalized = NormalizeLanguageLabel(label);
+        return normalized is not null && !LanguagePlaceholders.Contains(normalized);
+    }
+
     private static IReadOnlyDictionary<string, string> BuildLanguageAliases()
     {
         Dictionary<string, string> aliases = new(StringComparer.OrdinalIgnoreCase)

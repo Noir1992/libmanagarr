@@ -5,7 +5,7 @@
   --theme-panel-bg: rgb(255 255 255);
   --theme-surface: rgb(255 255 255 / 92%);
   --theme-tile-surface: #e9eff4;
-  --theme-border-color: rgb(43 60 74 / 14%);
+  --theme-border-color: rgb(221 231 240);
   --theme-border-radius: var(--theme-default-gap-small);
   --theme-text: #16202a;
   --theme-muted: #546270;
@@ -52,7 +52,7 @@ html[data-theme='dark'] {
   --theme-panel-bg: rgb(15 21 28);
   --theme-surface: rgb(15 21 28 / 92%);
   --theme-tile-surface: rgb(15 21 28 / 92%);
-  --theme-border-color: rgb(196 210 223 / 14%);
+  --theme-border-color: rgb(44 51 57);
   --theme-input-disabled: color-mix(in srgb, var(--theme-panel-bg) 75%, #686868);
   --theme-text: #f3f6f8;
   --theme-muted: #a9b5c1;

@@ -15,12 +15,16 @@
           <span class="material-symbols-outlined" aria-hidden="true">search</span>
           <input
             matInput
+            #logsSearch
             type="search"
             [placeholder]="searchLabel()"
             [attr.aria-label]="searchLabel()"
             [value]="logSearch()"
             (input)="onLogSearchChanged($event)"
           />
+          @if (logSearch()) {
+            <app-search-clear (cleared)="logSearch.set(''); logsSearch.focus()" />
+          }
         </div>
         <app-page-filter [filters]="filters()" [storagePrefix]="'logs'" [bubblesBelow]="true" />
       </div>

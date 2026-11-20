@@ -8,9 +8,12 @@ import { TranslationKey } from '../../services/i18n/_i18n-key';
 type Translate = (key: TranslationKey) => string;
 
 const reasonLabelKeys: Record<string, TranslationKey> = {
+  'title-variant': 'symlinks.reason.titleVariant',
   'identical-title': 'symlinks.reason.identicalTitle',
   'series-qualified-title': 'symlinks.reason.seriesQualifiedTitle',
   'alternative-title': 'symlinks.reason.alternativeTitle',
+  'filename-title': 'symlinks.reason.filenameTitle',
+  'series-alias-title': 'symlinks.reason.seriesAliasTitle',
   'generic-word-difference': 'symlinks.reason.genericWord',
   'release-year-match': 'symlinks.reason.sameYear',
   'release-year-differs': 'symlinks.reason.differentYear',

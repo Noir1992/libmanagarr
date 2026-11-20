@@ -21,12 +21,16 @@
             <span class="material-symbols-outlined" aria-hidden="true">search</span>
             <input
               matInput
+              #librarySearch
               type="search"
               [placeholder]="searchLabel()"
               [attr.aria-label]="searchLabel()"
               [value]="titleSearch()"
               (input)="onTitleSearchChanged($event)"
             />
+            @if (titleSearch()) {
+              <app-search-clear (cleared)="titleSearch.set(''); librarySearch.focus()" />
+            }
           </div>
 
           <app-page-filter

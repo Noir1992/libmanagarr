@@ -203,7 +203,7 @@ public sealed class SymlinkLinkEndpointTests
     }
 
     [Fact]
-    public async Task FollowUp_TurnsFollowingLaterUpgradesOffForOneEntry()
+    public async Task FollowUp_LegacyClientsCannotDisableFollowingUpgrades()
     {
         await SeedRowAsync("link-1");
 
@@ -216,10 +216,10 @@ public sealed class SymlinkLinkEndpointTests
             CancellationToken.None);
 
         SymlinkLinkDto dto = Assert.IsType<Ok<SymlinkLinkDto>>(result.Result).Value!;
-        Assert.False(dto.AutoFollowUp);
+        Assert.True(dto.AutoFollowUp);
         // The answer carries the revision the next write has to present.
         Assert.Equal(1, dto.Revision);
-        Assert.False((await StoredAsync("link-1")).AutoFollowUp);
+        Assert.True((await StoredAsync("link-1")).AutoFollowUp);
     }
 
     [Fact]

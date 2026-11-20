@@ -39,6 +39,8 @@ interface PopoverLayout {
 export class InfoIconWidget {
   readonly messageText: InputSignal<string> = input.required<string>();
   readonly contentTemplate = input<TemplateRef<unknown> | null>(null);
+  readonly iconName = input('info');
+  readonly tone = input<'default' | 'warning'>('default');
   readonly wide = input(false);
   readonly disabled = input(false);
   readonly size: InputSignal<'small' | 'big'> = input<'small' | 'big'>('small');

@@ -1,12 +1,12 @@
+import { SearchClearWidget } from '../../widgets/search-clear/search-clear.widget';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, Signal, signal } from '@angular/core';
 import { form, FormField } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatInputModule } from '@angular/material/input';
-import { MAT_SLIDE_TOGGLE_DEFAULT_OPTIONS, MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { SymlinkLink } from '../../interfaces/symlinks/symlink-link';
+import { SymlinkFinding, SymlinkLink } from '../../interfaces/symlinks/symlink-link';
 import { SymlinkRejection } from '../../interfaces/symlinks/symlink-decisions';
 import {
   SymlinkSuggestion,
@@ -15,6 +15,10 @@ import {
   ExistingEpisodeFileCheck,
 } from '../../interfaces/symlinks/symlink-suggestion';
 import { FeedbackState } from '../../interfaces/general/feedback-state';
+import { LibrarySortDirection } from '../../enums/library-sort-direction';
+import { LibrarySortField } from '../../enums/library-sort-field';
+import { sortLibraryEntries } from '../../utils/library-sort-utils';
+import { SortControlWidget, SortFieldOption } from '../../widgets/sort-control/sort-control.widget';
 import { FilterOptionType } from '../../enums/filter-option-type';
 import { FilterOption } from '../../interfaces/filter-option';
 import { PageFilterWidget } from '../../widgets/page-filter/page-filter.widget';
@@ -44,13 +48,13 @@ import {
  */
 @Component({
   selector: 'app-symlinks-page',
-  providers: [{ provide: MAT_SLIDE_TOGGLE_DEFAULT_OPTIONS, useValue: { disableToggleValue: true } }],
   imports: [
+    SearchClearWidget,
     FormField,
     MatButtonModule,
     MatInputModule,
-    MatSlideToggleModule,
     PageFilterWidget,
+    SortControlWidget,
     InfoIconWidget,
     FeedbackIconWidget,
     RouterLink,
@@ -78,7 +82,17 @@ export class SymlinksPage implements OnInit {
   protected readonly suggestionsEmpty: Signal<string> = computed((): string => this.i18n.t('symlinks.suggestions.empty'));
   protected readonly linksEmpty: Signal<string> = computed((): string => this.i18n.t('symlinks.links.empty'));
   protected readonly rejectionsEmpty: Signal<string> = computed((): string => this.i18n.t('symlinks.rejections.empty'));
-  protected readonly refreshLabel: Signal<string> = computed((): string => this.i18n.t('symlinks.refresh'));
+  private static readonly SORT_KEY = 'sort:symlinks';
+  private static readonly SECTIONS_KEY = 'expanded:symlinks';
+  protected readonly expandedSections = signal({ suggestions: true, links: false, rejections: false });
+  protected readonly sortField = signal(LibrarySortField.ALPHABETICAL);
+  protected readonly sortDirection = signal(LibrarySortDirection.ASCENDING);
+  protected readonly sortOptions = computed<readonly SortFieldOption[]>(() => [
+    { value: LibrarySortField.ALPHABETICAL, label: this.t('sort.field.alphabetical') },
+    { value: LibrarySortField.ADDED, label: this.t('sort.field.created') },
+  ]);
+  protected readonly expandedLinks = signal<ReadonlySet<string>>(new Set());
+
   protected readonly filtersModel = signal({ title: '', status: '', instance: '' });
   protected readonly searchFields = form(this.filtersModel);
   protected readonly instances = computed(() => [
@@ -124,35 +138,46 @@ export class SymlinksPage implements OnInit {
    * otherwise be listed twice — once where it can still be acted on and once where it can be revoked.
    */
   protected readonly offeredSuggestions: Signal<SymlinkSuggestion[]> = computed((): SymlinkSuggestion[] =>
-    this.symlinks
-      .suggestions()
-      .filter(
-        (suggestion) =>
-          ['Pending', 'Stale', 'Failed', 'Conflict'].includes(suggestion.status) &&
-          this.matches(suggestion, suggestion.status) &&
-          !this.symlinks
-            .links()
-            .some(
-              (link) =>
-                this.isDeleting(link) &&
-                link.radarrInstanceId === suggestion.radarrInstanceId &&
-                link.radarrMovieId === suggestion.radarrMovieId &&
-                link.sonarrInstanceId === suggestion.sonarrInstanceId &&
-                link.sonarrSeriesId === suggestion.sonarrSeriesId &&
-                link.sonarrEpisodeId === suggestion.sonarrEpisodeId,
-            ),
-      ),
-  );
-  protected readonly links = computed(() =>
-    this.symlinks.links().filter((link) =>
-      // An in-progress deletion stays in the current list when its status changes.
-      this.matches(link, this.isDeleting(link) ? this.filtersModel().status : link.operationStatus),
+    this.sortRows(
+      this.symlinks
+        .suggestions()
+        .filter(
+          (suggestion) =>
+            ['Pending', 'Stale', 'Failed', 'Conflict'].includes(suggestion.status) &&
+            this.matches(suggestion, suggestion.status) &&
+            !this.symlinks
+              .links()
+              .some(
+                (link) =>
+                  this.isDeleting(link) &&
+                  link.radarrInstanceId === suggestion.radarrInstanceId &&
+                  link.radarrMovieId === suggestion.radarrMovieId &&
+                  link.sonarrInstanceId === suggestion.sonarrInstanceId &&
+                  link.sonarrSeriesId === suggestion.sonarrSeriesId &&
+                  link.sonarrEpisodeId === suggestion.sonarrEpisodeId,
+              ),
+        ),
     ),
   );
-  protected readonly rejections = this.symlinks.rejections;
+  protected readonly links = computed(() =>
+    this.sortRows(
+      this.symlinks.links().filter((link) =>
+        // An in-progress deletion stays in the current list when its status changes.
+        this.matches(link, this.isDeleting(link) ? this.filtersModel().status : link.operationStatus),
+      ),
+    ),
+  );
+  protected readonly managedLinkWarningText = computed(() => {
+    const affected = this.sortRows(this.symlinks.links())
+      .filter((link) => this.warningFindings(link).length > 0)
+      .map((link) => `${link.radarrMovieTitle ?? this.t('common.na')} — ${this.specialLabel(link.episodeNumber)}`);
+    return affected.length > 0 ? this.t('symlinks.links.warningSummary', { links: affected.join('\n') }) : '';
+  });
+  protected readonly rejections = computed(() => this.sortRows(this.symlinks.rejections()));
+  protected readonly reactivating = signal<ReadonlySet<string>>(new Set());
+  protected readonly repairing = signal<ReadonlySet<string>>(new Set());
   protected readonly loading = this.symlinks.overviewLoading;
   protected readonly loadError = this.symlinks.overviewError;
-  protected readonly refreshing = this.symlinks.refreshing;
   protected readonly settingsFailed = this.symlinks.settingsError;
   /** The configuration revision a preview and a confirmation have to agree on. */
   protected readonly revision = computed((): number | null => this.symlinks.settings()?.revision ?? null);
@@ -203,16 +228,81 @@ export class SymlinksPage implements OnInit {
     this.filtersModel.update((model) => (model.status === status && model.instance === instance ? model : { ...model, status, instance }));
   }
 
+  protected onSortFieldChanged(field: LibrarySortField): void {
+    this.sortField.set(field);
+    this.persistSort();
+  }
+
+  protected onSortDirectionChanged(direction: LibrarySortDirection): void {
+    this.sortDirection.set(direction);
+    this.persistSort();
+  }
+
+  private persistSort(): void {
+    globalThis.localStorage.setItem(SymlinksPage.SORT_KEY, `${this.sortField()}:${this.sortDirection()}`);
+  }
+
+  private sortRows<T extends { radarrMovieTitle: string | null; sonarrSeriesTitle: string | null; createdAt: string }>(
+    rows: readonly T[],
+  ): T[] {
+    return sortLibraryEntries(
+      rows,
+      (row) => ({ title: row.radarrMovieTitle ?? row.sonarrSeriesTitle ?? '', addedAt: row.createdAt }),
+      this.sortField(),
+      this.sortDirection(),
+    );
+  }
+
+  protected toggleLinkDetails(id: string): void {
+    this.expandedLinks.update((expanded) => {
+      const next = new Set(expanded);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  protected toggleSection(section: 'suggestions' | 'links' | 'rejections'): void {
+    this.expandedSections.update((sections) => ({ ...sections, [section]: !sections[section] }));
+    globalThis.localStorage.setItem(SymlinksPage.SECTIONS_KEY, JSON.stringify(this.expandedSections()));
+  }
+
+  private restoreSections(): void {
+    try {
+      const saved: unknown = JSON.parse(globalThis.localStorage.getItem(SymlinksPage.SECTIONS_KEY) ?? 'null');
+      if (saved && typeof saved === 'object') {
+        const restored = { ...this.expandedSections() };
+        for (const key of ['suggestions', 'links', 'rejections'] as const) {
+          const value = (saved as Record<string, unknown>)[key];
+          if (typeof value === 'boolean') restored[key] = value;
+        }
+        this.expandedSections.set(restored);
+      }
+    } catch {
+      // Invalid stored state falls back to Suggestions open and the other sections closed.
+    }
+    globalThis.localStorage.setItem(SymlinksPage.SECTIONS_KEY, JSON.stringify(this.expandedSections()));
+  }
+
   ngOnInit(): void {
+    const [field, direction] = (globalThis.localStorage.getItem(SymlinksPage.SORT_KEY) ?? '').split(':');
+    if (field === LibrarySortField.ALPHABETICAL || field === LibrarySortField.ADDED) this.sortField.set(field);
+    if (direction === LibrarySortDirection.ASCENDING || direction === LibrarySortDirection.DESCENDING) this.sortDirection.set(direction);
+    this.persistSort();
+    this.restoreSections();
     void this.loadAsync();
     const timer = globalThis.setInterval(() => {
       if (
         !globalThis.document.hidden &&
-        this.symlinks.links().some((link) => link.operationStatus !== 'Active' || link.setupStep !== 'Completed')
+        this.symlinks.links().some((link) => this.isRepairing(link) || link.operationStatus !== 'Active' || link.setupStep !== 'Completed')
       )
         void this.symlinks.refreshProgress();
     }, 5000);
     this.destroy.onDestroy(() => globalThis.clearInterval(timer));
+  }
+
+  protected clearTitleSearch(): void {
+    this.filtersModel.update((model) => ({ ...model, title: '' }));
   }
 
   private matches(
@@ -266,14 +356,6 @@ export class SymlinksPage implements OnInit {
     }
   }
 
-  protected async refreshAsync(): Promise<void> {
-    try {
-      await this.symlinks.refreshSuggestions();
-    } catch {
-      // The pass reports itself through overviewError and leaves the lists that are already on screen.
-    }
-  }
-
   protected suggestionState(id: string): SymlinkActionState {
     return this.symlinks.suggestionStates()[id] ?? {};
   }
@@ -285,7 +367,7 @@ export class SymlinksPage implements OnInit {
   }
 
   protected linkLocked(link: SymlinkLink): boolean {
-    return !this.featureEnabled() || this.isDeleting(link) || this.linkState(link.id).busy === true;
+    return !this.featureEnabled() || this.isDeleting(link) || this.repairing().has(link.id) || this.linkState(link.id).busy === true;
   }
 
   protected linkState(id: string): SymlinkActionState {
@@ -361,34 +443,50 @@ export class SymlinksPage implements OnInit {
     }
   }
 
-  /**
-   * The look a person asks for on one row. It writes nothing of its own, so the only answer that has to
-   * reach the screen is the row the check left behind — which the service already put back in the list.
-   */
+  protected isInformationalFinding(finding: SymlinkFinding): boolean {
+    return finding.code === 'language-mapping-unavailable';
+  }
+
+  protected warningFindings(link: SymlinkLink): SymlinkFinding[] {
+    return link.findings.filter((finding) => finding.code !== 'renaming-disabled' && !this.isInformationalFinding(finding));
+  }
+
+  protected linkInformation(link: SymlinkLink): string {
+    return link.findings
+      .filter((finding) => this.isInformationalFinding(finding))
+      .map((finding) => finding.detail ?? finding.code)
+      .join('\n');
+  }
+
+  protected needsRepair(link: SymlinkLink): boolean {
+    return (
+      this.isRepairing(link) ||
+      link.operationStatus === 'Conflict' ||
+      !!this.linkState(link.id).error ||
+      link.findings.some(
+        (finding) =>
+          !this.isInformationalFinding(finding) && !['renaming-disabled', 'source-replaced', 'restored-unchecked'].includes(finding.code),
+      )
+    );
+  }
+
+  protected isRepairing(link: SymlinkLink): boolean {
+    return this.repairing().has(link.id) || this.linkState(link.id).repairing === true;
+  }
+
   protected async repairAsync(link: SymlinkLink): Promise<void> {
     if (this.linkLocked(link)) return;
+    this.repairing.update((pending) => new Set([...pending, link.id]));
     try {
       await this.symlinks.retryLink(link.id, link.revision);
     } catch {
       // The action state carries the refusal; foreign files remain untouched.
-    }
-  }
-
-  protected async checkAsync(link: SymlinkLink): Promise<void> {
-    if (this.linkLocked(link)) return;
-    try {
-      await this.symlinks.checkLink(link.id);
-    } catch {
-      // The row carries the sentence; a check that could not run is not a reason to clear the list.
-    }
-  }
-
-  protected async setFollowUpAsync(link: SymlinkLink, autoFollowUp: boolean): Promise<void> {
-    if (this.linkLocked(link)) return;
-    try {
-      await this.symlinks.setFollowUp(link.id, autoFollowUp, link.revision);
-    } catch {
-      // On a refused revision the service re-reads the register, so the next attempt carries the current one.
+    } finally {
+      this.repairing.update((pending) => {
+        const remaining = new Set(pending);
+        remaining.delete(link.id);
+        return remaining;
+      });
     }
   }
 
@@ -403,6 +501,9 @@ export class SymlinksPage implements OnInit {
   }
 
   protected async reactivateAsync(rejection: SymlinkRejection): Promise<void> {
+    const key = this.rejectionKey(rejection);
+    if (!this.featureEnabled() || this.reactivating().has(key)) return;
+    this.reactivating.update((pending) => new Set([...pending, key]));
     try {
       await this.symlinks.reactivateRejection({
         radarrInstanceId: rejection.radarrInstanceId,
@@ -414,6 +515,12 @@ export class SymlinksPage implements OnInit {
     } catch (error) {
       // The archive has no row of its own to put a sentence on, so the section above reports it.
       this.symlinks.overviewError.set(error instanceof Error ? error.message : this.t('symlinks.actionError'));
+    } finally {
+      this.reactivating.update((pending) => {
+        const remaining = new Set(pending);
+        remaining.delete(key);
+        return remaining;
+      });
     }
   }
 

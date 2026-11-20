@@ -366,6 +366,100 @@ public sealed class SpecialMovieMatchingRulesTests
     public void Normalize_NothingMeaningfulIsAnEmptyString(string? title) =>
         Assert.Equal(string.Empty, SpecialMovieMatchingRules.Normalize(title));
 
+    [Theory]
+    [InlineData("Madoka Magica the Movie Part III: The Rebellion Story", "Mahou Shoujo Madoka Magica the Movie (Part 3): The Story of the Rebellion")]
+    [InlineData("Madoka Magica the Movie Part 03: The Rebellion Story", "Mahou Shoujo Madoka Magica the Movie (Part III): The Story of the Rebellion")]
+    [InlineData("Puella Magi Madoka Magica the Movie Part III: The Rebellion Story", "Mahou Shoujo Madoka Magica the Movie (Part 3): The Story of the Rebellion")]
+    public void Match_SeriesVariantsWithReorderedSubtitleAndSamePart_AreSuggested(string special, string movie)
+    {
+        SpecialMovieMatch? match = Matched(Special(special), Film(movie), Series("Puella Magi Madoka Magica"));
+
+        Assert.NotNull(match);
+        Assert.Equal(SpecialMovieMatchStrength.TitleVariant, match.Strength);
+        Assert.Equal(SpecialMovieMatchingRules.TitleVariantCode, match.Reasons[0].Code);
+    }
+
+    [Theory]
+    [InlineData("Mahou Shoujo Madoka Magica the Movie Part II: The Story of the Rebellion")]
+    [InlineData("Mahou Shoujo Madoka Magica the Movie: The Story of the Rebellion")]
+    [InlineData("Mahou Shoujo Madoka Magica the Movie Part 3: The Beginning Story")]
+    [InlineData("Other Series the Movie Part 3: The Story of the Rebellion")]
+    [InlineData("Mahou Shoujo Madoka Magica the Movie Part 3")]
+    [InlineData("Mahou Shoujo Madoka Magica the Movie Part 3: The Rebellion Story Extra")]
+    public void Match_SeriesVariantsDoNotHideDifferentPartsOrIdentityWords(string movie)
+    {
+        Assert.Null(Matched(Special("Madoka Magica the Movie Part III: The Rebellion Story"),
+            Film(movie), Series("Puella Magi Madoka Magica")));
+    }
+
+    [Fact]
+    public void Match_AnExtraSequelNumberIsNotAGenericWordDifference()
+    {
+        Assert.Null(Matched(Special(SpecialTitle), Film(SpecialTitle + " 2")));
+        Assert.Null(Matched(Special(SpecialTitle + " 2"), Film(SpecialTitle)));
+    }
+
+    [Fact]
+    public void Match_SeriesVariantsAloneDoNotIdentifyASpecial()
+    {
+        Assert.Null(Matched(Special("Madoka Magica the Movie Part III"),
+            Film("Mahou Shoujo Madoka Magica the Movie Part 3"), Series("Puella Magi Madoka Magica")));
+    }
+
+    [Theory]
+    [InlineData("Understand in less than 1 minute! ", "")]
+    [InlineData("", "Understand in less than 1 minute! ")]
+    [InlineData("Making of: ", "")]
+    [InlineData("", "Behind the scenes: ")]
+    public void Match_AdditionalContentBeforeTheSeriesNameIsNotDiscarded(string episodePrefix, string moviePrefix)
+    {
+        Assert.Null(Matched(Special(episodePrefix + "Girls und Panzer das Finale: Part 1"),
+            Film(moviePrefix + "Girls und Panzer - Das Finale: Teil 1"), Series("Girls und Panzer")));
+    }
+
+    [Fact]
+    public void Match_GirlsUndPanzerGermanMovieTitleAndEnglishSpecialTitle_ArePairedEvenWithAnExistingFile()
+    {
+        SonarrEpisodeSnapshot episode = Special("Girls und Panzer das Finale: Part 1");
+        episode.HasFile = true;
+
+        SpecialMovieMatch? match = Matched(episode,
+            Film("Girls und Panzer - Das Finale: Teil 1"), Series("Girls und Panzer"));
+
+        Assert.NotNull(match);
+        Assert.True(match.MovieHasFile);
+    }
+
+    [Theory]
+    [InlineData("Part 2", "Teil 2")]
+    [InlineData("Part 3", "Teil 3")]
+    [InlineData("Part 4", "Teil 4")]
+    [InlineData("Part III", "Teil 3")]
+    [InlineData("Part 3", "Teil III")]
+    public void Match_LocalizedNumberedPartLabelsKeepEquivalentSequelNumbers(string episodePart, string moviePart)
+    {
+        Assert.NotNull(Matched(Special("Girls und Panzer das Finale: " + episodePart),
+            Film("Girls und Panzer - Das Finale: " + moviePart), Series("Girls und Panzer")));
+    }
+
+    [Theory]
+    [InlineData("Teil 2")]
+    [InlineData("Teil II")]
+    [InlineData("Teil")]
+    [InlineData("")]
+    public void Match_LocalizedPartLabelsDoNotHideDifferentOrMissingSequelNumbers(string moviePart)
+    {
+        Assert.Null(Matched(Special("Girls und Panzer das Finale: Part 1"),
+            Film("Girls und Panzer - Das Finale: " + moviePart), Series("Girls und Panzer")));
+    }
+
+    [Fact]
+    public void Match_PartWordsWithoutANumberRemainTitleIdentity()
+    {
+        Assert.Null(Matched(Special("Girls und Panzer: Ein Teil des Lebens"),
+            Film("Girls und Panzer: Ein Part des Lebens"), Series("Girls und Panzer")));
+    }
+
     private static SonarrSeriesSnapshot Series(string title = SeriesTitle) => new()
     {
         SeriesId = 12,

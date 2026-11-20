@@ -249,6 +249,8 @@ public static class SymlinkEndpoints
         {
             Runnable = plan.Runnable,
             AdoptsExisting = plan.AdoptsExisting,
+            CanRepairExisting = plan.CanRepairExisting,
+            RepairLinkText = plan.CanRepairExisting ? Path.GetRelativePath(Path.GetDirectoryName(plan.Draft.LinkPath)!, plan.Draft.SourcePath) : null,
             Draft = LinkDto(plan.Draft, SnapshotTitles.Collect(settings)),
             Blockers = [.. plan.Blockers],
             Warnings = [.. plan.Warnings]
@@ -562,7 +564,7 @@ public static class SymlinkEndpoints
             Findings = [.. link.Findings],
             MonitoringOriginal = link.MonitoringOriginal,
             MonitoringDisabled = link.MonitoringDisabled,
-            AutoFollowUp = link.AutoFollowUp,
+            AutoFollowUp = true,
             DesiredFilename = link.DesiredFilename,
             AppliedFilename = link.AppliedFilename,
             SourceVersion = link.SourceVersion,

@@ -142,6 +142,22 @@ export function linkTarget(linkPath: string): { kind: 'missing' | 'file' | 'link
   }
 }
 
+export async function waitForSuggestedPair(request: APIRequestContext, pair: SeedPair) {
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get('/api/settings/symlinks/suggestions');
+        expect(response.ok()).toBe(true);
+        const rows: { radarrMovieId: number; sonarrEpisodeId: number; status: string }[] = await response.json();
+        return rows.some(
+          (row) => row.radarrMovieId === pair.film.id && row.sonarrEpisodeId === pair.episode.id && row.status === 'Pending',
+        );
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+}
+
 export const rowsOf = (page: Page, title: string) =>
   page
     .locator('section.card')

@@ -199,24 +199,23 @@ public sealed class SymlinkHealthServiceTests
     }
 
     [Fact]
-    public async Task ASourceThatMovedWhileFollowingIsOffIsReportedWithoutQueueingAnything()
+    public async Task ASourceThatMovedWithLegacyFollowingDisabledStillQueuesTheUpgrade()
     {
         await SeedEntryAsync("link-1", autoFollowUp: false);
 
         SymlinkHealthRun run = await Health(ProvenLibraryWithMovieFile(
             SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize)).CheckAllAsync(CancellationToken.None);
 
-        Assert.Equal(0, run.FollowUpsQueued);
-        // The switch does what it promises, and the difference is still worth seeing.
+        Assert.Equal(1, run.FollowUpsQueued);
         Assert.Equal(1, run.Reported);
-        Assert.False(await IsPassRequestedAsync());
+        Assert.True(await IsPassRequestedAsync());
         SymlinkLink stored = await StoredAsync("link-1");
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
-        Assert.Equal(SymlinkSetupStep.Completed, stored.SetupStep);
-        Assert.Equal(0, stored.UpdateRevision);
+        Assert.Equal(SymlinkOperationStatus.Updating, stored.OperationStatus);
+        Assert.Equal(SymlinkSetupStep.LinkCreated, stored.SetupStep);
+        Assert.Equal(1, stored.UpdateRevision);
         SymlinkFinding finding = Assert.Single(stored.Findings);
         Assert.Equal("source-replaced", finding.Code);
-        Assert.Contains("Later upgrades are not followed", finding.Detail);
+        Assert.True(stored.AutoFollowUp);
     }
 
     [Fact]
@@ -365,6 +364,39 @@ public sealed class SymlinkHealthServiceTests
         SymlinkFinding finding = Assert.Single((await StoredAsync("link-1")).Findings);
         Assert.Equal("metadata-release-group-deviation", finding.Code);
         Assert.Contains("WFFF", finding.Detail);
+    }
+
+    [Theory]
+    [InlineData("und")]
+    [InlineData("Undetermined")]
+    [InlineData("Unknown")]
+    [InlineData("Original")]
+    public async Task StoredLanguagePlaceholdersDoNotCauseAHealthDeviation(string placeholder)
+    {
+        SymlinkLink entry = await SeedEntryAsync("link-1");
+        entry.ExpectedMetadata!.Languages.Add(placeholder);
+        Assert.True(await store.UpdateLinkAsync(entry, entry.Revision, CancellationToken.None));
+
+        await Health(ProvenLibrary()).CheckAllAsync(CancellationToken.None);
+
+        Assert.Empty((await StoredAsync("link-1")).Findings);
+    }
+
+    [Fact]
+    public async Task ARecordedUnsupportedLanguageDoesNotTriggerAnotherRepair()
+    {
+        SymlinkLink entry = await SeedEntryAsync("link-1");
+        entry.ExpectedMetadata!.Languages.Add("Telugu");
+        entry.ConfirmedMetadata = new SymlinkFileMetadata { Origin = "sonarr", Languages = ["German"], UnmappedLanguages = ["Telugu"] };
+        entry.Findings.Add(new("language-mapping-unavailable", "Sonarr cannot represent Telugu.", Start));
+        Assert.True(await store.UpdateLinkAsync(entry, entry.Revision, CancellationToken.None));
+
+        SymlinkHealthRun run = await Health(ProvenLibrary()).CheckAllAsync(CancellationToken.None);
+
+        SymlinkLink checkedLink = await StoredAsync("link-1");
+        Assert.Equal(0, run.FollowUpsQueued);
+        Assert.Contains("Telugu", checkedLink.ExpectedMetadata!.Languages);
+        Assert.Equal("language-mapping-unavailable", Assert.Single(checkedLink.Findings).Code);
     }
 
     [Fact]
