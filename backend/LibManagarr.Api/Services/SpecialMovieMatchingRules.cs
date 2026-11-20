@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using LibManagarr.Api.Models;
 
 namespace LibManagarr.Api.Services;
@@ -41,7 +42,10 @@ public sealed record SpecialMovieMatch(
 /// </summary>
 public static class SpecialMovieMatchingRules
 {
-    public const int MatcherVersion = 3;
+    public const int MatcherVersion = 6;
+
+    public const string FilenameTitleCode = "filename-title";
+    public const string SeriesAliasTitleCode = "series-alias-title";
 
     public const string TitleVariantCode = "title-variant";
     public const string IdenticalTitleCode = "identical-title";
@@ -68,6 +72,12 @@ public static class SpecialMovieMatchingRules
 
     private const int RuntimeToleranceMinutes = 5;
 
+    private enum MovieTitleSource { Main, Alternative, Filename }
+
+    private static readonly Regex MovieFolderPattern = new(
+        @"^(?<title>.+) \((?:19|20)[0-9]{2}\) \{tmdb-[1-9][0-9]*\}$",
+        RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+
     /// <summary>Null when the pairing is not defensible; the caller does not get a half-match.</summary>
     public static SpecialMovieMatch? Match(
         string sonarrInstanceId,
@@ -83,7 +93,10 @@ public static class SpecialMovieMatchingRules
         if (!TrySpecialPart(normalizedEpisode, normalizedSeries, out string specialPart)) return null;
         bool episodeCarriesSeries = StartsWithSeries(normalizedEpisode, normalizedSeries);
 
-        foreach ((string title, bool isAlternative) in MovieTitles(movie))
+        var titles = MovieTitles(movie).ToArray();
+        bool hasSeriesAlias = titles.Any(candidate => candidate.Source != MovieTitleSource.Filename
+            && StartsWithSeries(candidate.Title, normalizedSeries));
+        foreach ((string title, MovieTitleSource source, string reportedTitle) in titles)
         {
             if (!TrySpecialPart(title, normalizedSeries, out string moviePart)) continue;
             SpecialMovieMatchStrength? strength = Compare(
@@ -91,12 +104,19 @@ public static class SpecialMovieMatchingRules
                 title, moviePart, StartsWithSeries(title, normalizedSeries));
             strength ??= MatchesTitleVariant(normalizedSeries, normalizedEpisode, title)
                 ? SpecialMovieMatchStrength.TitleVariant : null;
+            bool seriesAliasMatch = strength is null && !episodeCarriesSeries && hasSeriesAlias
+                && MatchesAbbreviatedSeries(normalizedSeries, specialPart, title);
+            if (seriesAliasMatch) strength = SpecialMovieMatchStrength.SeriesQualifiedTitle;
             if (strength is null) continue;
 
-            List<SymlinkSuggestionReason> reasons =
-            [
-                TitleFinding(strength.Value, isAlternative, movie.Title, title, specialPart)
-            ];
+            SymlinkSuggestionReason titleReason = source == MovieTitleSource.Filename
+                ? new SymlinkSuggestionReason(FilenameTitleCode,
+                    $"The special matches the title '{reportedTitle}' from Radarr's movie folder and filename. No existing file or link was adopted or modified.")
+                : seriesAliasMatch
+                    ? new SymlinkSuggestionReason(SeriesAliasTitleCode,
+                        $"The special title matches '{reportedTitle}' with a shortened series prefix; another title of the same Radarr movie identifies the full series '{series.Title}'.")
+                    : TitleFinding(strength.Value, source == MovieTitleSource.Alternative, movie.Title, title, specialPart);
+            List<SymlinkSuggestionReason> reasons = [titleReason];
             AppendDateFindings(reasons, episode.AirDateUtc, movie.AirDateUtc);
             AppendRuntimeFindings(reasons, episode.File.Duration, movie.File.Duration);
 
@@ -156,6 +176,12 @@ public static class SpecialMovieMatchingRules
                 int movieStart = (" " + movie + " ").IndexOf(" " + phrase + " ", StringComparison.Ordinal);
                 if (episodeStart < 0 || movieStart < 0) continue;
 
+                // When the anchor starts the canonical series name, preceding words describe
+                // additional content (for example a recap), not a localized series prefix.
+                // Do not retry a shorter anchor that could conceal those identity words.
+                if (start == 0 && (WithoutMovieLabel(episode[..episodeStart].Trim()).Length > 0
+                    || WithoutMovieLabel(movie[..movieStart].Trim()).Length > 0)) return false;
+
                 // Use the longest common series phrase, so a shorter phrase cannot hide a differing
                 // identity word or sequel number inside a larger series name.
                 return SameVariantSuffix(episode[(episodeStart + phrase.Length)..].Trim(),
@@ -170,37 +196,37 @@ public static class SpecialMovieMatchingRules
 
     private static bool SameVariantSuffix(string episode, string movie)
     {
-        static (string[] Words, string[] Numbers) Parts(string suffix)
-        {
-            string[] tokens = suffix.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            List<string> words = [];
-            List<string> numbers = [];
-            for (int index = 0; index < tokens.Length; index++)
-            {
-                string token = tokens[index];
-                // Roman numerals are only numbers after an explicit part/format label, never arbitrary
-                // title words (for example the pronoun "I"). Arabic numbers remain significant anywhere.
-                if (index > 0 && tokens[index - 1] is "part" or "chapter" or "movie" or "film")
-                {
-                    token = token switch
-                    {
-                        "i" => "1", "ii" => "2", "iii" => "3", "iv" => "4", "v" => "5",
-                        "vi" => "6", "vii" => "7", "viii" => "8", "ix" => "9", "x" => "10",
-                        _ => token
-                    };
-                }
-                if (IsNumeric(token)) numbers.Add(token.TrimStart('0') is { Length: > 0 } number ? number : "0");
-                else if (token is not ("the" or "of" or "a" or "an" or "and"
-                    or "movie" or "movies" or "film" or "films" or "part" or "chapter")) words.Add(token);
-            }
-            return (words.Order(StringComparer.Ordinal).ToArray(), numbers.ToArray());
-        }
-
-        var left = Parts(episode);
-        var right = Parts(movie);
+        var left = VariantParts(episode);
+        var right = VariantParts(movie);
         return left.Words.Length >= 2
             && left.Words.SequenceEqual(right.Words)
             && left.Numbers.SequenceEqual(right.Numbers);
+    }
+
+    private static (string[] Words, string[] Numbers) VariantParts(string suffix)
+    {
+        string[] tokens = suffix.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        List<string> words = [];
+        List<string> numbers = [];
+        for (int index = 0; index < tokens.Length; index++)
+        {
+            string token = tokens[index];
+            // Roman numerals are only numbers after an explicit part/format label, never arbitrary
+            // title words (for example the pronoun "I"). Arabic numbers remain significant anywhere.
+            if (index > 0 && tokens[index - 1] is "part" or "chapter" or "movie" or "film")
+            {
+                token = token switch
+                {
+                    "i" => "1", "ii" => "2", "iii" => "3", "iv" => "4", "v" => "5",
+                    "vi" => "6", "vii" => "7", "viii" => "8", "ix" => "9", "x" => "10",
+                    _ => token
+                };
+            }
+            if (IsNumeric(token)) numbers.Add(token.TrimStart('0') is { Length: > 0 } number ? number : "0");
+            else if (token is not ("the" or "of" or "a" or "an" or "and"
+                or "movie" or "movies" or "film" or "films" or "part" or "chapter")) words.Add(token);
+        }
+        return (words.Order(StringComparer.Ordinal).ToArray(), numbers.ToArray());
     }
 
     /// <summary>
@@ -220,22 +246,67 @@ public static class SpecialMovieMatchingRules
             else builder.Append(' ');
         }
 
-        return string.Join(' ', builder.ToString()
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        string[] tokens = builder.ToString()
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (int index = 0; index + 1 < tokens.Length; index++)
+        {
+            // A numbered German part label is the same format marker as "Part". Keep every
+            // sequel number and leave "Teil" untouched when it is an ordinary title word.
+            if (tokens[index] == "teil" && (IsNumeric(tokens[index + 1])
+                || tokens[index + 1] is "i" or "ii" or "iii" or "iv" or "v"
+                    or "vi" or "vii" or "viii" or "ix" or "x"))
+                tokens[index] = "part";
+        }
+
+        return string.Join(' ', tokens);
     }
 
-    private static IEnumerable<(string Title, bool IsAlternative)> MovieTitles(RadarrMovieSnapshot movie)
+    private static IEnumerable<(string Title, MovieTitleSource Source, string ReportedTitle)> MovieTitles(RadarrMovieSnapshot movie)
     {
         string main = Normalize(movie.Title);
-        if (main.Length > 0) yield return (main, false);
+        if (main.Length > 0) yield return (main, MovieTitleSource.Main, movie.Title);
         foreach (string alternative in movie.AlternativeTitles)
         {
             string normalized = Normalize(alternative);
             if (normalized.Length > 0 && !string.Equals(normalized, main, StringComparison.Ordinal))
-            {
-                yield return (normalized, true);
-            }
+                yield return (normalized, MovieTitleSource.Alternative, alternative);
         }
+
+        string? fileTitle = MovieFilenameTitle(movie);
+        if (fileTitle is not null) yield return (Normalize(fileTitle), MovieTitleSource.Filename, fileTitle);
+    }
+
+    private static string? MovieFilenameTitle(RadarrMovieSnapshot movie)
+    {
+        // This is snapshot data only: do not access or traverse the filesystem during matching.
+        // Restrict the fallback to a structured movie folder repeated in its actual filename.
+        if (!movie.HasFile || movie.File.Id is null || string.IsNullOrWhiteSpace(movie.File.Path)) return null;
+        string[] segments = movie.File.Path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 2) return null;
+        string folder = segments[^2];
+        string filename = segments[^1];
+        int extension = filename.LastIndexOf('.');
+        if (extension <= 0) return null;
+        string stem = filename[..extension];
+        if (stem != folder && !stem.StartsWith(folder + " ", StringComparison.Ordinal)) return null;
+        System.Text.RegularExpressions.Match match = MovieFolderPattern.Match(folder);
+        if (!match.Success) return null;
+        string title = match.Groups["title"].Value;
+        string[] metadataNumbers = VariantParts(Normalize(movie.Title)).Numbers;
+        if (metadataNumbers.Length > 0
+            && !metadataNumbers.SequenceEqual(VariantParts(Normalize(title)).Numbers)) return null;
+        return title;
+    }
+
+    private static bool MatchesAbbreviatedSeries(string series, string episodePart, string movieTitle)
+    {
+        string subtitle = WithoutMovieLabel(episodePart);
+        if (subtitle.Split(' ', StringSplitOptions.RemoveEmptyEntries).Count(IsIdentityWord) < 2
+            || !movieTitle.EndsWith(" " + subtitle, StringComparison.Ordinal)) return false;
+        string prefix = movieTitle[..^(subtitle.Length + 1)];
+        // An abbreviation must be an exact leading segment of the canonical series name,
+        // corroborated by another metadata title of this very same Radarr movie.
+        return prefix.Length > 0 && series.StartsWith(prefix + " ", StringComparison.Ordinal);
     }
 
     private static bool StartsWithSeries(string normalizedTitle, string normalizedSeries) =>

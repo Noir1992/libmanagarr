@@ -53,6 +53,9 @@ public sealed class SymlinkFileMetadata
 
     public List<string> Languages { get; set; } = [];
 
+    /// <summary>Source languages the destination API could not represent, not confirmed audio tracks.</summary>
+    public List<string> UnmappedLanguages { get; set; } = [];
+
     public string? Quality { get; set; }
     public QualityRevisionResource? QualityRevision { get; set; }
 
@@ -183,4 +186,5 @@ public sealed record SymlinkSourceUpdate(
     string? SourceVersion,
     SpecialMoviePair? Pair = null,
     SpecialMoviePair? PreviousPair = null,
-    int? CleanupCommandId = null);
+    int? CleanupCommandId = null,
+    bool RepairAdoption = false);

@@ -366,6 +366,39 @@ public sealed class SymlinkHealthServiceTests
         Assert.Contains("WFFF", finding.Detail);
     }
 
+    [Theory]
+    [InlineData("und")]
+    [InlineData("Undetermined")]
+    [InlineData("Unknown")]
+    [InlineData("Original")]
+    public async Task StoredLanguagePlaceholdersDoNotCauseAHealthDeviation(string placeholder)
+    {
+        SymlinkLink entry = await SeedEntryAsync("link-1");
+        entry.ExpectedMetadata!.Languages.Add(placeholder);
+        Assert.True(await store.UpdateLinkAsync(entry, entry.Revision, CancellationToken.None));
+
+        await Health(ProvenLibrary()).CheckAllAsync(CancellationToken.None);
+
+        Assert.Empty((await StoredAsync("link-1")).Findings);
+    }
+
+    [Fact]
+    public async Task ARecordedUnsupportedLanguageDoesNotTriggerAnotherRepair()
+    {
+        SymlinkLink entry = await SeedEntryAsync("link-1");
+        entry.ExpectedMetadata!.Languages.Add("Telugu");
+        entry.ConfirmedMetadata = new SymlinkFileMetadata { Origin = "sonarr", Languages = ["German"], UnmappedLanguages = ["Telugu"] };
+        entry.Findings.Add(new("language-mapping-unavailable", "Sonarr cannot represent Telugu.", Start));
+        Assert.True(await store.UpdateLinkAsync(entry, entry.Revision, CancellationToken.None));
+
+        SymlinkHealthRun run = await Health(ProvenLibrary()).CheckAllAsync(CancellationToken.None);
+
+        SymlinkLink checkedLink = await StoredAsync("link-1");
+        Assert.Equal(0, run.FollowUpsQueued);
+        Assert.Contains("Telugu", checkedLink.ExpectedMetadata!.Languages);
+        Assert.Equal("language-mapping-unavailable", Assert.Single(checkedLink.Findings).Code);
+    }
+
     [Fact]
     public async Task TheSnapshotWithoutTheAudioOfTheChosenFileIsReported()
     {

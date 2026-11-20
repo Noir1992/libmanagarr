@@ -16,10 +16,13 @@ public sealed class SymlinkAdoptionTests
     private static string ExistingPath => SymlinkTestPaths.LibManagarr($"series/{SymlinkFixture.SeriesFolder}/Season 00/already-linked.mkv");
     private static string InstancePath => SymlinkFixture.SeriesInstance($"{SymlinkFixture.SeriesFolder}/Season 00/already-linked.mkv");
 
-    [Fact]
-    public async Task PreviewAndConfirmationEndpointsCarryTheAdoptionContractAndCompleteDraft()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PreviewAndConfirmationEndpointsCarryTheAdoptionContractAndCompleteDraft(bool repair)
     {
         Fixture fixture = Create();
+        if (repair) fixture.Files.Entries[ExistingPath] = SymlinkTestPaths.LibManagarr("movies/missing.mkv");
         FixedSettings settings = new(fixture.Settings);
         await fixture.Store.UpsertSuggestionAsync(new SymlinkSuggestion
         {
@@ -33,15 +36,17 @@ public sealed class SymlinkAdoptionTests
         Task<Ok<SymlinkLinkPlanDto>> previewTask = (Task<Ok<SymlinkLinkPlanDto>>)typeof(SymlinkEndpoints)
             .GetMethod("PreviewLinkAsync", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, [preview, settings, fixture.Service, CancellationToken.None])!;
         SymlinkLinkPlanDto plan = (await previewTask).Value!;
-        Assert.True(plan.AdoptsExisting);
-        Assert.True(plan.Runnable);
+        Assert.Equal(!repair, plan.AdoptsExisting);
+        Assert.Equal(!repair, plan.Runnable);
+        Assert.Equal(repair, plan.CanRepairExisting);
+        if (repair) Assert.Equal(Path.GetRelativePath(Path.GetDirectoryName(ExistingPath)!, SymlinkFixture.SourcePath()), plan.RepairLinkText);
         Assert.Equal(88, plan.Draft.SonarrFileId);
         Assert.Equal(ExistingPath, plan.Draft.LinkPath);
         Assert.Equal(SymlinkFixture.SourcePath(), plan.Draft.SourcePath);
         ConfirmSuggestionRequest confirm = new()
         {
             ConfigRevision = SymlinkFixture.ConfigRevision, SourceVersion = plan.Draft.SourceVersion,
-            ExistingLink = new(plan.Draft.LinkPath, plan.Draft.LinkText, plan.Draft.SonarrFileId!.Value)
+            ExistingLink = new(plan.Draft.LinkPath, plan.Draft.LinkText, plan.Draft.SonarrFileId!.Value, Repair: repair)
         };
         Task<Results<Accepted<SymlinkLinkDto>, NotFound, ProblemHttpResult>> confirmTask =
             (Task<Results<Accepted<SymlinkLinkDto>, NotFound, ProblemHttpResult>>)typeof(SymlinkEndpoints)
@@ -50,7 +55,8 @@ public sealed class SymlinkAdoptionTests
         SymlinkLinkDto adopted = Assert.IsType<Accepted<SymlinkLinkDto>>((await confirmTask).Result).Value!;
         Assert.Equal(88, adopted.SonarrFileId);
         Assert.Equal(SymlinkOperationStatus.Active, adopted.OperationStatus);
-        Assert.Empty(fixture.Files.CreatedLinks);
+        if (!repair) Assert.Empty(fixture.Files.CreatedLinks);
+        else Assert.Equal([ExistingPath], fixture.Files.CreatedLinks);
     }
 
     [RealSymlinkFact]
@@ -89,6 +95,175 @@ public sealed class SymlinkAdoptionTests
             Assert.Equal(SymlinkSetupStep.Completed, adopted.SetupStep);
         }
         finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [RealSymlinkFact]
+    public async Task ARealBrokenSymlinkCanBeRepairedWithoutChangingTheMovie()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "libmanagarr-adoption-" + Guid.NewGuid().ToString("N"));
+        string movies = Path.Combine(root, "movies");
+        string series = Path.Combine(root, "series");
+        string source = Path.Combine(movies, SymlinkFixture.MovieFolder, SymlinkFixture.SourceFileName);
+        string episode = Path.Combine(series, SymlinkFixture.SeriesFolder, "Season 00", "already-linked.mkv");
+        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(episode)!);
+        try
+        {
+            await File.WriteAllTextAsync(source, "original movie contents");
+            DateTime sourceModified = File.GetLastWriteTimeUtc(source);
+            string target = Path.GetRelativePath(Path.GetDirectoryName(episode)!, source);
+            File.CreateSymbolicLink(episode, Path.Combine(movies, "missing.mkv"));
+            string[] before = Directory.GetFileSystemEntries(root, "*", SearchOption.AllDirectories).Order().ToArray();
+            AppSettings settings = SymlinkFixture.Settings();
+            settings.Symlinks.StorageAreas[0].MoviesRoot = movies;
+            settings.Symlinks.StorageAreas[0].SeriesRoot = series;
+            foreach (ArrPathMapping mapping in settings.Symlinks.PathMappings)
+                mapping.LibManagarrRoot = mapping.Kind == ArrApplicationKind.Radarr ? movies : series;
+            InMemorySymlinkStore store = new();
+            SymlinkService service = Service(settings, new RealSymlinkFileSystem(), new StubArrHandler(Routes()), store);
+            SymlinkLinkPlan plan = await service.PreviewAsync(Pair, SymlinkFixture.RadarrFileId, CancellationToken.None);
+            Assert.True(plan.CanRepairExisting, string.Join(' ', plan.Blockers.Select(value => value.Detail)));
+            SymlinkLink adopted = await service.CreateAsync(Pair, SymlinkFixture.RadarrFileId, SymlinkFixture.ConfigRevision,
+                null, CancellationToken.None, plan.Draft.SourceVersion, Consent(plan) with { Repair = true });
+            Assert.Equal(episode, adopted.LinkPath);
+            Assert.Equal(target, new FileInfo(episode).LinkTarget);
+            Assert.Equal("original movie contents", await File.ReadAllTextAsync(episode));
+            Assert.Equal(sourceModified, File.GetLastWriteTimeUtc(source));
+            Assert.Equal(before, Directory.GetFileSystemEntries(root, "*", SearchOption.AllDirectories).Order().ToArray());
+            Assert.Equal(SymlinkSetupStep.MonitoringDisabled, adopted.SetupStep);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BrokenOrCyclicLinkCanBeRepairedAndAdoptedWithExplicitConsent(bool cyclic)
+    {
+        Fixture fixture = Create();
+        string broken = cyclic ? ExistingPath : SymlinkTestPaths.LibManagarr("movies/missing.mkv");
+        fixture.Files.Entries[ExistingPath] = broken;
+        SymlinkLinkPlan plan = await fixture.Service.PreviewAsync(Pair, SymlinkFixture.RadarrFileId, CancellationToken.None);
+        Assert.False(plan.Runnable);
+        Assert.False(plan.AdoptsExisting);
+        Assert.True(plan.CanRepairExisting);
+        Assert.Equal(broken, plan.Draft.LinkText);
+        Assert.Empty(await fixture.Store.GetLinksAsync(CancellationToken.None));
+
+        await Assert.ThrowsAsync<ApiProblemException>(() => fixture.Service.CreateAsync(Pair,
+            SymlinkFixture.RadarrFileId, SymlinkFixture.ConfigRevision, null, CancellationToken.None,
+            plan.Draft.SourceVersion, Consent(plan)));
+        Assert.Equal(broken, fixture.Files.Entries[ExistingPath]);
+
+        SymlinkLink repaired = await fixture.Service.CreateAsync(Pair, SymlinkFixture.RadarrFileId,
+            SymlinkFixture.ConfigRevision, null, CancellationToken.None, plan.Draft.SourceVersion,
+            Consent(plan) with { Repair = true });
+        Assert.Equal(SymlinkOperationStatus.Active, repaired.OperationStatus);
+        Assert.Equal(SymlinkSetupStep.MonitoringDisabled, repaired.SetupStep);
+        Assert.Null(repaired.ConfirmedMetadata);
+        Assert.Null(repaired.PendingUpdate);
+        Assert.Equal(ExistingPath, repaired.LinkPath);
+        Assert.Equal(88, repaired.SonarrFileId);
+        Assert.True(fixture.Service.ResolvesToSource(repaired));
+        Assert.False(repaired.MonitoringDisabled);
+        Assert.All(fixture.Handler.Requests, request => Assert.Equal("GET", request.Method));
+    }
+
+    [Fact]
+    public async Task ARepairedLinkIsRescannedAndConfirmedByTheBackgroundSetupBeforeCompletion()
+    {
+        Fixture fixture = Create();
+        fixture.Files.Entries[ExistingPath] = SymlinkTestPaths.LibManagarr("movies/missing.mkv");
+        SymlinkLinkPlan plan = await fixture.Service.PreviewAsync(Pair, SymlinkFixture.RadarrFileId, CancellationToken.None);
+        SymlinkLink repaired = await fixture.Service.CreateAsync(Pair, SymlinkFixture.RadarrFileId,
+            SymlinkFixture.ConfigRevision, null, CancellationToken.None, plan.Draft.SourceVersion,
+            Consent(plan) with { Repair = true });
+        Assert.Null(repaired.ConfirmedMetadata);
+        Assert.NotEqual(SymlinkSetupStep.Completed, repaired.SetupStep);
+        fixture.Handler.Routes["GET /api/v3/episode/5"] =
+            ["""{"id":5,"seriesId":12,"seasonNumber":0,"episodeNumber":5,"hasFile":true,"episodeFileId":88,"monitored":false}"""];
+        fixture.Handler.Routes["GET /api/v3/rename"] = ["[]"];
+        fixture.Handler.Routes["PUT /api/v3/episodefile/bulk"] = ["[]"];
+        TargetedSyncProbe sync = new();
+        FixedSettings settings = new(fixture.Settings);
+        SonarrClient client = new(new HttpClient(fixture.Handler));
+        SonarrSpecialIntegrationService integration = new(fixture.Store, settings, client,
+            new MediaPathMappingService(settings, fixture.Files), fixture.Files, TimeProvider.System,
+            NullLogger<SonarrSpecialIntegrationService>.Instance, snapshotSync: sync);
+        SymlinkSetupRunner runner = new(fixture.Store, fixture.Service, integration, NullLogger<SymlinkSetupRunner>.Instance);
+
+        Assert.Equal(1, await runner.RunDueSetupsAsync(CancellationToken.None));
+        Assert.Contains(fixture.Handler.Requests, request => request.Method == "POST" && request.Path == "/api/v3/command");
+        Assert.Empty(sync.Requests);
+        SymlinkLink scanning = (await fixture.Store.GetLinkAsync(repaired.Id, CancellationToken.None))!;
+        Assert.Equal(SymlinkSetupStep.RescanRequested, scanning.SetupStep);
+        // Sonarr's rescan now reports fresh data from the repaired target.
+        fixture.Handler.Routes["GET /api/v3/episodefile/88"] = [JsonSerializer.Serialize(new
+        {
+            id = 88, path = InstancePath, releaseGroup = "WFFF", size = 5368709120L,
+            languages = new[] { new { id = 4, name = "German" } },
+            quality = new { quality = new { name = "WEBDL-1080p" } },
+            mediaInfo = new { videoCodec = "h264", audioCodec = "aac" }
+        })];
+
+        Assert.Equal(0, await runner.RunDueSetupsAsync(CancellationToken.None));
+
+        SymlinkLink done = (await fixture.Store.GetLinkAsync(repaired.Id, CancellationToken.None))!;
+        Assert.Equal(SymlinkSetupStep.Completed, done.SetupStep);
+        Assert.Equal("sonarr", done.ConfirmedMetadata?.Origin);
+        Assert.Equal("WFFF", done.ConfirmedMetadata?.ReleaseGroup);
+        Assert.Equal("WEBDL-1080p", done.ConfirmedMetadata?.Quality);
+        Assert.Equal("h264", done.ConfirmedMetadata?.VideoCodec);
+        Assert.Contains(fixture.Handler.Requests, request => request.Method == "PUT" && request.Path == "/api/v3/episodefile/bulk");
+        Assert.Equal([(Pair.SonarrInstanceId, Pair.SonarrSeriesId)], sync.Requests);
+        Assert.Equal(ExistingPath, done.LinkPath);
+        Assert.True(fixture.Service.ResolvesToSource(done));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RepairConsentCannotOverwriteAChangedLinkOrRegularFile(bool regular)
+    {
+        Fixture fixture = Create();
+        fixture.Files.Entries[ExistingPath] = SymlinkTestPaths.LibManagarr("movies/missing.mkv");
+        SymlinkLinkPlan plan = await fixture.Service.PreviewAsync(Pair, SymlinkFixture.RadarrFileId, CancellationToken.None);
+        string? changed = regular ? null : SymlinkTestPaths.LibManagarr("movies/another-missing.mkv");
+        fixture.Files.Entries[ExistingPath] = changed;
+
+        await Assert.ThrowsAsync<ApiProblemException>(() => fixture.Service.CreateAsync(Pair,
+            SymlinkFixture.RadarrFileId, SymlinkFixture.ConfigRevision, null, CancellationToken.None,
+            plan.Draft.SourceVersion, Consent(plan) with { Repair = true }));
+
+        Assert.Equal(changed, fixture.Files.Entries[ExistingPath]);
+        Assert.Empty(await fixture.Store.GetLinksAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RepairCanResumeAfterTheReplacementWasWrittenButBeforeTheDatabaseWasUpdated()
+    {
+        Fixture fixture = Create();
+        fixture.Files.Entries[ExistingPath] = SymlinkTestPaths.LibManagarr("movies/missing.mkv");
+        SymlinkLinkPlan plan = await fixture.Service.PreviewAsync(Pair, SymlinkFixture.RadarrFileId, CancellationToken.None);
+        fixture.Files.AfterLinkCreated = path =>
+        {
+            if (path == ExistingPath) throw new OperationCanceledException("Simulated stop after replacement");
+        };
+        await Assert.ThrowsAsync<OperationCanceledException>(() => fixture.Service.CreateAsync(Pair,
+            SymlinkFixture.RadarrFileId, SymlinkFixture.ConfigRevision, null, CancellationToken.None,
+            plan.Draft.SourceVersion, Consent(plan) with { Repair = true }));
+        SymlinkLink interrupted = Assert.Single(await fixture.Store.GetLinksAsync(CancellationToken.None));
+        Assert.True(interrupted.PendingUpdate!.RepairAdoption);
+        Assert.Equal(SymlinkOperationStatus.Updating, interrupted.OperationStatus);
+        fixture.Files.AfterLinkCreated = null;
+
+        Assert.Equal(SymlinkSetupOutcome.Completed,
+            await fixture.Service.FinishUpdateAsync(interrupted, CancellationToken.None));
+        SymlinkLink resumed = (await fixture.Store.GetLinkAsync(interrupted.Id, CancellationToken.None))!;
+        Assert.True(fixture.Service.ResolvesToSource(resumed));
+        Assert.Equal(SymlinkSetupStep.MonitoringDisabled, resumed.SetupStep);
+        Assert.Null(resumed.ConfirmedMetadata);
+        Assert.Null(resumed.PendingUpdate);
     }
 
     [Theory]
@@ -277,6 +452,13 @@ public sealed class SymlinkAdoptionTests
         }
         StubArrHandler handler = new(routes);
         InMemorySymlinkStore store = new();
+        store.SaveCapabilityCheckAsync(new SymlinkCapabilityCheck
+        {
+            StorageAreaId = settings.Symlinks.StorageAreas[0].Id,
+            Status = SymlinkCapabilityStatus.Available,
+            ConfigRevision = settings.Symlinks.Revision,
+            CheckedAt = DateTimeOffset.UtcNow
+        }, CancellationToken.None).GetAwaiter().GetResult();
         SymlinkService service = Service(settings, files, handler, store, snapshotSync);
         return new(service, store, files, handler, settings);
     }

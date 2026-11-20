@@ -235,9 +235,10 @@ public sealed class SonarrSpecialIntegrationService(
         link.Findings.RemoveAll(value => value.Code.StartsWith("metadata-", StringComparison.Ordinal));
         if (!await OwnsEpisodeFileAsync(link, instance, cancellationToken))
             return Conflict(link, "sonarr-file-not-the-link", "The episode no longer owns the registered file. Nothing was written.");
+        IReadOnlyList<string> unmappedLanguages;
         try
         {
-            await sonarr.SetMappedEpisodeFileMetadataAsync(instance, sonarrFileId, link.ExpectedMetadata, cancellationToken);
+            unmappedLanguages = await sonarr.SetMappedEpisodeFileMetadataAsync(instance, sonarrFileId, link.ExpectedMetadata, cancellationToken);
         }
         catch (InvalidOperationException exception)
         {
@@ -259,6 +260,11 @@ public sealed class SonarrSpecialIntegrationService(
         }
 
         link.ConfirmedMetadata = MetadataFrom(readBack);
+        link.ConfirmedMetadata.UnmappedLanguages = [.. unmappedLanguages];
+        link.Findings.RemoveAll(value => value.Code == "language-mapping-unavailable");
+        if (unmappedLanguages.Count > 0)
+            Note(link, "language-mapping-unavailable",
+                $"Sonarr cannot represent these source audio languages: {string.Join(", ", unmappedLanguages)}. Other writable metadata was transferred; the source language information was retained.");
         // What Sonarr derived for itself and did not confirm stays visible as a finding instead of
         // silently counting as done; the health check compares the same two sides later on.
         ReportDeviations(link);
@@ -502,11 +508,14 @@ public sealed class SonarrSpecialIntegrationService(
         if (expected.QualityRevision is not null && expected.QualityRevision != confirmed.QualityRevision)
             Note(link, "metadata-quality-revision-deviation", "Sonarr has not confirmed the source quality revision/repack information.");
 
-        if (expected.Languages.Count > 0
-            && !expected.Languages.All(language => confirmed.Languages.Contains(language, StringComparer.OrdinalIgnoreCase)))
+        string[] expectedLanguages = MediaFileLanguageHelper.CollectLanguageNames(expected.Languages.ToArray())
+            .Where(MediaFileLanguageHelper.IsSpecificLanguage)
+            .Where(language => !confirmed.UnmappedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase)).ToArray();
+        if (expectedLanguages.Length > 0
+            && !expectedLanguages.All(language => confirmed.Languages.Contains(language, StringComparer.OrdinalIgnoreCase)))
         {
             Note(link, "metadata-languages-deviation",
-                $"{confirmed.Origin} found no audio language of the chosen Radarr file ({string.Join(", ", expected.Languages)}).");
+                $"{confirmed.Origin} found no audio language of the chosen Radarr file ({string.Join(", ", expectedLanguages)}).");
         }
     }
 

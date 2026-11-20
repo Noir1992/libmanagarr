@@ -12,6 +12,8 @@ const reasonLabelKeys: Record<string, TranslationKey> = {
   'identical-title': 'symlinks.reason.identicalTitle',
   'series-qualified-title': 'symlinks.reason.seriesQualifiedTitle',
   'alternative-title': 'symlinks.reason.alternativeTitle',
+  'filename-title': 'symlinks.reason.filenameTitle',
+  'series-alias-title': 'symlinks.reason.seriesAliasTitle',
   'generic-word-difference': 'symlinks.reason.genericWord',
   'release-year-match': 'symlinks.reason.sameYear',
   'release-year-differs': 'symlinks.reason.differentYear',

@@ -58,14 +58,19 @@ export class ConfirmSymlinkDialogComponent {
   }
 
   protected async confirmAsync(): Promise<void> {
-    if (this.busy()) return;
+    const proposed = this.plan();
+    if (this.busy() || !proposed || (!proposed.runnable && !proposed.canRepairExisting)) return;
     this.busy.set(true);
     this.error.set(null);
     try {
-      const proposed = this.plan();
       const consent: ExistingLinkConfirmation | undefined =
-        proposed?.adoptsExisting && typeof proposed.draft.sonarrFileId === 'number'
-          ? { path: proposed.draft.linkPath, linkText: proposed.draft.linkText, sonarrFileId: proposed.draft.sonarrFileId }
+        (proposed.adoptsExisting || proposed.canRepairExisting) && typeof proposed.draft.sonarrFileId === 'number'
+          ? {
+              path: proposed.draft.linkPath,
+              linkText: proposed.draft.linkText,
+              sonarrFileId: proposed.draft.sonarrFileId,
+              ...(proposed.canRepairExisting ? { repair: true } : {}),
+            }
           : undefined;
       const link: SymlinkLink = consent
         ? await this.symlinks.confirmSuggestion(this.data.suggestion.id, this.data.configRevision, proposed?.draft.sourceVersion, consent)

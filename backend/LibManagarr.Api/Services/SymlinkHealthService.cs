@@ -1,3 +1,4 @@
+using LibManagarr.Api.Clients;
 using LibManagarr.Api.Models;
 
 namespace LibManagarr.Api.Services;
@@ -437,11 +438,14 @@ public sealed class SymlinkHealthService(
                 $"The snapshot of {instance.InstanceName} reads the release group as '{episode.File.ReleaseGroup ?? "nothing"}'; the Radarr file this entry chose was labelled '{expected.ReleaseGroup}'."));
         }
 
-        if (expected.Languages.Count > 0
-            && !expected.Languages.All(language => episode.File.AudioLanguages.Contains(language, StringComparer.OrdinalIgnoreCase)))
+        string[] expectedLanguages = MediaFileLanguageHelper.CollectLanguageNames(expected.Languages.ToArray())
+            .Where(MediaFileLanguageHelper.IsSpecificLanguage)
+            .Where(language => row.ConfirmedMetadata?.UnmappedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase) != true).ToArray();
+        if (expectedLanguages.Length > 0
+            && !expectedLanguages.All(language => episode.File.AudioLanguages.Contains(language, StringComparer.OrdinalIgnoreCase)))
         {
             findings.Add(Finding(LanguagesDeviationCode,
-                $"The snapshot of {instance.InstanceName} found none of the audio languages of the chosen Radarr file ({string.Join(", ", expected.Languages)}); it knows {episode.File.AudioLanguages.Count} of its own."));
+                $"The snapshot of {instance.InstanceName} found none of the audio languages of the chosen Radarr file ({string.Join(", ", expectedLanguages)}); it knows {episode.File.AudioLanguages.Count} of its own."));
         }
     }
 

@@ -6,6 +6,7 @@ export interface SymlinkFileMetadata {
   origin: string | null;
   releaseGroup: string | null;
   languages: string[];
+  unmappedLanguages?: string[];
   quality: string | null;
   size: number | null;
 }
@@ -63,6 +64,8 @@ export interface SymlinkLink {
 /** What confirming a pair would do and what stands in the way; the draft has no id, because nothing exists yet. */
 export interface SymlinkLinkPlan {
   adoptsExisting?: boolean;
+  canRepairExisting?: boolean;
+  repairLinkText?: string | null;
   runnable: boolean;
   draft: SymlinkLink;
   blockers: SymlinkFinding[];
@@ -73,4 +76,5 @@ export interface ExistingLinkConfirmation {
   path: string;
   linkText: string;
   sonarrFileId: number;
+  repair?: boolean;
 }

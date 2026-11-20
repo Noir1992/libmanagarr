@@ -93,6 +93,8 @@ public sealed class SymlinkLinkDto
 public sealed class SymlinkLinkPlanDto
 {
     public bool AdoptsExisting { get; set; }
+    public bool CanRepairExisting { get; set; }
+    public string? RepairLinkText { get; set; }
     public bool Runnable { get; set; }
 
     public required SymlinkLinkDto Draft { get; set; }

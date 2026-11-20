@@ -304,6 +304,87 @@ public sealed class SonarrClientSymlinkWriteTests
         Assert.Equal("NEW", file.GetProperty("releaseGroup").GetString());
     }
 
+    [Theory]
+    [InlineData("und")]
+    [InlineData("Undetermined")]
+    [InlineData("Unknown")]
+    [InlineData("Original")]
+    public async Task Metadata_LanguagePlaceholdersDoNotPreventMappingKnownAudioLanguages(string placeholder)
+    {
+        StubArrHandler handler = new(new Dictionary<string, string>
+        {
+            ["GET /api/v3/episodefile/44"] = """{"id":44,"languages":[{"id":1,"name":"English"}]}""",
+            ["GET /api/v3/language"] = """[{"id":47,"name":"German"}]""",
+            ["PUT /api/v3/episodefile/bulk"] = "[]"
+        });
+        await new SonarrClient(new HttpClient(handler)).SetMappedEpisodeFileMetadataAsync(CreateSonarr(), 44,
+            new SymlinkFileMetadata { Languages = ["German", placeholder] }, CancellationToken.None);
+        RecordedRequest sent = Assert.Single(handler.Requests, value => value.Method == HttpMethod.Put);
+        using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(sent.Body);
+        Assert.Equal(["German"], body.RootElement[0].GetProperty("languages").EnumerateArray()
+            .Select(value => value.GetProperty("name").GetString()));
+    }
+
+    [Fact]
+    public async Task Metadata_OnlyUnknownLanguagesPreserveSonarrLanguagesWhileWritingOtherMetadata()
+    {
+        StubArrHandler handler = new(new Dictionary<string, string>
+        {
+            ["GET /api/v3/episodefile/44"] = """{"id":44,"languages":[{"id":1,"name":"English"}]}""",
+            ["PUT /api/v3/episodefile/bulk"] = "[]"
+        });
+        await new SonarrClient(new HttpClient(handler)).SetMappedEpisodeFileMetadataAsync(CreateSonarr(), 44,
+            new SymlinkFileMetadata { Languages = ["und", "Original"], ReleaseGroup = "NEW" }, CancellationToken.None);
+        RecordedRequest sent = Assert.Single(handler.Requests, value => value.Method == HttpMethod.Put);
+        using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(sent.Body);
+        Assert.Equal("English", body.RootElement[0].GetProperty("languages")[0].GetProperty("name").GetString());
+        Assert.Equal("NEW", body.RootElement[0].GetProperty("releaseGroup").GetString());
+        Assert.DoesNotContain(handler.Requests, value => value.Path == "/api/v3/language");
+    }
+
+    [Fact]
+    public async Task Metadata_UnsupportedSourceLanguageIsReportedWhileWritableMetadataIsTransferred()
+    {
+        StubArrHandler handler = new(new Dictionary<string, string>
+        {
+            ["GET /api/v3/episodefile/44"] = """{"id":44,"quality":{"quality":{"name":"WEBDL-1080p"}},"languages":[{"id":1,"name":"English"}]}""",
+            ["GET /api/v3/language"] = """[{"id":47,"name":"German"}]""",
+            ["PUT /api/v3/episodefile/bulk"] = "[]"
+        });
+        SymlinkFileMetadata expected = new() { Languages = ["German", "Telugu"], ReleaseGroup = "NEW", Quality = "WEBDL-1080p" };
+        IReadOnlyList<string> unsupported = await new SonarrClient(new HttpClient(handler))
+            .SetMappedEpisodeFileMetadataAsync(CreateSonarr(), 44, expected, CancellationToken.None);
+
+        Assert.Equal(["Telugu"], unsupported);
+        Assert.Equal(["German", "Telugu"], expected.Languages);
+        RecordedRequest sent = Assert.Single(handler.Requests, value => value.Method == HttpMethod.Put);
+        using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(sent.Body);
+        Assert.Equal("NEW", body.RootElement[0].GetProperty("releaseGroup").GetString());
+        Assert.Equal("WEBDL-1080p", body.RootElement[0].GetProperty("quality").GetProperty("quality").GetProperty("name").GetString());
+        Assert.Equal(["German"], body.RootElement[0].GetProperty("languages").EnumerateArray()
+            .Select(value => value.GetProperty("name").GetString()));
+    }
+
+    [Fact]
+    public async Task Metadata_OnlyUnsupportedLanguagesPreserveDestinationLanguagesAndReportTheLimitation()
+    {
+        StubArrHandler handler = new(new Dictionary<string, string>
+        {
+            ["GET /api/v3/episodefile/44"] = """{"id":44,"languages":[{"id":1,"name":"English"}]}""",
+            ["GET /api/v3/language"] = """[{"id":47,"name":"German"}]""",
+            ["PUT /api/v3/episodefile/bulk"] = "[]"
+        });
+        IReadOnlyList<string> unsupported = await new SonarrClient(new HttpClient(handler))
+            .SetMappedEpisodeFileMetadataAsync(CreateSonarr(), 44,
+                new SymlinkFileMetadata { Languages = ["Telugu"], ReleaseGroup = "NEW" }, CancellationToken.None);
+
+        Assert.Equal(["Telugu"], unsupported);
+        RecordedRequest sent = Assert.Single(handler.Requests, value => value.Method == HttpMethod.Put);
+        using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(sent.Body);
+        Assert.Equal("English", body.RootElement[0].GetProperty("languages")[0].GetProperty("name").GetString());
+        Assert.Equal("NEW", body.RootElement[0].GetProperty("releaseGroup").GetString());
+    }
+
     [Fact]
     public async Task Metadata_UnknownDestinationQualityDoesNotWrite()
     {

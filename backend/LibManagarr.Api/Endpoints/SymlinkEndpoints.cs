@@ -249,6 +249,8 @@ public static class SymlinkEndpoints
         {
             Runnable = plan.Runnable,
             AdoptsExisting = plan.AdoptsExisting,
+            CanRepairExisting = plan.CanRepairExisting,
+            RepairLinkText = plan.CanRepairExisting ? Path.GetRelativePath(Path.GetDirectoryName(plan.Draft.LinkPath)!, plan.Draft.SourcePath) : null,
             Draft = LinkDto(plan.Draft, SnapshotTitles.Collect(settings)),
             Blockers = [.. plan.Blockers],
             Warnings = [.. plan.Warnings]

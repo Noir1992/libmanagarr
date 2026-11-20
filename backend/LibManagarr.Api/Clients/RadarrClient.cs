@@ -96,7 +96,9 @@ public sealed class RadarrClient(HttpClient httpClient)
                 Title = movie.Title,
                 TitleSlug = movie.TitleSlug,
                 AlternativeTitles = (movie.AlternativeTitles ?? [])
-                    .Select(alternative => alternative.Title?.Trim())
+                    .Select(alternative => alternative.Title)
+                    .Prepend(movie.OriginalTitle)
+                    .Select(title => title?.Trim())
                     .Where(title => !string.IsNullOrWhiteSpace(title))
                     .Select(title => title!)
                     .Distinct(StringComparer.OrdinalIgnoreCase)

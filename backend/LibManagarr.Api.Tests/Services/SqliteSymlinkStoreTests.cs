@@ -173,15 +173,17 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         Assert.Null(await store.GetCapabilityCheckAsync("area-3", CancellationToken.None));
     }
 
-    [Fact]
-    public async Task AReservedSourceSwapSurvivesReopeningAndCanBeCleared()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AReservedSourceSwapSurvivesReopeningAndCanBeCleared(bool repairAdoption)
     {
         SqliteSymlinkStore store = CreateStore();
         SymlinkLink link = NewLink("link-1");
         await store.InsertLinkAsync(link, CancellationToken.None);
         SymlinkSourceUpdate pending = new(92, "area-2", "/movies/new.mp4", "/series/new.mp4",
             "../movies/new.mp4", 0, 2,
-            new SymlinkFileMetadata { Origin = "radarr", Size = 1234, Languages = ["German"] }, "radarr:92:1234");
+            new SymlinkFileMetadata { Origin = "radarr", Size = 1234, Languages = ["German"] }, "radarr:92:1234", RepairAdoption: repairAdoption);
         link.PendingUpdate = pending;
         link.OperationStatus = SymlinkOperationStatus.Updating;
         Assert.True(await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None));
@@ -256,7 +258,7 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
             Quality = "WEBDL-1080p",
             Size = 1_832_402_112
         };
-        link.ConfirmedMetadata = new SymlinkFileMetadata { Origin = "sonarr", Quality = "WEBDL-1080p" };
+        link.ConfirmedMetadata = new SymlinkFileMetadata { Origin = "sonarr", Quality = "WEBDL-1080p", UnmappedLanguages = ["Telugu"] };
         link.LastCheckedAt = clock.GetUtcNow();
         link.LastSuccessfulCheckAt = clock.GetUtcNow();
         link.Findings = [new SymlinkFinding("stale-source", "The Radarr file was replaced.", clock.GetUtcNow())];
@@ -294,6 +296,7 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         Assert.Equal(["de", "en"], stored.ExpectedMetadata!.Languages);
         Assert.Equal(1_832_402_112L, stored.ExpectedMetadata!.Size);
         Assert.Equal("sonarr", stored.ConfirmedMetadata!.Origin);
+        Assert.Equal(["Telugu"], stored.ConfirmedMetadata.UnmappedLanguages);
         Assert.Equal(link.CreatedAt, stored.CreatedAt);
         Assert.Equal(link.LastCheckedAt, stored.LastCheckedAt);
         Assert.Equal(link.LastSuccessfulCheckAt, stored.LastSuccessfulCheckAt);

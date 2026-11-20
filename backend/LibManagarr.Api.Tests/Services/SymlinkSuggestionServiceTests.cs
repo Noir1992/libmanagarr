@@ -62,6 +62,27 @@ public sealed class SymlinkSuggestionServiceTests
     }
 
     [Fact]
+    public async Task Refresh_AnExistingSpecialCanBeOfferedUsingTheStructuredRadarrFilename()
+    {
+        SonarrEpisodeSnapshot episode = Episode(3406, "Digimon Adventure tri. Part 4: Loss");
+        episode.HasFile = true;
+        RadarrMovieSnapshot movie = Film("Digimon Adventure tri. Chapter 4: Lost");
+        movie.File.Path = "/movies/Digimon Adventure tri. Part 4 Loss (2017) {tmdb-422347}/Digimon Adventure tri. Part 4 Loss (2017) {tmdb-422347} [Bluray].mkv";
+        AppSettings settings = Settings(specials: [episode], movies: [movie], seriesTitle: "Digimon: Digital Monsters");
+
+        SymlinkMatchingRun run = await Service(settings).RefreshAsync(force: false, CancellationToken.None);
+
+        Assert.Equal(1, run.Created);
+        SymlinkSuggestion suggestion = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
+        Assert.Equal(SymlinkSuggestionStatus.Pending, suggestion.Status);
+        Assert.Equal(3406, suggestion.Pair.SonarrEpisodeId);
+        Assert.Equal(movie.File.Id, suggestion.RadarrFileId);
+        Assert.Contains(suggestion.Reasons, reason => reason.Code == SpecialMovieMatchingRules.FilenameTitleCode);
+        Assert.Contains(suggestion.Reasons, reason => reason.Code == SpecialMovieMatchingRules.EpisodeHasFileCode);
+        Assert.Empty(await store.GetLinksAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Refresh_WithoutAMatchingMovieStoresNothingAndSaysSo()
     {
         AppSettings settings = Settings(movies: [Film("Kabaneri of the Iron Fortress: Raging Break")]);
@@ -306,6 +327,31 @@ public sealed class SymlinkSuggestionServiceTests
     {
         Assert.False(await Service(Settings()).RejectAsync("suggestion-9", "typo", CancellationToken.None));
         Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Refresh_ANewerMatcherRetiresTheRecapButKeepsTheActualMovieSuggestion()
+    {
+        AppSettings settings = Settings(
+            specials: [Episode(5, "Understand in less than 1 minute! Girls und Panzer das Finale: Part 1"),
+                Episode(6, "Girls und Panzer das Finale: Part 1")],
+            movies: [Film("Girls und Panzer - Das Finale: Teil 1")], seriesTitle: "Girls und Panzer");
+        SymlinkSuggestionService service = Service(settings);
+        await service.RefreshAsync(force: false, CancellationToken.None);
+        await store.UpsertSuggestionAsync(Suggestion("old-recap", SymlinkSuggestionStatus.Pending, 70), CancellationToken.None);
+        foreach (SymlinkMatchingState state in await store.GetMatchingStatesAsync(CancellationToken.None))
+        {
+            await store.SaveMatchingStateAsync(
+                WithRevision(state, state.ConfigRevision, SpecialMovieMatchingRules.MatcherVersion - 1), CancellationToken.None);
+        }
+
+        SymlinkMatchingRun run = await service.RefreshAsync(force: false, CancellationToken.None);
+
+        Assert.Equal(1, run.MarkedStale);
+        IReadOnlyList<SymlinkSuggestion> rows = await store.GetSuggestionsAsync(CancellationToken.None);
+        Assert.Equal(SymlinkSuggestionStatus.Stale, rows.Single(row => row.Pair.SonarrEpisodeId == 5).Status);
+        Assert.Equal(SymlinkSuggestionStatus.Pending, rows.Single(row => row.Pair.SonarrEpisodeId == 6).Status);
+        Assert.False((await service.RefreshAsync(force: false, CancellationToken.None)).DidWork);
     }
 
     [Fact]
