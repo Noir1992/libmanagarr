@@ -13,7 +13,8 @@ public enum SpecialMovieMatchStrength
 {
     IdenticalTitles,
     GenericWordDifference,
-    SeriesQualifiedTitle
+    SeriesQualifiedTitle,
+    TitleVariant
 }
 
 /// <summary>
@@ -40,8 +41,9 @@ public sealed record SpecialMovieMatch(
 /// </summary>
 public static class SpecialMovieMatchingRules
 {
-    public const int MatcherVersion = 2;
+    public const int MatcherVersion = 3;
 
+    public const string TitleVariantCode = "title-variant";
     public const string IdenticalTitleCode = "identical-title";
     public const string AlternativeTitleCode = "alternative-title";
     public const string SeriesQualifiedTitleCode = "series-qualified-title";
@@ -87,6 +89,8 @@ public static class SpecialMovieMatchingRules
             SpecialMovieMatchStrength? strength = Compare(
                 normalizedEpisode, specialPart, episodeCarriesSeries,
                 title, moviePart, StartsWithSeries(title, normalizedSeries));
+            strength ??= MatchesTitleVariant(normalizedSeries, normalizedEpisode, title)
+                ? SpecialMovieMatchStrength.TitleVariant : null;
             if (strength is null) continue;
 
             List<SymlinkSuggestionReason> reasons =
@@ -131,6 +135,72 @@ public static class SpecialMovieMatchingRules
 
         if (!episodeCarriesSeries || !movieCarriesSeries) return null;
         return TryGenericWordDifference(episodePart, moviePart) ? SpecialMovieMatchStrength.GenericWordDifference : null;
+    }
+
+    /// <summary>
+    /// A shared, distinctive series phrase anchors both titles. Only the suffix after that phrase is
+    /// compared loosely: articles and format labels may differ, subtitle words may move, but every
+    /// identity word and every part number must agree. This never matches on the series name alone.
+    /// </summary>
+    private static bool MatchesTitleVariant(string series, string episode, string movie)
+    {
+        string[] seriesWords = series.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (int length = seriesWords.Length; length >= 2; length--)
+        {
+            for (int start = 0; start + length <= seriesWords.Length; start++)
+            {
+                string[] phraseWords = seriesWords.Skip(start).Take(length).ToArray();
+                if (phraseWords.Count(IsIdentityWord) < 2) continue;
+                string phrase = string.Join(' ', phraseWords);
+                int episodeStart = (" " + episode + " ").IndexOf(" " + phrase + " ", StringComparison.Ordinal);
+                int movieStart = (" " + movie + " ").IndexOf(" " + phrase + " ", StringComparison.Ordinal);
+                if (episodeStart < 0 || movieStart < 0) continue;
+
+                // Use the longest common series phrase, so a shorter phrase cannot hide a differing
+                // identity word or sequel number inside a larger series name.
+                return SameVariantSuffix(episode[(episodeStart + phrase.Length)..].Trim(),
+                    movie[(movieStart + phrase.Length)..].Trim());
+            }
+        }
+        return false;
+    }
+
+    private static bool IsIdentityWord(string word) =>
+        !IsFiller(word) && word is not ("the" or "of" or "a" or "an" or "and");
+
+    private static bool SameVariantSuffix(string episode, string movie)
+    {
+        static (string[] Words, string[] Numbers) Parts(string suffix)
+        {
+            string[] tokens = suffix.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            List<string> words = [];
+            List<string> numbers = [];
+            for (int index = 0; index < tokens.Length; index++)
+            {
+                string token = tokens[index];
+                // Roman numerals are only numbers after an explicit part/format label, never arbitrary
+                // title words (for example the pronoun "I"). Arabic numbers remain significant anywhere.
+                if (index > 0 && tokens[index - 1] is "part" or "chapter" or "movie" or "film")
+                {
+                    token = token switch
+                    {
+                        "i" => "1", "ii" => "2", "iii" => "3", "iv" => "4", "v" => "5",
+                        "vi" => "6", "vii" => "7", "viii" => "8", "ix" => "9", "x" => "10",
+                        _ => token
+                    };
+                }
+                if (IsNumeric(token)) numbers.Add(token.TrimStart('0') is { Length: > 0 } number ? number : "0");
+                else if (token is not ("the" or "of" or "a" or "an" or "and"
+                    or "movie" or "movies" or "film" or "films" or "part" or "chapter")) words.Add(token);
+            }
+            return (words.Order(StringComparer.Ordinal).ToArray(), numbers.ToArray());
+        }
+
+        var left = Parts(episode);
+        var right = Parts(movie);
+        return left.Words.Length >= 2
+            && left.Words.SequenceEqual(right.Words)
+            && left.Numbers.SequenceEqual(right.Numbers);
     }
 
     /// <summary>
@@ -218,7 +288,7 @@ public static class SpecialMovieMatchingRules
             leftover.Remove(token);
         }
 
-        return leftover.Count == 1 && IsFiller(leftover[0]);
+        return leftover.Count == 1 && Array.IndexOf(GenericWords, leftover[0]) >= 0;
     }
 
     private static SymlinkSuggestionReason TitleFinding(
@@ -229,6 +299,9 @@ public static class SpecialMovieMatchingRules
         string specialPart) =>
         strength switch
         {
+            SpecialMovieMatchStrength.TitleVariant => new SymlinkSuggestionReason(
+                TitleVariantCode,
+                $"The special and {(isAlternative ? "an alternative title" : "the title")} of '{movieTitle}' share distinctive series words, the same subtitle words and matching part numbers after normalizing format labels and Roman numerals."),
             SpecialMovieMatchStrength.SeriesQualifiedTitle => new SymlinkSuggestionReason(
                 SeriesQualifiedTitleCode,
                 $"The special title '{specialPart}' matches the special part of {(isAlternative ? "an alternative title" : "the title")} of '{movieTitle}' after removing leading movie labels; the movie title carries the full series name."),

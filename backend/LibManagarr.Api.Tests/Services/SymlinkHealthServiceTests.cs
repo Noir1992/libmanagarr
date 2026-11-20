@@ -199,24 +199,23 @@ public sealed class SymlinkHealthServiceTests
     }
 
     [Fact]
-    public async Task ASourceThatMovedWhileFollowingIsOffIsReportedWithoutQueueingAnything()
+    public async Task ASourceThatMovedWithLegacyFollowingDisabledStillQueuesTheUpgrade()
     {
         await SeedEntryAsync("link-1", autoFollowUp: false);
 
         SymlinkHealthRun run = await Health(ProvenLibraryWithMovieFile(
             SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize)).CheckAllAsync(CancellationToken.None);
 
-        Assert.Equal(0, run.FollowUpsQueued);
-        // The switch does what it promises, and the difference is still worth seeing.
+        Assert.Equal(1, run.FollowUpsQueued);
         Assert.Equal(1, run.Reported);
-        Assert.False(await IsPassRequestedAsync());
+        Assert.True(await IsPassRequestedAsync());
         SymlinkLink stored = await StoredAsync("link-1");
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
-        Assert.Equal(SymlinkSetupStep.Completed, stored.SetupStep);
-        Assert.Equal(0, stored.UpdateRevision);
+        Assert.Equal(SymlinkOperationStatus.Updating, stored.OperationStatus);
+        Assert.Equal(SymlinkSetupStep.LinkCreated, stored.SetupStep);
+        Assert.Equal(1, stored.UpdateRevision);
         SymlinkFinding finding = Assert.Single(stored.Findings);
         Assert.Equal("source-replaced", finding.Code);
-        Assert.Contains("Later upgrades are not followed", finding.Detail);
+        Assert.True(stored.AutoFollowUp);
     }
 
     [Fact]

@@ -562,7 +562,7 @@ public static class SymlinkEndpoints
             Findings = [.. link.Findings],
             MonitoringOriginal = link.MonitoringOriginal,
             MonitoringDisabled = link.MonitoringDisabled,
-            AutoFollowUp = link.AutoFollowUp,
+            AutoFollowUp = true,
             DesiredFilename = link.DesiredFilename,
             AppliedFilename = link.AppliedFilename,
             SourceVersion = link.SourceVersion,

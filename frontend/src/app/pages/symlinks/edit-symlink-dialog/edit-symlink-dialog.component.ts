@@ -89,6 +89,11 @@ export class EditSymlinkDialogComponent {
     return this.i18n.t(key, replace);
   }
 
+  protected onSearchKeydown(event: KeyboardEvent): void {
+    // Let the select handle navigation and dismissal; typing, spaces and Home/End belong to the search.
+    if (!['Escape', 'Tab', 'ArrowDown', 'ArrowUp'].includes(event.key)) event.stopPropagation();
+  }
+
   protected clearSearch(field: 'movie' | 'special'): void {
     this.searchModel.update((value) => ({ ...value, [field]: '' }));
   }

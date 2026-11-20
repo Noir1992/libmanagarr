@@ -38,13 +38,15 @@
 
 .item-head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--theme-default-gap-small);
 }
 
 .item-title {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   font-weight: 600;
   overflow-wrap: anywhere;
@@ -143,6 +145,10 @@
 }
 
 .item-episode {
+  display: inline-block;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow-wrap: normal;
   margin-left: var(--theme-default-gap-small);
   font-weight: 400;
   color: var(--theme-muted);
@@ -189,7 +195,7 @@
   display: grid;
   grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
   gap: var(--theme-default-gap-small) var(--theme-default-gap);
-  margin: 0;
+  margin: var(--theme-default-gap-small) 0 0;
 
   dt {
     font-weight: 600;
@@ -241,26 +247,22 @@
   }
 }
 
-@media (max-width: 560px) {
-  .item-facts {
-    grid-template-columns: minmax(0, 1fr);
-
-    dt {
-      margin-top: var(--theme-default-gap-small);
-    }
-  }
-}
 .list-controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--theme-default-gap, 8px);
+  gap: var(--theme-default-gap, 8px) 0;
   position: relative;
+
+  > button {
+    margin-right: var(--theme-default-gap, 8px);
+  }
 
   .symlink-search {
     position: relative;
-    flex: 1 1 160px;
+    flex: 1 1 0;
     min-width: 120px;
+    margin-right: var(--theme-default-gap, 8px);
 
     .material-symbols-outlined {
       position: absolute;
@@ -279,20 +281,6 @@
   }
 }
 
-.follow-up-control {
-  margin-bottom: var(--theme-default-gap);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--theme-default-gap-small);
-
-  mat-slide-toggle {
-    --mat-slide-toggle-label-text-font: var(--app-font-family);
-    --mat-slide-toggle-label-text-color: var(--theme-text);
-    --mat-slide-toggle-disabled-label-text-color: var(--theme-muted);
-  }
-}
-
 .managed-actions {
   .button-content {
     display: inline-flex;
@@ -301,15 +289,11 @@
   }
   margin-top: var(--theme-default-gap);
   justify-content: space-between;
-  .check-actions,
   .edit-actions {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: var(--theme-default-gap-small);
-  }
-  .check-actions {
-    flex: 1 1 auto;
   }
   .edit-actions {
     margin-left: auto;
@@ -317,4 +301,23 @@
   .item-meta {
     margin: 0;
   }
+}
+
+.button-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--theme-default-gap-small);
+}
+
+.managed-heading {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--theme-default-gap-small);
+}
+
+.link-details-toggle {
+  flex-shrink: 0;
+  margin-block: -8px;
 }

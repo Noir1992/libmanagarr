@@ -247,11 +247,22 @@ describe('EditSymlinkDialogComponent', () => {
     it(`clears the ${field} search with a Material button while retaining the chosen pair and preview`, async () => {
       await settlePreview();
       const element = fixture.nativeElement as HTMLElement;
-      const input = element.querySelector(`#symlink-${field}-search`) as HTMLInputElement;
+      fixture.componentInstance['choices'].update((choices) => ({
+        ...choices,
+        movies: [...choices.movies, { ...choices.movies[0], movieId: 71, title: 'Second film' }],
+      }));
+      fixture.detectChanges();
+      expect(element.querySelector(`#symlink-${field}-search`)).toBeNull();
+      const select = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatSelectHarness.with({ selector: `#symlink-${field}` }));
+      await select.open();
+      const input = document.querySelector(`#symlink-${field}-search`) as HTMLInputElement;
+      expect((await select.getOptions()).length).toBe(2);
       input.value = 'no-match';
       input.dispatchEvent(new Event('input'));
       fixture.detectChanges();
       await fixture.whenStable();
+      expect((await select.getOptions()).length).toBe(1);
+      expect(button('Save').disabled).toBeFalse();
       const clear = input.parentElement!.querySelector('button.clear-search') as HTMLButtonElement;
       expect(clear.classList.contains('mat-mdc-icon-button')).toBeTrue();
       clear.click();
@@ -260,6 +271,8 @@ describe('EditSymlinkDialogComponent', () => {
       expect(input.value).toBe('');
       expect(document.activeElement).toBe(input);
       expect(input.parentElement!.querySelector('button.clear-search')).toBeNull();
+      expect((await select.getOptions()).length).toBe(2);
+      await select.close();
       expect(button('Save').disabled).toBeFalse();
     });
   }
@@ -370,7 +383,7 @@ describe('EditSymlinkDialogComponent', () => {
       const content = overlay.querySelector('mat-dialog-content') as HTMLElement;
       expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
       const controls = Array.from(content.querySelectorAll<HTMLElement>('input, mat-select'));
-      expect(controls.length).toBe(4);
+      expect(controls.length).toBe(2);
       controls.forEach((control) =>
         expect(control.getBoundingClientRect().right).toBeLessThanOrEqual(content.getBoundingClientRect().right + 1),
       );

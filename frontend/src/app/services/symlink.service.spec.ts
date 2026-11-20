@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { SymlinkSettings } from '../interfaces/symlinks/symlink-settings';
+import { SaveSymlinkLinkRequest } from '../interfaces/symlinks/symlink-decisions';
 import { SymlinkLink } from '../interfaces/symlinks/symlink-link';
 import { SymlinkSuggestion } from '../interfaces/symlinks/symlink-suggestion';
 import { AppI18nService } from './app-i18n.service';
@@ -104,6 +105,22 @@ describe('SymlinkService', () => {
     http = TestBed.inject(HttpTestingController);
   });
   afterEach(() => http.verify());
+
+  it('updates an edited link in place instead of moving it to the front', async () => {
+    const load = service.loadOverview();
+    http.expectOne(`${base}/links`).flush([link('first'), link('second')]);
+    await settle();
+    http.expectOne(`${base}/suggestions`).flush([]);
+    http.expectOne(`${base}/rejections`).flush([]);
+    await load;
+    const pending = service.saveLink({ revision: 0 } as SaveSymlinkLinkRequest, 'second');
+    const request = http.expectOne(`${base}/links/second`);
+    expect(request.request.method).toBe('PUT');
+    request.flush({ ...link('second', 1), updatedAt: '2026-11-20T10:00:00Z' });
+    await pending;
+    expect(service.links().map((row) => row.id)).toEqual(['first', 'second']);
+    expect(service.links()[1].revision).toBe(1);
+  });
 
   it('reads the path configuration with its probe answers', async () => {
     const pending = service.loadSettings();
@@ -299,26 +316,6 @@ describe('SymlinkService', () => {
     expect(service.suggestions()).toHaveSize(1);
     expect(service.links()).toHaveSize(1);
     expect(service.overviewLoading()).toBeFalse();
-  });
-
-  it('keeps a refresh summary and only reads again when the pass changed a row', async () => {
-    const pending = service.refreshSuggestions();
-    http
-      .expectOne(`${base}/suggestions/refresh`)
-      .flush({ instancesConsidered: 2, created: 0, updated: 0, markedStale: 0, skippedRejected: 1, didWork: false });
-    const run = await pending;
-    expect(run.didWork).toBeFalse();
-    expect(service.lastRun()?.skippedRejected).toBe(1);
-    http.expectNone(`${base}/suggestions`);
-
-    const next = service.refreshSuggestions();
-    http
-      .expectOne(`${base}/suggestions/refresh`)
-      .flush({ instancesConsidered: 2, created: 1, updated: 0, markedStale: 0, skippedRejected: 0, didWork: true });
-    await settle();
-    http.expectOne(`${base}/suggestions`).flush([suggestion()]);
-    expect((await next).created).toBe(1);
-    expect(service.suggestions()).toHaveSize(1);
   });
 
   it('asks the preview route what confirming would do', async () => {

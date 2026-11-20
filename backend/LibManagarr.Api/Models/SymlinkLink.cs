@@ -131,6 +131,7 @@ public sealed class SymlinkLink
 
     public bool MonitoringDisabled { get; set; }
 
+    /// <summary>Legacy storage field. Upgrades are always followed regardless of its stored value.</summary>
     public bool AutoFollowUp { get; set; }
 
     public string? DesiredFilename { get; set; }

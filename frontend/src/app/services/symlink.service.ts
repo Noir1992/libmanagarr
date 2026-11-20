@@ -7,7 +7,7 @@ import {
   SymlinkSettings,
   SymlinkSettingsInput,
 } from '../interfaces/symlinks/symlink-settings';
-import { SymlinkMatchingRun, SymlinkSuggestion } from '../interfaces/symlinks/symlink-suggestion';
+import { SymlinkSuggestion } from '../interfaces/symlinks/symlink-suggestion';
 import { ExistingLinkConfirmation, SymlinkLink, SymlinkLinkPlan } from '../interfaces/symlinks/symlink-link';
 import {
   PreviewSymlinkLinkRequest,
@@ -72,9 +72,6 @@ export class SymlinkService {
 
   readonly overviewLoading = signal(false);
   readonly overviewError = signal<string | null>(null);
-  readonly refreshing = signal(false);
-  /** The summary of the last manual matching pass; a pass that changed nothing is a result too. */
-  readonly lastRun = signal<SymlinkMatchingRun | null>(null);
 
   browseDirectories(path: string | null): Promise<SymlinkDirectoryListing> {
     const params = path ? new HttpParams().set('path', path) : new HttpParams();
@@ -166,24 +163,6 @@ export class SymlinkService {
       throw error;
     } finally {
       this.overviewLoading.set(false);
-    }
-  }
-
-  /** The manual pass over the snapshots. It re-reads even when nothing looks changed. */
-  async refreshSuggestions(): Promise<SymlinkMatchingRun> {
-    this.refreshing.set(true);
-    this.overviewError.set(null);
-    try {
-      const run = await firstValueFrom(this.http.post<SymlinkMatchingRun>(`${this.url}/suggestions/refresh`, null));
-      this.lastRun.set(run);
-      if (run.didWork) await this.reload(() => this.readSuggestions());
-      return run;
-    } catch (error) {
-      const message = this.message(error, 'symlinks.refreshError');
-      this.overviewError.set(message);
-      throw new Error(message, { cause: error });
-    } finally {
-      this.refreshing.set(false);
     }
   }
 
@@ -343,7 +322,9 @@ export class SymlinkService {
       () => this.readLinks(),
     );
     this.linkReadVersion++;
-    this.linksState.update((values) => [link, ...values.filter((value) => value.id !== link.id)]);
+    this.linksState.update((values) =>
+      values.some((value) => value.id === link.id) ? values.map((value) => (value.id === link.id ? link : value)) : [link, ...values],
+    );
     return link;
   }
 

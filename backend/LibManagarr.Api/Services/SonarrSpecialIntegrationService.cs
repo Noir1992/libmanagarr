@@ -564,7 +564,7 @@ public sealed class SonarrSpecialIntegrationService(
 
     private async Task<SymlinkSetupOutcome> FinishVerifiedAsync(SymlinkLink link, CancellationToken token)
     {
-        if (radarr is not null && link.AutoFollowUp)
+        if (radarr is not null)
         {
             ArrInstanceSettings? instance = (await settings.GetSnapshotAsync(token)).RadarrInstances.FirstOrDefault(value => value.Id == link.RadarrInstanceId);
             if (instance is null) return Conflict(link, "radarr-instance-missing", "The selected Radarr instance is no longer configured.");

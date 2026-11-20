@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { apiKey, instanceSettings, login, prepareAccount, syncInstance } from '../fixtures/app.js';
+import { apiKey, instanceSettings, login, mutation, prepareAccount, syncInstance } from '../fixtures/app.js';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chownSync, readFileSync, renameSync, statSync, unlinkSync } from 'node:fs';
@@ -14,6 +14,7 @@ import {
   rowsOf,
   seededPair,
   seriesOf,
+  waitForSuggestedPair,
   type ArrEpisodeFile,
   type ArrMovieFile,
 } from '../fixtures/symlinks.js';
@@ -47,7 +48,8 @@ test('E15: confirming an offer links the film file that the baseline paired with
 
   await login(page);
   await page.goto('/symlinks');
-  await page.getByRole('button', { name: 'Match again', exact: true }).click();
+  await waitForSuggestedPair(request, pair);
+  await page.reload();
   const offer = rowsOf(page, 'Suggestions').filter({ hasText: pair.film.title });
   await expect(offer).toHaveCount(1);
   await expect(offer.getByText(`Special ${pair.episode.episodeNumber}`)).toBeVisible();
@@ -60,6 +62,7 @@ test('E15: confirming an offer links the film file that the baseline paired with
   await create.click();
   await expect(dialog).toBeHidden();
 
+  await page.getByRole('button', { name: 'Managed links', exact: true }).click();
   const link = rowsOf(page, 'Managed links').filter({ hasText: pair.film.title });
   await expect(link).toHaveCount(1);
   await expect(link.getByText('Active', { exact: true })).toBeVisible();
@@ -79,10 +82,11 @@ test('E15: confirming an offer links the film file that the baseline paired with
 
   // A missing managed link can be recreated through the UI without deleting its registration or source.
   unlinkSync(links[0].linkPath);
-  await link.getByRole('button', { name: 'Check', exact: true }).click();
+  await mutation(request, 'post', '/api/tasks/symlinkHealthCheck/run', null);
+  await page.reload();
   await expect(link.getByText('link-lost', { exact: true })).toBeVisible();
   const repairResponse = page.waitForResponse((response) => response.url().endsWith('/retry') && response.request().method() === 'POST');
-  await link.getByRole('button', { name: 'Repair / resume', exact: true }).click();
+  await link.getByRole('button', { name: 'Repair', exact: true }).click();
   expect((await repairResponse).ok()).toBe(true);
   await expect.poll(settled, { timeout: 180_000 }).toBe('Completed');
   const repaired = (await managedLinks(request))[0];

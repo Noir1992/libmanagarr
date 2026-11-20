@@ -263,8 +263,8 @@ public sealed class SymlinkHealthService(
     /// The Radarr half: does the movie this row follows have another file now. Queueing is left to the code
     /// that owns it, because that is the one place that knows what a follow-up costs the entry — and its
     /// sentence stays on the row, because it came out of a decision rather than out of a look. What it
-    /// declined to queue is reported anyway: a source that moved while following is switched off is worth
-    /// seeing, and it is not the same thing as a row that is fine.
+    /// declined to queue is reported anyway: a source that moved while an entry is blocked still
+    /// needs to be visible.
     /// </summary>
     private async Task<bool> FollowMovedSourceAsync(
         SymlinkLink row,
@@ -289,7 +289,7 @@ public sealed class SymlinkHealthService(
             && !string.Equals(current.SourceVersion ?? SymlinkService.SourceVersionOf(fileId, current.Size), row.SourceVersion, StringComparison.Ordinal))
         {
             findings.Add(Finding(SourceReplacedCode,
-                $"{instanceName} has file {fileId} of movie {row.RadarrMovieId} now, while this entry still points at file {row.RadarrFileId}. Later upgrades are not followed for this entry, so this one is left to you."));
+                $"{instanceName} has file {fileId} of movie {row.RadarrMovieId} now, while this entry still points at file {row.RadarrFileId}. The source update is waiting for this entry to become ready for processing."));
         }
 
         return false;

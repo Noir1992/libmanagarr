@@ -63,7 +63,7 @@ public sealed class SymlinkFollowUpTests
 
         int marked = await service.MarkReplacedSourcesAsync(CancellationToken.None);
 
-        Assert.Equal(1, marked);
+        Assert.Equal(2, marked);
         SymlinkLink stored = await StoredAsync("link-1");
         Assert.Equal(SymlinkOperationStatus.Updating, stored.OperationStatus);
         // The Sonarr half is not owed again yet — the entry has to be pointed at the new file first, which
@@ -73,10 +73,10 @@ public sealed class SymlinkFollowUpTests
         SymlinkFinding finding = Assert.Single(stored.Findings);
         Assert.Equal("source-replaced", finding.Code);
         Assert.Contains($"{SymlinkFixture.UpgradedRadarrFileId}", finding.Detail);
-        // An entry whose person switched following off and one that already reflects the newest file are
-        // not the sync's to touch, and neither is an upgrade that has nothing to follow.
-        Assert.Equal(SymlinkOperationStatus.Active, (await StoredAsync("link-2")).OperationStatus);
-        Assert.Equal(SymlinkSetupStep.Completed, (await StoredAsync("link-2")).SetupStep);
+        // Legacy entries with following disabled now follow upgrades as well.
+        Assert.Equal(SymlinkOperationStatus.Updating, (await StoredAsync("link-2")).OperationStatus);
+        Assert.Equal(SymlinkSetupStep.LinkCreated, (await StoredAsync("link-2")).SetupStep);
+        Assert.True((await StoredAsync("link-2")).AutoFollowUp);
         Assert.Equal(SymlinkOperationStatus.Active, (await StoredAsync("link-3")).OperationStatus);
         Assert.Equal(SymlinkSetupStep.Completed, (await StoredAsync("link-3")).SetupStep);
     }

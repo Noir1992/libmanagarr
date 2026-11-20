@@ -224,11 +224,8 @@ public sealed class SymlinkService(
     }
 
     /// <summary>
-    /// The one decision a confirmed entry leaves to the user afterwards: whether later Radarr upgrades of
-    /// this source keep being followed. Every other field belongs to the pairing or to the file system.
-    /// Turning it on says so about the file that is current right now, too — an entry that is already
-    /// behind is marked for its new source in the same write, so switching following on is enough to start
-    /// it and does not wait for the library to be synchronized again.
+    /// Compatibility for older clients: source upgrades are always followed, including for entries
+    /// saved with the former switch disabled. Requests can no longer turn following off.
     /// </summary>
     public async Task<SymlinkLink?> SetAutoFollowUpAsync(
         string id,
@@ -241,9 +238,9 @@ public sealed class SymlinkService(
         if (link is null) return null;
         if (link.Revision != expectedRevision) throw StaleRevision();
 
-        link.AutoFollowUp = enabled;
+        link.AutoFollowUp = true;
         link.UpdatedAt = clock.GetUtcNow();
-        if (enabled && link.OperationStatus == SymlinkOperationStatus.Active && link.SetupStep == SymlinkSetupStep.Completed)
+        if (link.OperationStatus == SymlinkOperationStatus.Active && link.SetupStep == SymlinkSetupStep.Completed)
         {
             AppSettings snapshot = await settings.GetSnapshotAsync(cancellationToken);
             MediaFileSnapshot? current = SnapshotFileOf(snapshot, link);
@@ -340,15 +337,9 @@ public sealed class SymlinkService(
         return false;
     }
 
-    /// <summary>
-    /// Whether a row is owed the way onto its movie's newest file: a person has to have asked for it, and
-    /// the entry has to be standing on its own feet. A row that is still being set up, one that stopped for
-    /// a person and one whose following was switched off are left alone — the first two because their own
-    /// pass reports about them, the last because that is the switch doing what it promises.
-    /// </summary>
+    /// <summary>Every active entry follows source upgrades, regardless of the legacy stored flag.</summary>
     private static bool FollowsUpgrades(SymlinkLink link) =>
-        link.AutoFollowUp
-        && link.OperationStatus == SymlinkOperationStatus.Active;
+        link.OperationStatus == SymlinkOperationStatus.Active;
 
     /// <summary>
     /// Writes the answer that this entry is owed the way onto the file its movie has now. It is one method
@@ -384,6 +375,7 @@ public sealed class SymlinkService(
             }
             link.NamingMove = null;
         }
+        link.AutoFollowUp = true;
         link.OperationStatus = SymlinkOperationStatus.Updating;
         // Back to the file half: the entry has to be pointed at the new source before Sonarr is told about
         // it again, which is the same point a creation starts from.

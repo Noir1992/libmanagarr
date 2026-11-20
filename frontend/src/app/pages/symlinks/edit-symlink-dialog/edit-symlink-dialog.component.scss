@@ -104,9 +104,12 @@ mat-optgroup {
 }
 
 .clear-search {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   position: absolute;
   inset-block: 0;
-  right: 2px;
+  right: 10px;
   margin-block: auto;
   width: 28px;
   height: 28px;
@@ -116,9 +119,25 @@ mat-optgroup {
   --mat-icon-button-state-layer-size: 28px;
   --mat-icon-button-touch-target-size: 28px;
   .material-symbols-outlined {
+    display: block;
+    width: 18px;
+    height: 18px;
     font-size: 18px;
+    line-height: 1;
   }
   &:hover {
     color: var(--theme-accent);
+  }
+}
+
+.select-search.field-control-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px;
+  background: var(--theme-panel-bg);
+
+  input {
+    width: 100%;
   }
 }

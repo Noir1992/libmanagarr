@@ -5,7 +5,7 @@ import { LibrarySortDirection } from '../../enums/library-sort-direction';
 import { LibrarySortField } from '../../enums/library-sort-field';
 import { AppI18nService } from '../../services/app-i18n.service';
 
-type SortFieldOption = {
+export type SortFieldOption = {
   value: LibrarySortField;
   label: string;
 };
@@ -23,6 +23,8 @@ export class SortControlWidget {
   readonly sortField: InputSignal<LibrarySortField> = input.required<LibrarySortField>();
   readonly sortDirection: InputSignal<LibrarySortDirection> = input.required<LibrarySortDirection>();
 
+  readonly fieldOptions = input<readonly SortFieldOption[] | null>(null);
+
   readonly sortFieldChange: OutputEmitterRef<LibrarySortField> = output<LibrarySortField>();
   readonly sortDirectionChange: OutputEmitterRef<LibrarySortDirection> = output<LibrarySortDirection>();
 
@@ -30,12 +32,15 @@ export class SortControlWidget {
     title: this.i18n.t('sort.title'),
   }));
 
-  protected readonly options: Signal<readonly SortFieldOption[]> = computed((): readonly SortFieldOption[] => [
-    { value: LibrarySortField.ALPHABETICAL, label: this.i18n.t('sort.field.alphabetical') },
-    { value: LibrarySortField.AIRED, label: this.i18n.t('sort.field.aired') },
-    { value: LibrarySortField.ADDED, label: this.i18n.t('sort.field.added') },
-    { value: LibrarySortField.SIZE, label: this.i18n.t('sort.field.size') },
-  ]);
+  protected readonly options: Signal<readonly SortFieldOption[]> = computed(
+    (): readonly SortFieldOption[] =>
+      this.fieldOptions() ?? [
+        { value: LibrarySortField.ALPHABETICAL, label: this.i18n.t('sort.field.alphabetical') },
+        { value: LibrarySortField.AIRED, label: this.i18n.t('sort.field.aired') },
+        { value: LibrarySortField.ADDED, label: this.i18n.t('sort.field.added') },
+        { value: LibrarySortField.SIZE, label: this.i18n.t('sort.field.size') },
+      ],
+  );
 
   protected readonly directionIcon: Signal<string> = computed((): string =>
     this.sortDirection() === LibrarySortDirection.ASCENDING ? 'arrow_upward' : 'arrow_downward',

@@ -4,36 +4,45 @@
     <section class="selection-group">
       <div class="field">
         <div class="field-label-row">
-          <label for="symlink-movie-search">{{ t('symlinks.searchMovie') }}</label>
-        </div>
-        <div class="field-control-wrap search-control">
-          <input matInput #movieSearch id="symlink-movie-search" type="search" [formField]="searchFields.movie" />
-          @if (searchModel().movie) {
-            <button
-              mat-icon-button
-              type="button"
-              class="clear-search"
-              [attr.aria-label]="t('symlinks.clearMovieSearch')"
-              [title]="t('symlinks.clearMovieSearch')"
-              (click)="clearSearch('movie'); movieSearch.focus()"
-            >
-              <span class="material-symbols-outlined" aria-hidden="true">close</span>
-            </button>
-          }
-        </div>
-      </div>
-      <div class="field">
-        <div class="field-label-row">
           <label id="symlink-movie-label" for="symlink-movie">{{ t('symlinks.movie') }}</label>
         </div>
         <div class="field-control-wrap">
           <mat-select
+            panelClass="symlink-choice-panel"
             id="symlink-movie"
             aria-labelledby="symlink-movie-label"
             [hideSingleSelectionIndicator]="true"
             [formField]="fields.movie"
             (selectionChange)="onSelectionChanged()"
+            (openedChange)="$event ? movieSearch.focus() : clearSearch('movie')"
           >
+            <div
+              class="field-control-wrap search-control select-search"
+              (click)="$event.stopPropagation()"
+              (keydown)="onSearchKeydown($event)"
+            >
+              <input
+                matInput
+                #movieSearch
+                id="symlink-movie-search"
+                type="search"
+                [attr.aria-label]="t('symlinks.searchMovie')"
+                [placeholder]="t('symlinks.searchMovie')"
+                [formField]="searchFields.movie"
+              />
+              @if (searchModel().movie) {
+                <button
+                  mat-icon-button
+                  type="button"
+                  class="clear-search"
+                  [attr.aria-label]="t('symlinks.clearMovieSearch')"
+                  [title]="t('symlinks.clearMovieSearch')"
+                  (click)="clearSearch('movie'); movieSearch.focus()"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                </button>
+              }
+            </div>
             <mat-select-trigger>
               @if (selectedMovie(); as movie) {
                 {{ movie.title }} <span class="selection-instance">({{ movie.instanceName }})</span>
@@ -55,36 +64,45 @@
     <section class="selection-group">
       <div class="field">
         <div class="field-label-row">
-          <label for="symlink-special-search">{{ t('symlinks.searchSpecial') }}</label>
-        </div>
-        <div class="field-control-wrap search-control">
-          <input matInput #specialSearch id="symlink-special-search" type="search" [formField]="searchFields.special" />
-          @if (searchModel().special) {
-            <button
-              mat-icon-button
-              type="button"
-              class="clear-search"
-              [attr.aria-label]="t('symlinks.clearSpecialSearch')"
-              [title]="t('symlinks.clearSpecialSearch')"
-              (click)="clearSearch('special'); specialSearch.focus()"
-            >
-              <span class="material-symbols-outlined" aria-hidden="true">close</span>
-            </button>
-          }
-        </div>
-      </div>
-      <div class="field">
-        <div class="field-label-row">
           <label id="symlink-special-label" for="symlink-special">{{ t('symlinks.special') }}</label>
         </div>
         <div class="field-control-wrap">
           <mat-select
+            panelClass="symlink-choice-panel"
             id="symlink-special"
             aria-labelledby="symlink-special-label"
             [hideSingleSelectionIndicator]="true"
             [formField]="fields.special"
             (selectionChange)="onSelectionChanged()"
+            (openedChange)="$event ? specialSearch.focus() : clearSearch('special')"
           >
+            <div
+              class="field-control-wrap search-control select-search"
+              (click)="$event.stopPropagation()"
+              (keydown)="onSearchKeydown($event)"
+            >
+              <input
+                matInput
+                #specialSearch
+                id="symlink-special-search"
+                type="search"
+                [attr.aria-label]="t('symlinks.searchSpecial')"
+                [placeholder]="t('symlinks.searchSpecial')"
+                [formField]="searchFields.special"
+              />
+              @if (searchModel().special) {
+                <button
+                  mat-icon-button
+                  type="button"
+                  class="clear-search"
+                  [attr.aria-label]="t('symlinks.clearSpecialSearch')"
+                  [title]="t('symlinks.clearSpecialSearch')"
+                  (click)="clearSearch('special'); specialSearch.focus()"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                </button>
+              }
+            </div>
             <mat-select-trigger>
               @if (selectedSpecial(); as special) {
                 {{ special.seriesTitle }} · {{ t('symlinks.specialNumber', { episode: special.episodeNumber.toString() }) }}

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { existsSync, statSync } from 'node:fs';
 import { login, mutation, prepareAccount } from '../fixtures/app.js';
 import { configureLibrary } from '../fixtures/library.js';
-import { configureSymlinks, episode, managedLinks, rowsOf, seededPair, seriesOf } from '../fixtures/symlinks.js';
+import { configureSymlinks, episode, managedLinks, rowsOf, seededPair, seriesOf, waitForSuggestedPair } from '../fixtures/symlinks.js';
 
 test('E16: a declined pair stays declined through another sync and changes nothing on disk', async ({ request, page }) => {
   await prepareAccount(request);
@@ -12,7 +12,8 @@ test('E16: a declined pair stays declined through another sync and changes nothi
 
   await login(page);
   await page.goto('/symlinks');
-  await page.getByRole('button', { name: 'Match again', exact: true }).click();
+  await waitForSuggestedPair(request, pair);
+  await page.reload();
   const offer = rowsOf(page, 'Suggestions').filter({ hasText: pair.film.title });
   await expect(offer).toHaveCount(1);
   await offer.getByRole('button', { name: 'Decline', exact: true }).click();
@@ -24,6 +25,7 @@ test('E16: a declined pair stays declined through another sync and changes nothi
   await expect(dialog).toBeHidden();
 
   await expect(rowsOf(page, 'Suggestions')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Rejections', exact: true }).click();
   const rejection = rowsOf(page, 'Rejections').filter({ hasText: pair.film.title });
   await expect(rejection).toHaveCount(1);
   await expect(rejection.getByText('Belongs to the series, not to this shelf', { exact: true })).toBeVisible();
@@ -35,7 +37,7 @@ test('E16: a declined pair stays declined through another sync and changes nothi
       kind: kind === 'sonarr' ? 'Sonarr' : 'Radarr',
       instanceId: instances[`${kind}Instances`][0].id,
     });
-  await page.getByRole('button', { name: 'Match again', exact: true }).click();
+  await page.reload();
   await expect(rowsOf(page, 'Suggestions')).toHaveCount(0);
   await expect(rejection).toHaveCount(1);
 
