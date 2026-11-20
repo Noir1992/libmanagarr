@@ -95,7 +95,7 @@ public sealed class SonarrSpecialIntegrationService(
                     _ => "sonarr-api-error"
                 };
                 Pause(link, code,
-                    $"{instance.Name} responded during {open} (series {link.SonarrSeriesId}, episode {link.SonarrEpisodeId}, episode file {link.SonarrFileId?.ToString(CultureInfo.InvariantCulture) ?? "none"}): {exception.Message}");
+                    $"{instance.Name} responded during {open} (series ID {link.SonarrSeriesId}, episode ID {link.SonarrEpisodeId}, S{link.SeasonNumber:00}E{link.EpisodeNumber:00}, episode file ID {link.SonarrFileId?.ToString(CultureInfo.InvariantCulture) ?? "none"}): {exception.Message}");
                 outcome = exception.StatusCode == System.Net.HttpStatusCode.TooManyRequests || (int)exception.StatusCode.Value >= 500
                     ? SymlinkSetupOutcome.Waiting : SymlinkSetupOutcome.Blocked;
             }

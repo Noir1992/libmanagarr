@@ -138,6 +138,25 @@ public sealed class SonarrClientSymlinkWriteTests
     }
 
     [Fact]
+    public async Task MonitoringUsesTheInternalIdRatherThanTheSeasonEpisodeNumber()
+    {
+        StubArrHandler handler = new(new Dictionary<string, string>
+        {
+            ["GET /api/v3/episode/17965"] = """{"id":17965,"seriesId":382,"seasonNumber":0,"episodeNumber":2,"monitored":true}""",
+            ["PUT /api/v3/episode/17965"] = """{"id":17965,"seriesId":382,"seasonNumber":0,"episodeNumber":2,"monitored":false}"""
+        });
+
+        SonarrEpisodeResource? episode = await new SonarrClient(new HttpClient(handler))
+            .SetEpisodeMonitoredAsync(CreateSonarr(), 17965, false, CancellationToken.None);
+
+        RecordedRequest write = Assert.Single(handler.Requests, request => request.Method == HttpMethod.Put);
+        Assert.Equal("/api/v3/episode/17965", write.Path);
+        Assert.Equal(17965, episode?.Id);
+        Assert.Equal(2, episode?.EpisodeNumber);
+        Assert.False(episode?.Monitored);
+    }
+
+    [Fact]
     public async Task Monitoring_ChangesOneFieldOnSonarrsOwnEpisodeDocument()
     {
         StubArrHandler handler = new(new Dictionary<string, string>
@@ -154,7 +173,7 @@ public sealed class SonarrClientSymlinkWriteTests
                   "runtime": 132
                 }
                 """,
-            ["PUT /api/v3/episode"] = """
+            ["PUT /api/v3/episode/5"] = """
                 { "id": 5, "seriesId": 12, "seasonNumber": 0, "episodeNumber": 1, "monitored": false }
                 """
         });
@@ -174,7 +193,7 @@ public sealed class SonarrClientSymlinkWriteTests
             write =>
             {
                 Assert.Equal(HttpMethod.Put, write.Method);
-                Assert.Equal("/api/v3/episode", write.Path);
+                Assert.Equal("/api/v3/episode/5", write.Path);
                 Assert.Equal("secret", write.ApiKey);
                 Assert.Contains("\"monitored\":false", write.Body);
                 Assert.DoesNotContain("\"monitored\":true", write.Body);

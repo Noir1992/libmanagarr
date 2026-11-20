@@ -22,6 +22,13 @@ test('E15: confirming an offer links the film file that the baseline paired with
   test.setTimeout(480_000);
   await prepareAccount(request);
   const pair = await seededPair(request);
+  // Exercise the actual monitoring write: an already-unmonitored seed would skip that API call.
+  const monitoring = await request.put(`http://sonarr:8989/api/v3/episode/${pair.episode.id}`, {
+    headers: { 'X-Api-Key': apiKey },
+    data: { ...pair.episode, monitored: true },
+  });
+  expect(monitoring.ok(), await monitoring.text()).toBe(true);
+  expect((await episode(request, pair.episode.id)).monitored).toBe(true);
   await configureLibrary(request);
   await configureSymlinks(request);
   const naming = await arrGet<{ id: number; [key: string]: unknown }>(request, 'sonarr', '/config/naming');

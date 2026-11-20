@@ -305,7 +305,7 @@ public sealed class SonarrClient(HttpClient httpClient)
             ?? throw new InvalidOperationException($"Sonarr answered without an episode document for {episodeId}.");
         episode["monitored"] = monitored;
 
-        return await PutNodeAsync<SonarrEpisodeResource>(instance, "/api/v3/episode", episode, cancellationToken);
+        return await PutNodeAsync<SonarrEpisodeResource>(instance, $"/api/v3/episode/{episodeId}", episode, cancellationToken);
     }
 
     /// <summary>

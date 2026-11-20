@@ -51,7 +51,8 @@ public sealed class SonarrSpecialIntegrationServiceTests
         SymlinkFinding finding = Assert.Single(stopped.Findings);
         Assert.Equal(code, finding.Code);
         Assert.Contains("MonitoringDisabled", finding.Detail);
-        Assert.Contains("episode 5", finding.Detail);
+        Assert.Contains("episode ID 5", finding.Detail);
+        Assert.Contains("S00E01", finding.Detail);
         Assert.Contains("/api/v3/episode/5", finding.Detail);
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stopped.SetupStep);
 
@@ -538,7 +539,7 @@ public sealed class SonarrSpecialIntegrationServiceTests
             $$"""{ "id": {{EpisodeId}}, "seriesId": {{SeriesId}}, "seasonNumber": 0, "episodeNumber": 1, "monitored": false }""",
             $$"""{ "id": {{EpisodeId}}, "seriesId": {{SeriesId}}, "seasonNumber": 0, "episodeNumber": 1, "monitored": false, "episodeFileId": {{EpisodeFileId}} }"""
         ],
-        ["PUT /api/v3/episode"] = [$$"""{ "id": {{EpisodeId}}, "monitored": false }"""],
+        [$"PUT /api/v3/episode/{EpisodeId}"] = [$$"""{ "id": {{EpisodeId}}, "monitored": false }"""],
         ["POST /api/v3/command"] = ["""{ "id": 91, "status": "queued" }"""],
         ["GET /api/v3/command/91"] =
         [
