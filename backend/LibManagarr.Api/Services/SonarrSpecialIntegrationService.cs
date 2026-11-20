@@ -65,6 +65,7 @@ public sealed class SonarrSpecialIntegrationService(
         while (open != SymlinkSetupStep.Completed)
         {
             SymlinkSetupOutcome outcome;
+            link.Findings.RemoveAll(value => value.Code is "arr-unreachable" or "sonarr-resource-not-found" or "sonarr-access-denied" or "sonarr-api-error");
             try
             {
                 outcome = open switch
@@ -80,6 +81,23 @@ public sealed class SonarrSpecialIntegrationService(
                     _ => Pause(link, "setup-step-unknown",
                         $"The entry names setup step {(int)open}, which this version cannot act on.")
                 };
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (HttpRequestException exception) when (exception.StatusCode is { })
+            {
+                string code = exception.StatusCode switch
+                {
+                    System.Net.HttpStatusCode.NotFound => "sonarr-resource-not-found",
+                    System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden => "sonarr-access-denied",
+                    _ => "sonarr-api-error"
+                };
+                Pause(link, code,
+                    $"{instance.Name} responded during {open} (series ID {link.SonarrSeriesId}, episode ID {link.SonarrEpisodeId}, S{link.SeasonNumber:00}E{link.EpisodeNumber:00}, episode file ID {link.SonarrFileId?.ToString(CultureInfo.InvariantCulture) ?? "none"}): {exception.Message}");
+                outcome = exception.StatusCode == System.Net.HttpStatusCode.TooManyRequests || (int)exception.StatusCode.Value >= 500
+                    ? SymlinkSetupOutcome.Waiting : SymlinkSetupOutcome.Blocked;
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
             {
