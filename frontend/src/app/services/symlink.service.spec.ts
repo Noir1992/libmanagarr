@@ -494,6 +494,64 @@ describe('SymlinkService', () => {
     expect(service.linkStates()['link-1'].error).toBe('The entry changed.');
   });
 
+  for (const fails of [false, true]) {
+    it(`retains repair warnings and busy state beyond acceptance until the worker ${fails ? 'reports a failure' : 'finishes'}`, async () => {
+      const finding = { code: 'metadata-mapping-unavailable', detail: 'Original problem.', detectedAt: '2026-11-20T12:00:00Z' };
+      const original = { ...link('link-1', 3), findings: [finding] };
+      const read = async (rows: SymlinkLink[]): Promise<void> => {
+        const pending = service.refreshProgress();
+        http.expectOne(`${base}/links`).flush(rows);
+        await settle();
+        http.expectOne(`${base}/suggestions`).flush([]);
+        http.expectOne(`${base}/rejections`).flush([]);
+        await pending;
+      };
+      await read([original]);
+      const retry = service.retryLink('link-1', 3);
+      expect(service.linkStates()['link-1'].repairing).toBeTrue();
+      const queued: SymlinkLink = { ...link('link-1', 4), setupStep: 'MonitoringDisabled' };
+      http.expectOne(`${base}/links/link-1/retry`).flush(queued);
+      await retry;
+      expect(service.links()[0].findings).toEqual([finding]);
+      expect(service.linkStates()['link-1'].busy).toBeTrue();
+      expect(service.linkStates()['link-1'].success).toBeFalse();
+      await expectAsync(service.retryLink('link-1', 4)).toBeRejected();
+      http.expectNone(`${base}/links/link-1/retry`);
+
+      // An older completed snapshot must not finish a newer repair attempt.
+      await read([link('link-1', 3)]);
+      expect(service.links()[0].findings).toEqual([finding]);
+      expect(service.linkStates()['link-1'].repairing).toBeTrue();
+      // A failed refresh is not an outcome of the background repair.
+      const failedRead = service.refreshProgress();
+      http.expectOne(`${base}/links`).flush('Unavailable', { status: 503, statusText: 'Unavailable' });
+      await failedRead;
+      expect(service.linkStates()['link-1'].repairing).toBeTrue();
+      await read([{ ...queued, revision: 5, setupStep: 'RescanRequested' }]);
+      expect(service.links()[0].findings).toEqual([finding]);
+      expect(service.linkStates()['link-1'].repairing).toBeTrue();
+      const nextFinding = { ...finding, detail: 'Repair did not fix the problem.' };
+      await read([
+        fails
+          ? { ...queued, revision: 6, setupStep: 'MetadataMatched', findings: [nextFinding] }
+          : { ...link('link-1', 6), findings: [{ ...finding, code: 'language-mapping-unavailable', detail: 'Telugu retained.' }] },
+      ]);
+      expect(service.linkStates()['link-1'].busy).toBeFalse();
+      expect(service.linkStates()['link-1'].repairing).not.toBeTrue();
+      expect(service.linkStates()['link-1'].success).toBe(!fails);
+      expect(service.links()[0].findings[0].detail).toBe(fails ? nextFinding.detail : 'Telugu retained.');
+    });
+  }
+
+  it('clears the repair lock after a rejected request and exposes the refusal', async () => {
+    const pending = service.retryLink('link-1', 3).catch((error: Error) => error.message);
+    http.expectOne(`${base}/links/link-1/retry`).flush({ detail: 'Repair refused.' }, { status: 400, statusText: 'Bad Request' });
+    expect(await pending).toBe('Repair refused.');
+    expect(service.linkStates()['link-1'].busy).toBeFalse();
+    expect(service.linkStates()['link-1'].repairing).not.toBeTrue();
+    expect(service.linkStates()['link-1'].error).toBe('Repair refused.');
+  });
+
   it('keeps deletion locked until the refreshed suggestions and removed row can be shown together', async () => {
     const load = service.loadOverview();
     http.expectOne(`${base}/links`).flush([link('link-1', 3)]);

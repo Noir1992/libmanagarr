@@ -829,6 +829,23 @@ describe('SymlinksPage', () => {
     });
   }
 
+  it('keeps Repair visible and spinning after acceptance while the background worker is running', async () => {
+    stub.links.set([createLink({ findings: [], setupStep: 'RescanRequested' })]);
+    stub.linkStates.set({ 'link-1': { busy: true, repairing: true } });
+    fixture.detectChanges();
+    const button = actionButtons(1).find((candidate) => candidate.textContent?.includes('Repair'))!;
+    expect(button).toBeDefined();
+    expect(button.disabled).toBeTrue();
+    expect(button.querySelector('.feedback-icon.spinning')).not.toBeNull();
+    await fixture.componentInstance['repairAsync'](createLink());
+    expect(stub.retryLink).not.toHaveBeenCalled();
+
+    stub.linkStates.set({ 'link-1': { busy: false } });
+    stub.links.set([createLink({ findings: [], setupStep: 'Completed' })]);
+    fixture.detectChanges();
+    expect(actionButtons(1).some((candidate) => candidate.textContent?.includes('Repair'))).toBeFalse();
+  });
+
   it('retains a locked deletion and swaps it for its suggestion after polling completes', async () => {
     fixture.destroy();
     spyOnProperty(globalThis.document, 'hidden', 'get').and.returnValue(false);

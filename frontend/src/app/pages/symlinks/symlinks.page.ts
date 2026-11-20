@@ -292,7 +292,7 @@ export class SymlinksPage implements OnInit {
     const timer = globalThis.setInterval(() => {
       if (
         !globalThis.document.hidden &&
-        this.symlinks.links().some((link) => link.operationStatus !== 'Active' || link.setupStep !== 'Completed')
+        this.symlinks.links().some((link) => this.isRepairing(link) || link.operationStatus !== 'Active' || link.setupStep !== 'Completed')
       )
         void this.symlinks.refreshProgress();
     }, 5000);
@@ -454,6 +454,7 @@ export class SymlinksPage implements OnInit {
 
   protected needsRepair(link: SymlinkLink): boolean {
     return (
+      this.isRepairing(link) ||
       link.operationStatus === 'Conflict' ||
       !!this.linkState(link.id).error ||
       link.findings.some(
@@ -461,6 +462,10 @@ export class SymlinksPage implements OnInit {
           !this.isInformationalFinding(finding) && !['renaming-disabled', 'source-replaced', 'restored-unchecked'].includes(finding.code),
       )
     );
+  }
+
+  protected isRepairing(link: SymlinkLink): boolean {
+    return this.repairing().has(link.id) || this.linkState(link.id).repairing === true;
   }
 
   protected async repairAsync(link: SymlinkLink): Promise<void> {

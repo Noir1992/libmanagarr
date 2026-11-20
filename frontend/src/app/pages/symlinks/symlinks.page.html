@@ -327,7 +327,7 @@
                           >
                             <span class="button-content">
                               <span>{{ t('symlinks.repair') }}</span>
-                              <app-feedback-icon [state]="repairing().has(link.id) ? 'loading' : null" variant="inline" />
+                              <app-feedback-icon [state]="isRepairing(link) ? 'loading' : null" variant="inline" />
                             </span>
                           </button>
                         }

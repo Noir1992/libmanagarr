@@ -8,7 +8,7 @@ import {
   SymlinkSettingsInput,
 } from '../interfaces/symlinks/symlink-settings';
 import { SymlinkSuggestion } from '../interfaces/symlinks/symlink-suggestion';
-import { ExistingLinkConfirmation, SymlinkLink, SymlinkLinkPlan } from '../interfaces/symlinks/symlink-link';
+import { ExistingLinkConfirmation, SymlinkFinding, SymlinkLink, SymlinkLinkPlan } from '../interfaces/symlinks/symlink-link';
 import {
   PreviewSymlinkLinkRequest,
   SaveSymlinkLinkRequest,
@@ -23,6 +23,7 @@ import { AppI18nService } from './app-i18n.service';
 export interface SymlinkActionState {
   busy?: boolean;
   deleting?: boolean;
+  repairing?: boolean;
   error?: string | null;
   success?: boolean;
 }
@@ -49,6 +50,7 @@ export class SymlinkService {
   private readonly rejectionsState = signal<SymlinkRejection[]>([]);
   private readonly suggestionBusy = signal<Record<string, SymlinkActionState>>({});
   private readonly linkBusy = signal<Record<string, SymlinkActionState>>({});
+  private readonly repairAttempts = signal<Record<string, { revision: number | null; findings: SymlinkFinding[] }>>({});
   private readonly capabilityBusy = signal<Record<string, SymlinkActionState>>({});
 
   readonly settings = this.settingsState.asReadonly();
@@ -56,10 +58,25 @@ export class SymlinkService {
   readonly pendingCount = computed(() =>
     this.settings()?.enabled === false ? 0 : this.suggestions().filter((value) => value.status === 'Pending').length,
   );
-  readonly links = this.linksState.asReadonly();
+  readonly links = computed(() =>
+    this.linksState().map((link) => {
+      const attempt = this.repairAttempts()[link.id];
+      if (!attempt) return link;
+      // An accepted retry has not verified the old findings yet. Keep them until the worker answers.
+      const findings = new Map(attempt.findings.map((finding) => [finding.code, finding]));
+      for (const finding of link.findings) findings.set(finding.code, finding);
+      return { ...link, findings: [...findings.values()] };
+    }),
+  );
   readonly rejections = this.rejectionsState.asReadonly();
   readonly suggestionStates = this.suggestionBusy.asReadonly();
-  readonly linkStates = this.linkBusy.asReadonly();
+  readonly linkStates = computed(() => {
+    const states = { ...this.linkBusy() };
+    for (const id of Object.keys(this.repairAttempts())) {
+      states[id] = { ...states[id], busy: true, repairing: true, success: false };
+    }
+    return states;
+  });
   readonly capabilityStates = this.capabilityBusy.asReadonly();
 
   readonly capabilityChecking = signal(false);
@@ -329,14 +346,55 @@ export class SymlinkService {
   }
 
   async retryLink(id: string, revision: number): Promise<SymlinkLink> {
-    const link = await this.perform(
-      this.linkBusy,
-      id,
-      () => firstValueFrom(this.http.post<SymlinkLink>(`${this.url}/links/${encodeURIComponent(id)}/retry`, { revision })),
-      () => this.readLinks(),
-    );
-    this.linksState.update((values) => values.map((value) => (value.id === link.id ? link : value)));
-    return link;
+    if (this.repairAttempts()[id]) throw new Error('A repair is already in progress.');
+    const original = this.linksState().find((link) => link.id === id);
+    this.repairAttempts.update((attempts) => ({ ...attempts, [id]: { revision: null, findings: original?.findings ?? [] } }));
+    try {
+      const link = await this.perform(
+        this.linkBusy,
+        id,
+        () => firstValueFrom(this.http.post<SymlinkLink>(`${this.url}/links/${encodeURIComponent(id)}/retry`, { revision })),
+        () => this.readLinks(),
+      );
+      this.linksState.update((values) => values.map((value) => (value.id === link.id && value.revision <= link.revision ? link : value)));
+      this.repairAttempts.update((attempts) => ({ ...attempts, [id]: { ...attempts[id], revision: link.revision } }));
+      this.reconcileRepairs(this.linksState());
+      return link;
+    } catch (error) {
+      this.removeRepair(id);
+      throw error;
+    }
+  }
+
+  private removeRepair(id: string): void {
+    this.repairAttempts.update((attempts) => {
+      const remaining = { ...attempts };
+      delete remaining[id];
+      return remaining;
+    });
+  }
+
+  private reconcileRepairs(links: SymlinkLink[]): void {
+    for (const [id, attempt] of Object.entries(this.repairAttempts())) {
+      if (attempt.revision === null) continue;
+      const link = links.find((value) => value.id === id);
+      if (!link) {
+        this.removeRepair(id);
+        continue;
+      }
+      if (link.revision < attempt.revision) continue;
+      const blocked =
+        link.operationStatus === 'Conflict' ||
+        link.findings.some(
+          (finding) =>
+            !['language-mapping-unavailable', 'renaming-disabled', 'source-replaced', 'restored-unchecked'].includes(finding.code),
+        );
+      const completed = link.operationStatus === 'Active' && link.setupStep === 'Completed';
+      if (blocked || completed) {
+        this.removeRepair(id);
+        this.updateState(this.linkBusy, id, { success: completed && !blocked });
+      }
+    }
   }
 
   async refreshCount(): Promise<void> {
@@ -367,6 +425,7 @@ export class SymlinkService {
       return;
     }
     // No awaited work between these writes: the view receives the lists in the same render.
+    this.reconcileRepairs(links);
     this.linksState.set(links);
     this.suggestionsState.set(suggestions);
     this.rejectionsState.set(rejections);
@@ -402,7 +461,10 @@ export class SymlinkService {
   private readLinks(): Promise<void> {
     const version = ++this.linkReadVersion;
     return firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`)).then((links) => {
-      if (version === this.linkReadVersion) this.linksState.set(links);
+      if (version === this.linkReadVersion) {
+        this.reconcileRepairs(links);
+        this.linksState.set(links);
+      }
     });
   }
 
