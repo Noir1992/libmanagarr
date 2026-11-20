@@ -34,6 +34,11 @@ export class MediaDetailsDialogWidget {
     const file = d.hasFile === false ? null : d.mediaDetails;
     const size = d.hasFile === false ? null : (file?.size ?? d.size);
     const na = this.i18n.t('common.na');
+    const sizeInGiB = size != null && size >= 1024 ** 3;
+    const formattedSize =
+      size == null
+        ? na
+        : `${(size / 1024 ** (sizeInGiB ? 3 : 2)).toLocaleString(this.settings.localeId(), { maximumFractionDigits: 2 })} ${sizeInGiB ? 'GiB' : 'MiB'}`;
     const value = (v: string | number | null | undefined) => (v == null || v === '' ? na : String(v));
     const list = (v: string[] | undefined) => (v?.length ? v.join(', ') : na);
     const date = (v: string | null | undefined) => (v ? formatDate(v, 'medium', this.settings.localeId()) : na);
@@ -102,10 +107,7 @@ export class MediaDetailsDialogWidget {
       row('library.details.releaseGroup', value(file?.releaseGroup)),
       row('library.details.filePath', value(file?.relativePath)),
       row('library.details.createdAt', date(file?.createdAt)),
-      row(
-        'library.details.size',
-        size == null ? na : `${(size / 1024 ** 3).toLocaleString(this.settings.localeId(), { maximumFractionDigits: 2 })} GiB`,
-      ),
+      row('library.details.size', formattedSize),
     );
     if (d.episodeNumber == null) {
       rows.push(row('filter.tags', list(d.tags)));

@@ -87,7 +87,7 @@ describe('Media detail dialogs', () => {
 
   for (const [size, hasFile, expected] of [
     [2.5 * 1024 ** 3, true, '2.5 GiB'],
-    [0, true, '0 GiB'],
+    [0, true, '0 MiB'],
     [1024 ** 3, false, 'N/A'],
   ] as const) {
     it(`shows movie size ${expected} without detailed file metadata`, async () => {
@@ -105,6 +105,30 @@ describe('Media detail dialogs', () => {
         (row) => row.querySelector('dt')?.textContent?.trim() === 'File size',
       );
       expect(row?.querySelector('dd')?.textContent?.trim()).toBe(expected);
+    });
+  }
+
+  for (const [size, locale, expected] of [
+    [112.64 * 1024 ** 2, 'en-US', '112.64 MiB'],
+    [112.64 * 1024 ** 2, 'de-DE', '112,64 MiB'],
+    [1024 ** 3 - 1, 'en-US', '1,024 MiB'],
+    [1024 ** 3, 'en-US', '1 GiB'],
+    [2.5 * 1024 ** 3, 'en-US', '2.5 GiB'],
+    [null, 'en-US', 'N/A'],
+  ] as const) {
+    it(`shows episode file size ${size} as ${expected} for ${locale}`, () => {
+      TestBed.configureTestingModule({
+        providers: [
+          {
+            provide: MAT_DIALOG_DATA,
+            useValue: { ...movie, episodeNumber: 1, seasonNumber: 1, mediaDetails: { ...movie.mediaDetails, size } },
+          },
+          { provide: MatDialogRef, useValue: { close: () => undefined } },
+          { provide: AppSettingsService, useValue: { localeId: signal(locale) } },
+        ],
+      });
+      const dialog = TestBed.runInInjectionContext(() => new MediaDetailsDialogWidget());
+      expect(dialog['rows']().find((row) => row.key === 'library.details.size')?.value).toBe(expected);
     });
   }
 
