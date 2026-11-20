@@ -64,6 +64,7 @@
       <section class="card">
         <header class="card-header">
           <h2 class="card-title" id="symlinks-suggestions-title">{{ suggestionsTitle() }}</h2>
+          <span class="card-subtitle">({{ offeredSuggestions().length }})</span>
           <div class="card-header-actions">
             <button
               type="button"
@@ -221,6 +222,7 @@
       <section class="card">
         <header class="card-header">
           <h2 class="card-title" id="symlinks-links-title">{{ linksTitle() }}</h2>
+          <span class="card-subtitle">({{ links().length }})</span>
           <div class="card-header-actions">
             <button
               type="button"
@@ -349,6 +351,7 @@
       <section class="card">
         <header class="card-header">
           <h2 class="card-title" id="symlinks-rejections-title">{{ rejectionsTitle() }}</h2>
+          <span class="card-subtitle">({{ rejections().length }})</span>
           <div class="card-header-actions">
             <button
               type="button"
