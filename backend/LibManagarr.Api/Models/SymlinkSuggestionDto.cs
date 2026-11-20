@@ -18,6 +18,8 @@ public sealed class SymlinkSuggestionDto
 
     public int RadarrMovieId { get; set; }
 
+    public IReadOnlyList<string> SearchTitles { get; set; } = [];
+
     public string? RadarrMovieTitle { get; set; }
 
     public int? RadarrFileId { get; set; }
@@ -72,6 +74,8 @@ public sealed class SymlinkRejectionDto
     public string RadarrInstanceId { get; set; } = string.Empty;
 
     public int RadarrMovieId { get; set; }
+
+    public IReadOnlyList<string> SearchTitles { get; set; } = [];
 
     public string? RadarrMovieTitle { get; set; }
 

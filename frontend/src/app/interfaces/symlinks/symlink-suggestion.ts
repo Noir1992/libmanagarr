@@ -23,6 +23,7 @@ export interface SymlinkSuggestion {
   radarrInstanceId: string;
   radarrInstanceName?: string | null;
   radarrMovieId: number;
+  searchTitles?: string[];
   radarrMovieTitle: string | null;
   radarrFileId: number | null;
   radarrFilePath: string | null;

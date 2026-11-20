@@ -1,3 +1,4 @@
+import { MediaTitlesService } from '../../services/media-titles.service';
 import { signal, WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject } from 'rxjs';
@@ -87,6 +88,7 @@ describe('LibraryPage instance filters', () => {
     radarrInstances = signal([{ id: 'radarr-1', name: 'Radarr', baseUrl: 'http://radarr', apiKey: 'test' }]);
     TestBed.configureTestingModule({
       providers: [
+        { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
         { provide: SonarrApiService, useValue: sonarr },
         { provide: RadarrApiService, useValue: radarr },
         { provide: AppI18nService, useValue: { t: (key: string) => key } },

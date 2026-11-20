@@ -1,3 +1,4 @@
+import { MediaTitlesService } from '../../services/media-titles.service';
 import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { MatMenuHarness } from '@angular/material/menu/testing';
 import { LibrarySortDirection } from '../../enums/library-sort-direction';
@@ -208,7 +209,12 @@ describe('SymlinksPage', () => {
 
     await TestBed.configureTestingModule({
       imports: [SymlinksPage],
-      providers: [provideRouter([]), { provide: SymlinkService, useValue: stub }, { provide: MatDialog, useValue: dialog }],
+      providers: [
+        { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
+        provideRouter([]),
+        { provide: SymlinkService, useValue: stub },
+        { provide: MatDialog, useValue: dialog },
+      ],
     }).compileComponents();
 
     TestBed.inject(AppI18nService).setLanguage('en');

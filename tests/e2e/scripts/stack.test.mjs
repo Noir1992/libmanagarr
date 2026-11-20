@@ -105,9 +105,9 @@ test('the complete catalog restores the full baseline once and keeps external st
   }
   assert.equal(calls.filter((call) => call[1] === 'tar').length, 1);
   assert.equal(starts.get('runner'), 1);
-  assert.equal(starts.get('app'), 20);
-  assert.equal(starts.get('sonarr'), 3);
-  assert.equal(starts.get('radarr'), 2);
+  assert.equal(starts.get('app'), 21);
+  assert.equal(starts.get('sonarr'), 4);
+  assert.equal(starts.get('radarr'), 3);
   assert.equal(starts.get('seerr'), 3);
   assert.equal(starts.get('metadata'), 1);
 });

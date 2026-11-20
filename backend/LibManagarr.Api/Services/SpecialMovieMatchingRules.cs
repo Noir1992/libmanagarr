@@ -42,7 +42,7 @@ public sealed record SpecialMovieMatch(
 /// </summary>
 public static class SpecialMovieMatchingRules
 {
-    public const int MatcherVersion = 6;
+    public const int MatcherVersion = 7;
 
     public const string FilenameTitleCode = "filename-title";
     public const string SeriesAliasTitleCode = "series-alias-title";
@@ -87,8 +87,21 @@ public static class SpecialMovieMatchingRules
         string radarrInstanceId,
         RadarrMovieSnapshot movie)
     {
-        string normalizedSeries = Normalize(series.Title);
-        string normalizedEpisode = Normalize(episode.Title);
+        foreach (string seriesTitle in new[] { series.Title }.Concat(MediaTitleResolver.Candidates(series.Title, series.Titles, AppLanguage.En)).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (string episodeTitle in new[] { episode.Title }.Concat(MediaTitleResolver.Candidates(episode.Title, episode.Titles, AppLanguage.En)).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                SpecialMovieMatch? match = MatchTitles(sonarrInstanceId, series, episode, seasonNumber, radarrInstanceId, movie, seriesTitle, episodeTitle);
+                if (match is not null) return match;
+            }
+        return null;
+    }
+
+    private static SpecialMovieMatch? MatchTitles(string sonarrInstanceId, SonarrSeriesSnapshot series,
+        SonarrEpisodeSnapshot episode, int seasonNumber, string radarrInstanceId, RadarrMovieSnapshot movie,
+        string seriesTitle, string episodeTitle)
+    {
+        string normalizedSeries = Normalize(seriesTitle);
+        string normalizedEpisode = Normalize(episodeTitle);
         if (normalizedEpisode.Length == 0) return null;
         if (!TrySpecialPart(normalizedEpisode, normalizedSeries, out string specialPart)) return null;
         bool episodeCarriesSeries = StartsWithSeries(normalizedEpisode, normalizedSeries);
@@ -265,7 +278,7 @@ public static class SpecialMovieMatchingRules
     {
         string main = Normalize(movie.Title);
         if (main.Length > 0) yield return (main, MovieTitleSource.Main, movie.Title);
-        foreach (string alternative in movie.AlternativeTitles)
+        foreach (string alternative in MediaTitleResolver.Candidates(movie.Title, movie.Titles, AppLanguage.En, movie.AlternativeTitles))
         {
             string normalized = Normalize(alternative);
             if (normalized.Length > 0 && !string.Equals(normalized, main, StringComparison.Ordinal))

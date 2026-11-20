@@ -36,7 +36,11 @@ Not affiliated with the Sonarr or Radarr projects.
   crash-safe create/edit/delete with full audit trail.
 - ***Backup & restore*** — encrypted (AES-256-GCM) export/import of settings and database as a single
   `.lmbak` archive, with preview, rollback journal and automatic host restart.
-- ***Multiple UI languages*** — English, German and French.
+- ***Multiple UI languages*** — English, German and French. Library and symlink titles follow the
+  selected language when translations are available, with cached fallback titles and background
+  loading. Radarr movie titles are supported; Sonarr titles depend on explicitly supplied translations
+  (the stable episode API provides none). Matching decisions and media paths stay independent of the
+  display language.
 
 ---
 

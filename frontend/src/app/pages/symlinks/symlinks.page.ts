@@ -1,5 +1,6 @@
+import { MediaTitlesService } from '../../services/media-titles.service';
 import { SearchClearWidget } from '../../widgets/search-clear/search-clear.widget';
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, Signal, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, untracked, DestroyRef, inject, OnInit, Signal, signal } from '@angular/core';
 import { form, FormField } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
@@ -284,6 +285,18 @@ export class SymlinksPage implements OnInit {
     globalThis.localStorage.setItem(SymlinksPage.SECTIONS_KEY, JSON.stringify(this.expandedSections()));
   }
 
+  private readonly mediaTitles = inject(MediaTitlesService);
+
+  constructor() {
+    let previous = this.mediaTitles.revision();
+    effect(() => {
+      const revision = this.mediaTitles.revision();
+      if (revision === previous) return;
+      previous = revision;
+      untracked(() => void this.loadAsync());
+    });
+  }
+
   ngOnInit(): void {
     const [field, direction] = (globalThis.localStorage.getItem(SymlinksPage.SORT_KEY) ?? '').split(':');
     if (field === LibrarySortField.ALPHABETICAL || field === LibrarySortField.ADDED) this.sortField.set(field);
@@ -306,13 +319,22 @@ export class SymlinksPage implements OnInit {
   }
 
   private matches(
-    row: { radarrMovieTitle: string | null; sonarrSeriesTitle: string | null; radarrInstanceId: string; sonarrInstanceId: string },
+    row: {
+      searchTitles?: string[];
+      sonarrEpisodeTitle?: string | null;
+      radarrMovieTitle: string | null;
+      sonarrSeriesTitle: string | null;
+      radarrInstanceId: string;
+      sonarrInstanceId: string;
+    },
     status: string,
   ): boolean {
     const filter = this.filtersModel();
     return (
       (!filter.title ||
-        `${row.radarrMovieTitle ?? ''} ${row.sonarrSeriesTitle ?? ''}`.toLocaleLowerCase().includes(filter.title.toLocaleLowerCase())) &&
+        `${row.radarrMovieTitle ?? ''} ${row.sonarrSeriesTitle ?? ''} ${row.sonarrEpisodeTitle ?? ''} ${(row.searchTitles ?? []).join(' ')}`
+          .toLocaleLowerCase()
+          .includes(filter.title.toLocaleLowerCase())) &&
       (!filter.status || status === filter.status) &&
       (!filter.instance || row.radarrInstanceId === filter.instance || row.sonarrInstanceId === filter.instance)
     );

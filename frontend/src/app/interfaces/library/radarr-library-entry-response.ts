@@ -1,6 +1,7 @@
 import { LibraryMediaDetails } from './library-media-details';
 
 export interface RadarrLibraryEntryResponse {
+  searchTitles?: string[];
   instanceName: string;
   movieId: number;
   movieTitle: string;

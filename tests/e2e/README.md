@@ -64,7 +64,7 @@ the catalog order. Adding a writing case requires declaring its mutated resource
 The LibManagarr sync schedule is disabled by default. Preparation may use regular
 APIs; the user flow under test always happens in the browser.
 
-`npm run e2e` runs all 20 scenarios by default, exactly like the CI.
+`npm run e2e` runs all 21 scenarios by default, exactly like the CI.
 `--scenario E12` or `--scenario backup-restore` selects exactly one case locally,
 with the same fresh application state and verified service baseline. Unknown options, an empty selection, duplicate catalog
 entries and missing specs fail before anything is built. The binding catalog lives
@@ -106,6 +106,8 @@ ids into `seeds/expected-library.json`; `bootstrap/verify.mjs` then demands the 
 back from every restored seed. Nothing is invented while a scenario runs, and a
 baseline without such a pair is refused instead of shipping two cases that could
 never find an offer.
+
+The E17 scenario switches from English to German after synchronization and checks cached titles, alternative-title search and stable symlink suggestions without another sync.
 
 ## Diagnostics and reset
 
@@ -245,7 +247,7 @@ runs with 18/18 passed scenarios each, 1,445 and 1,430 seconds. Both ran in
 parallel on Windows/Docker Desktop and were fully cleaned up. There are
 additionally 19 infrastructure tests, plus three repetitions of the filter case
 that was corrected after the Linux diagnosis and the statistics case. The final
-Linux acceptance happens in the normal CI run with all 20 scenarios.
+Linux acceptance happens in the normal CI run with all 21 scenarios.
 
 Local evidence for the symlink pair from 2026-11-06: one complete offline run with
 20/20 passed scenarios in 803 seconds, after a run of every case that had not

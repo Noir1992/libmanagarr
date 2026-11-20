@@ -6,6 +6,8 @@ public sealed class SonarrEpisodeSnapshot
 
     public int EpisodeNumber { get; set; }
 
+    public MediaTitles Titles { get; set; } = new();
+
     public string Title { get; set; } = string.Empty;
 
     public DateTimeOffset? AirDateUtc { get; set; }

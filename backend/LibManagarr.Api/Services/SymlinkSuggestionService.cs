@@ -361,13 +361,15 @@ public sealed class SymlinkSuggestionService(
         StringBuilder builder = new();
         foreach (SonarrSeriesSnapshot series in snapshot.Series.OrderBy(series => series.SeriesId))
         {
-            builder.Append('S').Append(series.SeriesId).Append(':').Append(series.Title).Append('\n');
+            builder.Append('S').Append(series.SeriesId).Append(':').Append(series.Title)
+                .Append(':').Append(string.Join('|', MediaTitleResolver.Candidates(series.Title, series.Titles, AppLanguage.En).Order(StringComparer.OrdinalIgnoreCase))).Append('\n');
             foreach (SonarrEpisodeSnapshot episode in series.Seasons
                          .Where(season => season.SeasonNumber == 0)
                          .SelectMany(season => season.Episodes)
                          .OrderBy(episode => episode.EpisodeId))
             {
                 builder.Append('E').Append(episode.EpisodeId).Append(':').Append(episode.Title)
+                    .Append(':').Append(string.Join('|', MediaTitleResolver.Candidates(episode.Title, episode.Titles, AppLanguage.En).Order(StringComparer.OrdinalIgnoreCase)))
                     .Append(':').Append(episode.AirDateUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "-")
                     .Append(':').Append(episode.HasFile ? 1 : 0)
                     .Append(':').Append(FileIdentity(episode.File))
@@ -384,7 +386,7 @@ public sealed class SymlinkSuggestionService(
         foreach (RadarrMovieSnapshot movie in snapshot.Movies.OrderBy(movie => movie.MovieId))
         {
             builder.Append('M').Append(movie.MovieId).Append(':').Append(movie.Title)
-                .Append(':').Append(string.Join('|', movie.AlternativeTitles))
+                .Append(':').Append(string.Join('|', MediaTitleResolver.Candidates(movie.Title, movie.Titles, AppLanguage.En, movie.AlternativeTitles).Order(StringComparer.OrdinalIgnoreCase)))
                 .Append(':').Append(movie.AirDateUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "-")
                 .Append(':').Append(movie.HasFile ? 1 : 0)
                 .Append(':').Append(FileIdentity(movie.File))

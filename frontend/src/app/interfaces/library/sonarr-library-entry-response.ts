@@ -2,6 +2,7 @@ import { LibraryStatus } from './library-status';
 import { SonarrSeasonResponse } from './sonarr-season-response';
 
 export interface SonarrLibraryEntryResponse {
+  searchTitles?: string[];
   instanceName: string;
   seriesId: number;
   seriesTitle: string;

@@ -144,6 +144,15 @@ public sealed class SnapshotSyncService(
     private async Task PersistSonarrSnapshotAsync(ArrInstanceSettings instance, SonarrInstanceSnapshot? previous,
         SonarrInstanceSnapshot snapshot, IReadOnlyList<SonarrHistoryResource> resources, CancellationToken token, bool backfill = false, int? seriesId = null)
     {
+        Dictionary<int, SonarrSeriesSnapshot> priorSeries = (previous?.Series ?? []).ToDictionary(value => value.SeriesId);
+        foreach (SonarrSeriesSnapshot series in snapshot.Series)
+        {
+            if (!priorSeries.TryGetValue(series.SeriesId, out SonarrSeriesSnapshot? known)
+                || known.TvdbId != series.TvdbId || known.TitleSlug != series.TitleSlug) continue;
+            if (string.IsNullOrWhiteSpace(series.Titles.OriginalTitle)) series.Titles.OriginalTitle = known.Titles.OriginalTitle;
+            foreach ((string code, MediaTitleTranslation translation) in known.Titles.Translations)
+                series.Titles.Translations.TryAdd(code, translation);
+        }
         IReadOnlyList<LibraryChangeHistoryEntry> historyEntries = LibraryChangeHistoryBuilder.BuildSonarrEntries(instance, snapshot, previous, resources);
         IReadOnlyList<LibraryChangeHistoryEntry> persisted = await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, token);
         List<LibraryChangeHistoryEntry> combined = LibraryHistoryReconciler.MergeEvents(persisted, historyEntries);
@@ -197,6 +206,7 @@ public sealed class SnapshotSyncService(
         IReadOnlyList<LibraryChangeHistoryEntry> raw = await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Radarr, cancellationToken);
         bool backfill = raw.Any(e => e.InstanceId == instanceId && e.NeedsHistoryBackfill);
         RadarrInstanceSnapshot snapshot = await radarrClient.FetchSnapshotAsync(instance, cancellationToken);
+        ReuseRadarrTitles(snapshot.Movies, previousSnapshot?.Movies ?? []);
         DateTimeOffset historyStart = previousSnapshot?.SyncedAt ?? GetRadarrBootstrapDate(snapshot);
         if (!hasRadarrLibraryHistory || backfill)
         {
@@ -249,6 +259,8 @@ public sealed class SnapshotSyncService(
         await settingsService.UpdateAsync(current =>
         {
             if (!current.RadarrInstances.Any(item => item.Id == instanceId)) return;
+            // Enrichment may have finished while the full sync was reading files/history.
+            ReuseRadarrTitles(snapshot.Movies, current.RadarrSnapshots.Where(value => value.InstanceId == instanceId).SelectMany(value => value.Movies));
             current.RadarrSnapshots = [.. current.RadarrSnapshots.Where(item => item.InstanceId != instanceId), snapshot];
             current.LibraryFilterValues = [.. current.LibraryFilterValues.Where(item => item.InstanceId != instanceId), radarrFilterValues];
         }, cancellationToken);
@@ -267,6 +279,20 @@ public sealed class SnapshotSyncService(
             SyncedAt = snapshot.SyncedAt,
             ItemCount = snapshot.Movies.Count
         };
+    }
+
+    private static void ReuseRadarrTitles(IEnumerable<RadarrMovieSnapshot> movies, IEnumerable<RadarrMovieSnapshot> previous)
+    {
+        Dictionary<int, RadarrMovieSnapshot> byId = previous.ToDictionary(value => value.MovieId);
+        foreach (RadarrMovieSnapshot movie in movies)
+        {
+            if (!byId.TryGetValue(movie.MovieId, out RadarrMovieSnapshot? known) || known.TmdbId != movie.TmdbId) continue;
+            if (string.IsNullOrWhiteSpace(movie.Titles.OriginalTitle)) movie.Titles.OriginalTitle = known.Titles.OriginalTitle;
+            movie.Titles.Translations = known.Titles.Translations;
+            if (known.Title != movie.Title)
+                foreach (MediaTitleTranslation translation in movie.Titles.Translations.Values)
+                    translation.RetryAt = DateTimeOffset.MinValue;
+        }
     }
 
     private static DateTimeOffset GetSonarrBootstrapDate(SonarrInstanceSnapshot snapshot)

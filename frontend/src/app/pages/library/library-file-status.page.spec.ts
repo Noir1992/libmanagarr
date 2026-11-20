@@ -1,3 +1,4 @@
+import { MediaTitlesService } from '../../services/media-titles.service';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
@@ -45,6 +46,7 @@ describe('LibraryPage file status', () => {
     sonarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
     TestBed.configureTestingModule({
       providers: [
+        { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
         {
           provide: AppSettingsService,
           useValue: {

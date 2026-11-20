@@ -24,6 +24,7 @@ export interface SymlinkLink {
   radarrInstanceId: string;
   radarrInstanceName?: string | null;
   radarrMovieId: number;
+  searchTitles?: string[];
   radarrMovieTitle: string | null;
   radarrFileId: number;
   sonarrInstanceId: string;

@@ -97,6 +97,8 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     builder.Services.AddHttpClient();
     builder.Services.AddHttpClient<SonarrClient>();
     builder.Services.AddHttpClient<RadarrClient>();
+    builder.Services.AddSingleton<MediaTitleRefreshService>();
+    builder.Services.AddHostedService<MediaTitleRefreshBackgroundService>();
     builder.Services.AddHttpClient<SeerrClient>();
     builder.Services.AddHttpClient<PosterCacheService>();
     builder.Services.AddSingleton<IPosterCacheService, PosterCacheService>();
@@ -264,6 +266,7 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     app.MapLogsEndpoints();
     app.MapSonarrEndpoints();
     app.MapRadarrEndpoints();
+    app.MapMediaTitleEndpoints();
     app.MapStatisticsEndpoints();
     app.MapRequestEndpoints();
     app.MapCalendarEndpoints();

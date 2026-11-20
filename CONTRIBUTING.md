@@ -68,3 +68,33 @@ build the version tags and `latest`.
 | `backend/` | ASP.NET Core (.NET 10) API, services and tests  |
 | `frontend/`| Angular 22 + Angular Material single-page app   |
 | `tests/`   | End-to-end tests                                |
+
+
+## Localized media titles
+
+`MediaTitles` lives with each snapshot in the existing SQLite/backup storage. The resolver selects
+app language, English, original title, then source title. Source titles remain matching input. Library
+GET/POST responses sort after projection and include all variants for search; symlink suggestions,
+managed links, rejections and create choices share the resolver. Calendar and history retain source
+names. Display changes preserve library filters, sorting and expanded table rows.
+
+Radarr v3 supplies language IDs through `/language` and batched movie titles through
+`/movie?languageId=…`. English is fetched first as a reference. Equal German/French responses are
+ambiguous because Radarr silently falls back to English; they are cached as missing rather than
+labelled as verified translations. The visible text remains the same. English relies on the API's
+language-parameter contract. Successful translations are reused for seven days, missing/ambiguous
+results for one day and errors for five minutes. Existing titles survive empty/error responses. A
+single refresh gate limits concurrency; each instance has a 45-second timeout. The worker checks
+every 30 seconds, and the frontend independently requests enrichment and observes the saved revision.
+
+Sonarr's stable API has no series/episode translation collection. Explicit series `translations`
+from newer versions are read when supplied; episodes/specials otherwise retain source titles. No
+additional metadata provider, credentials or upstream language-setting changes are introduced.
+See the upstream [Radarr controller](https://github.com/Radarr/Radarr/blob/develop/src/Radarr.Api.V3/Movies/MovieController.cs),
+[stable Sonarr series resource](https://github.com/Sonarr/Sonarr/blob/main/src/Sonarr.Api.V3/Series/SeriesResource.cs)
+and [newer series translations](https://github.com/Sonarr/Sonarr/blob/develop/src/Sonarr.Api.V3/Series/SeriesTranslationResource.cs).
+
+`MediaTitleTests`, localized endpoint tests and the frontend title tests cover fallbacks, failures,
+cache reuse and response ordering. E2E scenario E17 uses the pinned Arr baseline to switch from
+English to German after sync and checks library titles, alternative-title search and unchanged
+suggestion identities without another sync.

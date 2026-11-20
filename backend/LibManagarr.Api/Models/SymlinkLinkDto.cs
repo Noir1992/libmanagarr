@@ -14,6 +14,8 @@ public sealed class SymlinkLinkDto
 
     public int RadarrMovieId { get; set; }
 
+    public IReadOnlyList<string> SearchTitles { get; set; } = [];
+
     public string? RadarrMovieTitle { get; set; }
 
     public int RadarrFileId { get; set; }

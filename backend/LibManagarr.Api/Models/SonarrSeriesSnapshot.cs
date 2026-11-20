@@ -4,6 +4,10 @@ public sealed class SonarrSeriesSnapshot
 {
     public int SeriesId { get; init; }
 
+    public MediaTitles Titles { get; set; } = new();
+
+    public int? TvdbId { get; init; }
+
     public string Title { get; init; } = string.Empty;
 
     public string TitleSlug { get; init; } = string.Empty;

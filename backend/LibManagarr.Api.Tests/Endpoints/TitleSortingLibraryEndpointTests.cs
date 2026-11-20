@@ -53,6 +53,45 @@ public sealed class TitleSortingLibraryEndpointTests
         Assert.All(instances, rows => Assert.Equal(["Batman", "Office", "The Office", "A Quiet Place"], rows));
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task LocalizedTitles_AreProjectedBeforeSorting_InBothLibraryApis(bool sonarr, bool post)
+    {
+        MediaTitles first = new() { Translations = new() { ["de"] = new() { Title = "Zebra" } } };
+        MediaTitles second = new() { Translations = new() { ["de"] = new() { Title = "Alpha" } } };
+        AppSettings settings = new() { Language = AppLanguage.De,
+            RadarrInstances = [new() { Id = "one" }], SonarrInstances = [new() { Id = "one" }],
+            RadarrSnapshots = [new() { InstanceId = "one", Movies = [new() { Title = "A", Titles = first }, new() { Title = "Z", Titles = second }] }],
+            SonarrSnapshots = [new() { InstanceId = "one", Series = [
+                new() { Title = "A", Titles = first, Seasons = [new() { SeasonNumber = 1, Episodes = [new() { Title = "Old episode", Titles = first }] }] },
+                new() { Title = "Z", Titles = second, Seasons = [new() { SeasonNumber = 1, Episodes = [new() { Title = "Old episode", Titles = second }] }] }
+            ] }] };
+        MethodInfo handler = (sonarr ? typeof(SonarrEndpoints) : typeof(RadarrEndpoints))
+            .GetMethod(post ? "PostLibraryAsync" : "GetLibraryAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+        object?[] arguments = handler.GetParameters().Select(parameter => parameter.Name switch
+        {
+            "filter" => (object)new LibraryRequestFilter { SonarrInstanceFilter = ["__all__"], RadarrInstanceFilter = ["__all__"] },
+            "instanceId" => "one", "settingsService" => new StubSettingsService(settings),
+            "cancellationToken" => CancellationToken.None, _ => parameter.DefaultValue
+        }).ToArray();
+        Task task = (Task)handler.Invoke(null, arguments)!;
+        await task;
+        object union = task.GetType().GetProperty("Result")!.GetValue(task)!;
+        object result = union.GetType().GetProperty("Result")!.GetValue(union)!;
+        IEnumerable<string> titles = result switch
+        {
+            Ok<RadarrLibraryResponse> response => response.Value!.Rows.Select(row => row.MovieTitle),
+            Ok<SonarrLibraryResponse> response => response.Value!.Rows.Select(row => row.SeriesTitle),
+            Ok<RadarrLibraryBatchResponse> response => response.Value!.Instances.Single().Rows.Select(row => row.MovieTitle),
+            Ok<SonarrLibraryBatchResponse> response => response.Value!.Instances.Single().Rows.Select(row => row.SeriesTitle),
+            _ => throw new InvalidOperationException()
+        };
+        Assert.Equal(["Alpha", "Zebra"], titles);
+    }
+
     private sealed class StubSettingsService(AppSettings settings) : ISettingsService
     {
         public Task<AppSettings> GetAsync(CancellationToken cancellationToken) => Task.FromResult(settings);

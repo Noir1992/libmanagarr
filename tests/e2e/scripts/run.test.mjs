@@ -56,14 +56,14 @@ if (args.includes('playwright')) {
   };
 }
 
-test('orchestrator executes all 20 cases with one runner, one baseline restore and one final teardown', { skip }, async (t) => {
+test('orchestrator executes all 21 cases with one runner, one baseline restore and one final teardown', { skip }, async (t) => {
   const fixtureOfRun = await fixture(t);
   await fixtureOfRun.run('--suite', 'full');
   const calls = (await fixtureOfRun.calls()).map((item) => item.args);
   const summary = await fixtureOfRun.summary();
   assert.equal(summary.failed, false);
-  assert.equal(summary.completed.length, 20);
-  assert.equal(calls.filter((args) => args.includes('playwright')).length, 20);
+  assert.equal(summary.completed.length, 21);
+  assert.equal(calls.filter((args) => args.includes('playwright')).length, 21);
   assert.equal(calls.filter((args) => args.includes('tar') && args.includes('-xzf')).length, 1);
   assert.equal(calls.filter((args) => args.includes('up') && args.at(-1) === 'runner').length, 1);
   assert.equal(calls.filter((args) => args.includes('down')).length, 1);
@@ -72,7 +72,7 @@ test('orchestrator executes all 20 cases with one runner, one baseline restore a
     false,
   );
   assert.equal(calls.filter((args) => args.includes('--check-offline')).length, 1);
-  assert.equal(calls.filter((args) => args.includes('bootstrap/reset.mjs')).length, 20);
+  assert.equal(calls.filter((args) => args.includes('bootstrap/reset.mjs')).length, 21);
   assert.equal(new Set((await fixtureOfRun.calls()).map((item) => item.artifacts)).size, 1);
   assert.equal(
     calls.some((args) => args[0] === 'image' && args[1] === 'rm'),
