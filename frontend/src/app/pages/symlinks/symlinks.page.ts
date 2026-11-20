@@ -1,3 +1,4 @@
+import { SearchClearWidget } from '../../widgets/search-clear/search-clear.widget';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, Signal, signal } from '@angular/core';
 import { form, FormField } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
@@ -48,6 +49,7 @@ import {
 @Component({
   selector: 'app-symlinks-page',
   imports: [
+    SearchClearWidget,
     FormField,
     MatButtonModule,
     MatInputModule,
@@ -297,6 +299,10 @@ export class SymlinksPage implements OnInit {
         void this.symlinks.refreshProgress();
     }, 5000);
     this.destroy.onDestroy(() => globalThis.clearInterval(timer));
+  }
+
+  protected clearTitleSearch(): void {
+    this.filtersModel.update((model) => ({ ...model, title: '' }));
   }
 
   private matches(

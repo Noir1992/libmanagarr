@@ -16,32 +16,22 @@
             (selectionChange)="onSelectionChanged()"
             (openedChange)="$event ? movieSearch.focus() : clearSearch('movie')"
           >
-            <div
-              class="field-control-wrap search-control select-search"
-              (click)="$event.stopPropagation()"
-              (keydown)="onSearchKeydown($event)"
-            >
-              <input
-                matInput
-                #movieSearch
-                id="symlink-movie-search"
-                type="search"
-                [attr.aria-label]="t('symlinks.searchMovie')"
-                [placeholder]="t('symlinks.searchMovie')"
-                [formField]="searchFields.movie"
-              />
-              @if (searchModel().movie) {
-                <button
-                  mat-icon-button
-                  type="button"
-                  class="clear-search"
-                  [attr.aria-label]="t('symlinks.clearMovieSearch')"
-                  [title]="t('symlinks.clearMovieSearch')"
-                  (click)="clearSearch('movie'); movieSearch.focus()"
-                >
-                  <span class="material-symbols-outlined" aria-hidden="true">close</span>
-                </button>
-              }
+            <div class="field-control-wrap select-search" (click)="$event.stopPropagation()" (keydown)="onSearchKeydown($event)">
+              <div class="search-control">
+                <span class="material-symbols-outlined search-icon" aria-hidden="true">search</span>
+                <input
+                  matInput
+                  #movieSearch
+                  id="symlink-movie-search"
+                  type="search"
+                  [attr.aria-label]="t('symlinks.searchMovie')"
+                  [placeholder]="t('symlinks.searchMovie')"
+                  [formField]="searchFields.movie"
+                />
+                @if (searchModel().movie) {
+                  <app-search-clear [label]="t('symlinks.clearMovieSearch')" (cleared)="clearSearch('movie'); movieSearch.focus()" />
+                }
+              </div>
             </div>
             <mat-select-trigger>
               @if (selectedMovie(); as movie) {
@@ -76,32 +66,22 @@
             (selectionChange)="onSelectionChanged()"
             (openedChange)="$event ? specialSearch.focus() : clearSearch('special')"
           >
-            <div
-              class="field-control-wrap search-control select-search"
-              (click)="$event.stopPropagation()"
-              (keydown)="onSearchKeydown($event)"
-            >
-              <input
-                matInput
-                #specialSearch
-                id="symlink-special-search"
-                type="search"
-                [attr.aria-label]="t('symlinks.searchSpecial')"
-                [placeholder]="t('symlinks.searchSpecial')"
-                [formField]="searchFields.special"
-              />
-              @if (searchModel().special) {
-                <button
-                  mat-icon-button
-                  type="button"
-                  class="clear-search"
-                  [attr.aria-label]="t('symlinks.clearSpecialSearch')"
-                  [title]="t('symlinks.clearSpecialSearch')"
-                  (click)="clearSearch('special'); specialSearch.focus()"
-                >
-                  <span class="material-symbols-outlined" aria-hidden="true">close</span>
-                </button>
-              }
+            <div class="field-control-wrap select-search" (click)="$event.stopPropagation()" (keydown)="onSearchKeydown($event)">
+              <div class="search-control">
+                <span class="material-symbols-outlined search-icon" aria-hidden="true">search</span>
+                <input
+                  matInput
+                  #specialSearch
+                  id="symlink-special-search"
+                  type="search"
+                  [attr.aria-label]="t('symlinks.searchSpecial')"
+                  [placeholder]="t('symlinks.searchSpecial')"
+                  [formField]="searchFields.special"
+                />
+                @if (searchModel().special) {
+                  <app-search-clear [label]="t('symlinks.clearSpecialSearch')" (cleared)="clearSearch('special'); specialSearch.focus()" />
+                }
+              </div>
             </div>
             <mat-select-trigger>
               @if (selectedSpecial(); as special) {

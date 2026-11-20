@@ -1,3 +1,4 @@
+import { SearchClearWidget } from '../../widgets/search-clear/search-clear.widget';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -63,6 +64,7 @@ import { TableColumnTemplateDirective } from '../../widgets/table-column-templat
 @Component({
   selector: 'app-library-page',
   imports: [
+    SearchClearWidget,
     MatIconButton,
     MatIconModule,
     MatInput,

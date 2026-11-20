@@ -29,11 +29,15 @@
           <span class="material-symbols-outlined" aria-hidden="true">search</span>
           <input
             matInput
+            #symlinkSearch
             type="search"
             [placeholder]="t('symlinks.filterTitle')"
             [attr.aria-label]="t('symlinks.filterTitle')"
             [formField]="searchFields.title"
           />
+          @if (filtersModel().title) {
+            <app-search-clear (cleared)="clearTitleSearch(); symlinkSearch.focus()" />
+          }
         </div>
         <app-page-filter [filters]="filters()" storagePrefix="symlinks" [bubblesBelow]="true" (activeFilterCountChange)="syncFilters()" />
         <app-sort-control
@@ -262,7 +266,7 @@
               <ul class="items">
                 @for (link of links(); track link.id) {
                   <li class="item" [attr.aria-busy]="isDeleting(link)">
-                    <div class="item-head">
+                    <div class="item-head managed-head">
                       <div class="managed-heading">
                         <button
                           type="button"
@@ -287,10 +291,53 @@
                             @if (linkInformation(link); as information) {
                               <app-info-icon [messageText]="information" />
                             }
+                            <span [class]="operationStatusClass(link)">{{ operationStatus(link) }}</span>
                           </span>
                         </p>
                       </div>
-                      <span [class]="operationStatusClass(link)">{{ operationStatus(link) }}</span>
+                      <div class="item-actions managed-actions">
+                        <div class="edit-actions">
+                          @if (needsRepair(link)) {
+                            <button
+                              type="button"
+                              mat-stroked-button
+                              class="secondary-button"
+                              [disabled]="linkLocked(link)"
+                              (click)="repairAsync(link)"
+                            >
+                              <span class="button-content">
+                                <span>{{ t('symlinks.repair') }}</span>
+                                <app-feedback-icon [state]="isRepairing(link) ? 'loading' : null" variant="inline" />
+                              </span>
+                            </button>
+                          }
+                          <button
+                            type="button"
+                            mat-stroked-button
+                            class="secondary-button"
+                            [disabled]="
+                              linkLocked(link) || !(link.canEdit ?? (link.operationStatus === 'Active' && link.setupStep === 'Completed'))
+                            "
+                            (click)="edit(link)"
+                          >
+                            {{ t('symlinks.edit') }}
+                          </button>
+
+                          <button
+                            type="button"
+                            mat-flat-button
+                            class="danger-button"
+                            [disabled]="linkLocked(link)"
+                            (click)="deleteAsync(link)"
+                            [attr.aria-busy]="isDeleting(link)"
+                          >
+                            <span class="button-content">
+                              <span>{{ t('symlinks.links.delete') }}</span>
+                              <app-feedback-icon [state]="isDeleting(link) ? 'loading' : null" variant="inline" />
+                            </span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     @if (expandedLinks().has(link.id)) {
@@ -314,50 +361,6 @@
                     @if (linkState(link.id).error; as actionError) {
                       <p class="feedback error" role="alert">{{ actionError }}</p>
                     }
-
-                    <div class="item-actions managed-actions">
-                      <div class="edit-actions">
-                        @if (needsRepair(link)) {
-                          <button
-                            type="button"
-                            mat-stroked-button
-                            class="secondary-button"
-                            [disabled]="linkLocked(link)"
-                            (click)="repairAsync(link)"
-                          >
-                            <span class="button-content">
-                              <span>{{ t('symlinks.repair') }}</span>
-                              <app-feedback-icon [state]="isRepairing(link) ? 'loading' : null" variant="inline" />
-                            </span>
-                          </button>
-                        }
-                        <button
-                          type="button"
-                          mat-stroked-button
-                          class="secondary-button"
-                          [disabled]="
-                            linkLocked(link) || !(link.canEdit ?? (link.operationStatus === 'Active' && link.setupStep === 'Completed'))
-                          "
-                          (click)="edit(link)"
-                        >
-                          {{ t('symlinks.edit') }}
-                        </button>
-
-                        <button
-                          type="button"
-                          mat-flat-button
-                          class="danger-button"
-                          [disabled]="linkLocked(link)"
-                          (click)="deleteAsync(link)"
-                          [attr.aria-busy]="isDeleting(link)"
-                        >
-                          <span class="button-content">
-                            <span>{{ t('symlinks.links.delete') }}</span>
-                            <app-feedback-icon [state]="isDeleting(link) ? 'loading' : null" variant="inline" />
-                          </span>
-                        </button>
-                      </div>
-                    </div>
                   </li>
                 }
               </ul>

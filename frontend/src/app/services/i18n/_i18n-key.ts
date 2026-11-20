@@ -65,6 +65,7 @@ export type TranslationKey =
   | 'codecStats.resolutions'
   | 'codecStats.title'
   | 'codecStats.videoCodecs'
+  | 'common.clearSearch'
   | 'common.cancel'
   | 'common.column.airDate'
   | 'common.column.episode'

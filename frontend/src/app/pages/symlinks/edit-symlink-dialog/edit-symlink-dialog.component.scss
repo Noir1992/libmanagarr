@@ -95,38 +95,32 @@ mat-optgroup {
   --mat-optgroup-label-text-color: var(--theme-text);
 }
 
+.search-control {
+  position: relative;
+  display: flex;
+  width: 100%;
+}
+
+.search-control .search-icon {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 18px;
+  color: var(--theme-muted);
+}
+
 .search-control input {
+  padding-left: 34px;
   padding-right: 36px;
+  font-family: var(--app-font-family), sans-serif;
+  font-size: 1rem;
+  line-height: normal;
+  letter-spacing: normal;
   &::-webkit-search-cancel-button {
     display: none;
     appearance: none;
-  }
-}
-
-.clear-search {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  position: absolute;
-  inset-block: 0;
-  right: 10px;
-  margin-block: auto;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  color: var(--theme-muted);
-  --mat-icon-button-icon-size: 18px;
-  --mat-icon-button-state-layer-size: 28px;
-  --mat-icon-button-touch-target-size: 28px;
-  .material-symbols-outlined {
-    display: block;
-    width: 18px;
-    height: 18px;
-    font-size: 18px;
-    line-height: 1;
-  }
-  &:hover {
-    color: var(--theme-accent);
   }
 }
 

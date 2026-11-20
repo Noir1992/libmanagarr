@@ -162,7 +162,12 @@ describe('LogsPage', () => {
     await search('   ');
     expect(fixture.componentInstance['visibleLogs']()).toEqual(entries);
     expect(fixture.componentInstance['isFiltered']()).toBeFalse();
-    await search('');
+    (fixture.nativeElement.querySelector('app-search-clear button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(input.value).toBe('');
+    expect(document.activeElement).toBe(input);
+    expect(fixture.nativeElement.querySelector('app-search-clear')).toBeNull();
     expect(fixture.componentInstance['visibleLogs']()).toEqual(entries);
     expect(fixture.componentInstance['logsState']()).toEqual(entries);
   });

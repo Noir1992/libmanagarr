@@ -1,3 +1,4 @@
+import { SearchClearWidget } from '../../widgets/search-clear/search-clear.widget';
 import { ScrollingModule } from '@angular/cdk/scrolling';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal, Signal, WritableSignal } from '@angular/core';
 import { MatTableModule } from '@angular/material/table';
@@ -20,6 +21,7 @@ const LOG_LEVELS: readonly AppLogLevel[] = ['Debug', 'Information', 'Warning', '
 @Component({
   selector: 'app-logs-page',
   imports: [
+    SearchClearWidget,
     MatTableModule,
     MatInputModule,
     PageFilterWidget,

@@ -88,6 +88,7 @@ export const i18nDe: Record<TranslationKey, string> = {
   'codecStats.resolutions': 'Auflösungen',
   'codecStats.title': 'Codec-Statistiken',
   'codecStats.videoCodecs': 'Video-Codecs',
+  'common.clearSearch': 'Suche leeren',
   'common.cancel': 'Abbrechen',
   'common.column.airDate': 'Ausstrahlung',
   'common.column.episode': 'Folge',

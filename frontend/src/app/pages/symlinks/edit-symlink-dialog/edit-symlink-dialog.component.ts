@@ -1,3 +1,4 @@
+import { SearchClearWidget } from '../../../widgets/search-clear/search-clear.widget';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { disabled, form, FormField } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
@@ -25,7 +26,7 @@ function groupByInstance<T extends { instanceId: string; instanceName: string }>
 
 @Component({
   selector: 'app-edit-symlink-dialog',
-  imports: [FormField, MatButtonModule, MatDialogModule, MatInputModule, MatSelectModule],
+  imports: [SearchClearWidget, FormField, MatButtonModule, MatDialogModule, MatInputModule, MatSelectModule],
   templateUrl: './edit-symlink-dialog.component.html',
   styleUrl: './edit-symlink-dialog.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

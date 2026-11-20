@@ -435,6 +435,12 @@ describe('SymlinksPage', () => {
     expect(rowText(1)).toContain('The Special Movie');
     expect(cards()[0].textContent).not.toContain('Another Movie');
     expect(rowText(1)).not.toContain('Another Movie');
+    (element.querySelector('.symlink-search app-search-clear button') as HTMLButtonElement).click();
+    await settle();
+    expect(search.value).toBe('');
+    expect(document.activeElement).toBe(search);
+    expect(element.querySelector('.symlink-search app-search-clear')).toBeNull();
+    expect(cards()[1].querySelectorAll('.item').length).toBe(2);
   });
 
   it('restores the shared filters when the page is reopened before rows arrive', async () => {
