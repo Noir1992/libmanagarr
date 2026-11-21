@@ -37,6 +37,7 @@ type SymlinkServiceStub = Pick<
   | 'loadOverview'
   | 'loadSettings'
   | 'refreshProgress'
+  | 'deletionRefreshPending'
   | 'rejectSuggestion'
   | 'retryLink'
   | 'checkLink'
@@ -108,7 +109,7 @@ function createLink(overrides: Partial<SymlinkLink> = {}): SymlinkLink {
     linkText: '/data/movies/the-special-movie.mkv',
     sourcePath: '/data/movies/the-special-movie.mkv',
     operationStatus: 'Active',
-    setupStep: null,
+    setupStep: 'Completed',
     findings: [{ code: 'MetadataMismatch', detail: 'The size differs from the expected one.', detectedAt: '2026-11-02T09:00:00.000Z' }],
     monitoringOriginal: true,
     monitoringDisabled: true,
@@ -194,6 +195,7 @@ describe('SymlinksPage', () => {
       loadOverview: jasmine.createSpy('loadOverview').and.resolveTo(),
       loadSettings: jasmine.createSpy('loadSettings').and.resolveTo(),
       refreshProgress: jasmine.createSpy('refreshProgress').and.resolveTo(),
+      deletionRefreshPending: signal(false),
       rejectSuggestion: jasmine.createSpy('rejectSuggestion').and.resolveTo(createSuggestion({ status: 'Rejected' })),
       retryLink: jasmine.createSpy('retryLink').and.resolveTo(createLink()),
       checkLink: jasmine.createSpy('checkLink').and.resolveTo(createLink()),
@@ -796,13 +798,48 @@ describe('SymlinksPage', () => {
     ).toBeTrue();
   });
 
-  it('lets an incomplete managed link be repaired and respects the backend edit decision', async () => {
+  for (const [step, progress] of [
+    ['LinkCreated', 'Creating the symlink'],
+    ['MonitoringDisabled', 'Preparing Sonarr'],
+    ['RescanRequested', 'Sonarr is rescanning the series'],
+    ['EpisodeAssigned', 'Checking the episode file assignment'],
+    ['MetadataMatched', 'Matching file information'],
+    ['Renamed', 'Confirming the filename and library'],
+  ] as const) {
+    for (const status of ['Pending', 'Active'] as const) {
+      it(`shows progress and locks editing and deletion during ${step} even with status ${status}`, async () => {
+        const link = createLink({ operationStatus: status, setupStep: step, findings: [], canEdit: true });
+        stub.links.set([link]);
+        fixture.detectChanges();
+        expect(cards()[1].querySelector('.item .status-pill')?.textContent).toContain('Setting up');
+        expect(cards()[1].querySelector('.item .status-pill')?.classList.contains('is-success')).toBeFalse();
+        expect(cards()[1].querySelector('.setup-progress')?.textContent).toContain(progress);
+        expect(cards()[1].querySelector('.setup-progress .feedback-icon.spinning')).not.toBeNull();
+        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBeTrue();
+        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Delete')?.disabled).toBeTrue();
+        fixture.componentInstance['edit'](link);
+        await fixture.componentInstance['deleteAsync'](link);
+        expect(dialog.open).not.toHaveBeenCalled();
+        expect(stub.deleteLink).not.toHaveBeenCalled();
+
+        stub.links.set([{ ...link, operationStatus: 'Active', setupStep: 'Completed' }]);
+        fixture.detectChanges();
+        expect(cards()[1].querySelector('.item .status-pill')?.textContent).toContain('Active');
+        expect(cards()[1].querySelector('.setup-progress')).toBeNull();
+        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBeFalse();
+        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Delete')?.disabled).toBeFalse();
+      });
+    }
+  }
+
+  it('allows repair but keeps editing and deletion disabled for an incomplete managed link', async () => {
     stub.links.set([createLink({ operationStatus: 'Conflict', setupStep: 'MetadataMatched', canEdit: true })]);
     fixture.detectChanges();
     const buttons = actionButtons(1);
     const repair = buttons.find((button) => button.textContent?.trim() === 'Repair');
     expect(repair?.disabled).toBeFalse();
-    expect(buttons.find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBeFalse();
+    expect(buttons.find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBeTrue();
+    expect(buttons.find((button) => button.textContent?.trim() === 'Delete')?.disabled).toBeTrue();
 
     repair!.click();
     await settle();

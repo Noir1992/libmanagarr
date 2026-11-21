@@ -10,6 +10,95 @@ public sealed class SqliteHistoryStoreTests : IDisposable
     private readonly TestStorageEnvironment environment = new();
 
     [Fact]
+    public async Task HistoryReplacementWritesOnlyNewChangedAndRemovedRowsAcrossReopening()
+    {
+        var at = DateTimeOffset.Parse("2026-05-01T12:00:00Z");
+        var keep = CreateEntry("shared", ArrApplicationKind.Sonarr, "main", at, LibraryChangeType.Added, 10);
+        var otherInstance = CreateEntry("shared", ArrApplicationKind.Sonarr, "other", at, LibraryChangeType.Added, 20);
+        var corrected = CreateEntry("corrected", ArrApplicationKind.Sonarr, "main", at, LibraryChangeType.Added, 30);
+        var removed = CreateEntry("removed", ArrApplicationKind.Sonarr, "main", at, LibraryChangeType.Added, 40);
+        var radarr = CreateEntry("shared", ArrApplicationKind.Radarr, "main", at, LibraryChangeType.Added, 50);
+        var added = CreateEntry("added", ArrApplicationKind.Sonarr, "main", at, LibraryChangeType.Deleted, -10);
+        LibraryChangeHistoryEntry[] initial = [keep, otherInstance, corrected, removed];
+        await CreateStore().ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, initial, CancellationToken.None, initial);
+        await CreateStore().ReplaceLibraryHistoryAsync(ArrApplicationKind.Radarr, [radarr], CancellationToken.None, [radarr]);
+
+        await using SqliteConnection connection = new(new SqliteConnectionStringBuilder
+            { DataSource = Path.Combine(environment.ContentRootPath, "data", "libmanagarr.db") }.ToString());
+        await connection.OpenAsync();
+        await using SqliteCommand audit = connection.CreateCommand();
+        audit.CommandText = "CREATE TABLE history_write_audit (table_name TEXT, operation TEXT, source_key TEXT)";
+        await audit.ExecuteNonQueryAsync();
+        foreach (string table in new[] { "library_history", "library_history_events" })
+        foreach (string operation in new[] { "INSERT", "UPDATE", "DELETE" })
+        {
+            string row = operation == "DELETE" ? "OLD" : "NEW";
+            audit.CommandText = $"""
+                CREATE TRIGGER audit_{table}_{operation} AFTER {operation} ON {table}
+                BEGIN INSERT INTO history_write_audit VALUES ('{table}', '{operation}', {row}.source_key); END
+                """;
+            await audit.ExecuteNonQueryAsync();
+        }
+
+        // Change both indexed columns and JSON-only metadata; both representations must agree.
+        corrected.DeltaSizeBytes = 31;
+        corrected.FileId = "recovered-file-id";
+        corrected.EventData = new() { ["Size"] = "31" };
+        LibraryChangeHistoryEntry[] next = [otherInstance, added, corrected, keep];
+        await CreateStore().ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, next, CancellationToken.None, next);
+        // A repeated observation must perform no writes at all, including after reopening.
+        await CreateStore().ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, next, CancellationToken.None, next);
+
+        audit.CommandText = "SELECT table_name, operation, source_key FROM history_write_audit ORDER BY table_name, operation";
+        List<(string Table, string Operation, string Key)> writes = [];
+        await using (var reader = await audit.ExecuteReaderAsync())
+            while (await reader.ReadAsync()) writes.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+        Assert.Equal(6, writes.Count);
+        foreach (string table in new[] { "library_history", "library_history_events" })
+            Assert.Equal(new[] { (table, "DELETE", "removed"), (table, "INSERT", "added"), (table, "UPDATE", "corrected") },
+                writes.Where(w => w.Table == table));
+        foreach (var entries in new[] {
+            await CreateStore().GetLibraryHistoryAsync(ArrApplicationKind.Sonarr, CancellationToken.None),
+            await CreateStore().GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, CancellationToken.None) })
+        {
+            Assert.Equal(4, entries.Count);
+            Assert.Equal(2, entries.Count(e => e.SourceKey == "shared"));
+            var changed = Assert.Single(entries, e => e.SourceKey == "corrected");
+            Assert.Equal(31, changed.DeltaSizeBytes);
+            Assert.Equal("recovered-file-id", changed.FileId);
+            Assert.Equal("31", changed.EventData!["Size"]);
+        }
+        Assert.Single(await CreateStore().GetLibraryHistoryAsync(ArrApplicationKind.Radarr, CancellationToken.None));
+        Assert.Single(await CreateStore().GetLibraryHistoryEventsAsync(ArrApplicationKind.Radarr, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task OmittingRawEntriesPreservesThemAndEmptyEntriesExplicitlyRemoveThem()
+    {
+        var entry = CreateEntry("one", ArrApplicationKind.Sonarr, "main", DateTimeOffset.UtcNow, LibraryChangeType.Added, 10);
+        var store = CreateStore();
+        await store.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, [entry], CancellationToken.None, [entry]);
+        await store.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, [], CancellationToken.None);
+        Assert.Empty(await store.GetLibraryHistoryAsync(ArrApplicationKind.Sonarr, CancellationToken.None));
+        Assert.Single(await store.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, CancellationToken.None));
+        await store.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, [], CancellationToken.None, []);
+        Assert.Empty(await store.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ProjectedEntriesWithRepeatedSourceKeysRemainSeparate()
+    {
+        var first = CreateEntry("shared", ArrApplicationKind.Sonarr, "main", DateTimeOffset.UtcNow, LibraryChangeType.Added, 10);
+        var second = CreateEntry("shared", ArrApplicationKind.Sonarr, "main", first.OccurredAt.AddSeconds(1), LibraryChangeType.Deleted, -10);
+        var store = CreateStore();
+        await store.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, [first, second], CancellationToken.None);
+        await store.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, [second, first], CancellationToken.None);
+        Assert.Equal(2, (await store.GetLibraryHistoryAsync(ArrApplicationKind.Sonarr, CancellationToken.None)).Count);
+        await store.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, [second], CancellationToken.None);
+        Assert.Equal(LibraryChangeType.Deleted, Assert.Single(await store.GetLibraryHistoryAsync(ArrApplicationKind.Sonarr, CancellationToken.None)).ChangeType);
+    }
+
+    [Fact]
     public async Task ReplaceLibraryHistoryAsync_ShouldRoundTripEntries_AndFilterByKind()
     {
         SqliteHistoryStore store = CreateStore();

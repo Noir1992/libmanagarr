@@ -86,6 +86,9 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     builder.Services.AddSingleton<SymlinkCapabilityService>();
     builder.Services.AddSingleton<SymlinkMatchingRequests>();
     builder.Services.AddSingleton<SymlinkSetupRequests>();
+    builder.Services.AddSingleton<SymlinkDeletionRefreshRequests>();
+    builder.Services.AddScoped<SymlinkDeletionRefreshService>();
+    builder.Services.AddHostedService<SymlinkDeletionRefreshBackgroundService>();
     builder.Services.AddScoped<SymlinkSuggestionService>();
     builder.Services.AddScoped<SymlinkService>();
     builder.Services.AddScoped<SymlinkHealthService>();
@@ -257,6 +260,7 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     });
     app.UseAuthentication();
     app.UseAuthorization();
+
     app.UseMiddleware<ApiAntiforgeryMiddleware>();
     app.UseRateLimiter();
 

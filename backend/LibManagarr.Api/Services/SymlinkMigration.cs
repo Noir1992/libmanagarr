@@ -259,6 +259,31 @@ internal sealed class SymlinkMigration(TimeProvider clock, ILogger logger)
             -- instance signature changes and the pair is reported afresh as Pending.
             DELETE FROM symlink_suggestions WHERE status = 1;
             """
+        ),
+        (
+            "symlinks-v9",
+            """
+            CREATE TABLE IF NOT EXISTS symlink_deletion_refreshes (
+                link_id TEXT NOT NULL PRIMARY KEY,
+                payload TEXT NOT NULL
+            );
+            """
+        ),
+        (
+            "symlinks-v10",
+            """
+            UPDATE symlink_links SET operation_status=0, revision=revision+1
+            WHERE operation_status=1 AND (setup_step IS NULL OR setup_step<>6);
+            """
+        ),
+        (
+            "symlinks-v11",
+            """
+            CREATE INDEX IF NOT EXISTS symlink_links_episode_lookup
+                ON symlink_links (sonarr_instance_id,sonarr_series_id,sonarr_episode_id);
+            CREATE INDEX IF NOT EXISTS symlink_suggestions_episode_lookup
+                ON symlink_suggestions (sonarr_instance_id,sonarr_series_id,sonarr_episode_id);
+            """
         )
     ];
 

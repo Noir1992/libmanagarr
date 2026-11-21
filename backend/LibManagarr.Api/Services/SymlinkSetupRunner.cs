@@ -21,7 +21,6 @@ public sealed class SymlinkSetupRunner(
     /// </summary>
     public async Task<int> RunDueSetupsAsync(CancellationToken cancellationToken)
     {
-        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
         if (!await links.CanProcessAsync(cancellationToken)) return 0;
         await links.MarkReplacedSourcesAsync(cancellationToken);
 
@@ -30,10 +29,13 @@ public sealed class SymlinkSetupRunner(
         logger.LogDebug("{Count} managed links owe work.", owed.Count);
 
         int waiting = 0;
-        foreach (SymlinkLink link in owed)
+        foreach (SymlinkLink observed in owed.OrderByDescending(link => link.OperationStatus is SymlinkOperationStatus.DeletePending or SymlinkOperationStatus.CleanupPending))
         {
             try
             {
+                using IDisposable lease = await links.LockLinkAsync(observed.Id, cancellationToken);
+                SymlinkLink? link = await store.GetLinkAsync(observed.Id, cancellationToken);
+                if (link is null || !HasOwedWork(link)) continue;
                 if (await CarryOutAsync(link, cancellationToken) == SymlinkSetupOutcome.Waiting) waiting++;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -46,7 +48,7 @@ public sealed class SymlinkSetupRunner(
             {
                 waiting++;
                 // One pair that cannot be carried forward is never allowed to stop the others.
-                logger.LogError(exception, "Carrying managed link {LinkId} forward failed; it stays as it is.", link.Id);
+                logger.LogError(exception, "Carrying managed link {LinkId} forward failed; it stays as it is.", observed.Id);
             }
         }
 
@@ -91,7 +93,7 @@ public sealed class SymlinkSetupRunner(
         || link.OperationStatus is SymlinkOperationStatus.DeletePending or SymlinkOperationStatus.CleanupPending
         || link.OperationStatus == SymlinkOperationStatus.Updating
         || (link.PendingUpdate is null && (link.SetupStep is null or SymlinkSetupStep.LinkCreated))
-        || (link.OperationStatus == SymlinkOperationStatus.Active && link.SetupStep != SymlinkSetupStep.Completed);
+        || (link.OperationStatus is SymlinkOperationStatus.Active or SymlinkOperationStatus.Pending && link.SetupStep != SymlinkSetupStep.Completed);
 
     private async Task<SymlinkSetupOutcome> CarryForwardAsync(SymlinkLink link, CancellationToken cancellationToken) =>
         link.SetupStep is null or SymlinkSetupStep.LinkCreated

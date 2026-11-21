@@ -63,7 +63,7 @@ public sealed class SymlinkSetupRunnerTests
         Assert.Equal(0, waiting);
         Assert.Equal([owed.LinkPath], files.CreatedLinks);
         SymlinkLink stored = await StoredAsync(store, owed.Id);
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, stored.OperationStatus);
         // The Sonarr half starts from here on; the pass does not run it in the same breath, which is what
         // lets a slow instance be waited for without holding anything else up.
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
@@ -130,7 +130,7 @@ public sealed class SymlinkSetupRunnerTests
         // broken write is its own row's story, and the second entry got its link.
         Assert.Equal([healthy.LinkPath], files.CreatedLinks);
         Assert.Equal(SymlinkOperationStatus.Pending, (await StoredAsync(store, broken.Id)).OperationStatus);
-        Assert.Equal(SymlinkOperationStatus.Active, (await StoredAsync(store, healthy.Id)).OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, (await StoredAsync(store, healthy.Id)).OperationStatus);
     }
 
     [Fact]
@@ -211,7 +211,7 @@ public sealed class SymlinkSetupRunnerTests
         // owed to the next pass rather than run in the same breath.
         Assert.Equal(0, waiting);
         SymlinkLink stored = await StoredAsync(store, marked.Id);
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, stored.OperationStatus);
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
         Assert.Equal(
             SymlinkFixture.SourceVersion(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize),
@@ -250,7 +250,7 @@ public sealed class SymlinkSetupRunnerTests
 
         Assert.Equal(0, await RunAsync(store, files, SymlinkFixture.Settings(), new StubArrHandler(SymlinkFixture.UpgradeRoutes())));
         SymlinkLink stored = await StoredAsync(store, swapped.Id);
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, stored.OperationStatus);
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
         Assert.Empty(files.CreatedLinks);
         Assert.Empty(files.Removed);

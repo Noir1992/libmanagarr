@@ -168,6 +168,13 @@ export class SymlinksPage implements OnInit {
       ),
     ),
   );
+  protected readonly settingUpCount = computed(
+    () =>
+      this.symlinks
+        .links()
+        .filter((link) => (link.operationStatus === 'Pending' || link.operationStatus === 'Active') && link.setupStep !== 'Completed')
+        .length,
+  );
   protected readonly managedLinkWarningText = computed(() => {
     const affected = this.sortRows(this.symlinks.links())
       .filter((link) => this.warningFindings(link).length > 0)
@@ -307,7 +314,10 @@ export class SymlinksPage implements OnInit {
     const timer = globalThis.setInterval(() => {
       if (
         !globalThis.document.hidden &&
-        this.symlinks.links().some((link) => this.isRepairing(link) || link.operationStatus !== 'Active' || link.setupStep !== 'Completed')
+        (this.symlinks.deletionRefreshPending() ||
+          this.symlinks
+            .links()
+            .some((link) => this.isRepairing(link) || link.operationStatus !== 'Active' || link.setupStep !== 'Completed'))
       )
         void this.symlinks.refreshProgress();
     }, 5000);
@@ -341,7 +351,7 @@ export class SymlinksPage implements OnInit {
   }
 
   protected edit(link?: SymlinkLink): void {
-    if (link && this.linkLocked(link)) return;
+    if (link && !this.canChangeLink(link)) return;
     this.dialog.open(EditSymlinkDialogComponent, { data: link, width: '760px', maxWidth: '95vw' });
   }
 
@@ -392,6 +402,24 @@ export class SymlinksPage implements OnInit {
     return !this.featureEnabled() || this.isDeleting(link) || this.repairing().has(link.id) || this.linkState(link.id).busy === true;
   }
 
+  protected canChangeLink(link: SymlinkLink): boolean {
+    return !this.linkLocked(link) && link.operationStatus === 'Active' && link.setupStep === 'Completed' && link.canEdit !== false;
+  }
+
+  protected setupProgress(link: SymlinkLink): string | null {
+    if (link.setupStep === 'Completed' || this.isDeleting(link) || link.operationStatus === 'Updating') return null;
+    if (this.needsRepair(link) && !this.isRepairing(link)) return this.t('symlinks.progress.paused');
+    const steps: Record<string, TranslationKey> = {
+      LinkCreated: 'symlinks.progress.LinkCreated',
+      MonitoringDisabled: 'symlinks.progress.MonitoringDisabled',
+      RescanRequested: 'symlinks.progress.RescanRequested',
+      EpisodeAssigned: 'symlinks.progress.EpisodeAssigned',
+      MetadataMatched: 'symlinks.progress.MetadataMatched',
+      Renamed: 'symlinks.progress.Renamed',
+    };
+    return this.t(steps[link.setupStep ?? 'LinkCreated']);
+  }
+
   protected linkState(id: string): SymlinkActionState {
     return this.symlinks.linkStates()[id] ?? {};
   }
@@ -405,11 +433,16 @@ export class SymlinksPage implements OnInit {
   }
 
   protected operationStatus(link: SymlinkLink): string {
-    return operationStatusLabel(link.operationStatus, this.translate);
+    return operationStatusLabel(
+      link.operationStatus === 'Active' && link.setupStep !== 'Completed' ? 'Pending' : link.operationStatus,
+      this.translate,
+    );
   }
 
   protected operationStatusClass(link: SymlinkLink): string {
-    return this.statusClass(operationFeedbackState(link.operationStatus));
+    return this.statusClass(
+      operationFeedbackState(link.operationStatus === 'Active' && link.setupStep !== 'Completed' ? 'Pending' : link.operationStatus),
+    );
   }
 
   protected specialLabel(episodeNumber: number): string {
@@ -513,7 +546,7 @@ export class SymlinksPage implements OnInit {
   }
 
   protected async deleteAsync(link: SymlinkLink): Promise<void> {
-    if (this.linkLocked(link)) return;
+    if (!this.canChangeLink(link)) return;
     if (!globalThis.confirm(this.t('symlinks.links.delete.question'))) return;
     try {
       await this.symlinks.deleteLink(link.id, link.revision);
