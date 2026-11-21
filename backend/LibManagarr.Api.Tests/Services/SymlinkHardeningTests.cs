@@ -131,19 +131,25 @@ public sealed class SymlinkHardeningTests
     }
 
     [Fact]
-    public async Task TargetedCleanupDoesNotDropTheJournalWhileSonarrStillAssociatesTheRemovedLink()
+    public async Task FailedDeleteKeepsTheJournalAndRetriesOnlyTheRecordedSonarrFile()
     {
-        Dictionary<string, List<string>> routes = SymlinkFixture.HappyRoutes();
-        SymlinkService service = Service(new StubArrHandler(routes));
-        SymlinkLink link = await service.CreateAsync(Pair, 4321, settings.Symlinks.Revision, null, CancellationToken.None);
-        await service.DeleteAsync(link.Id, link.Revision, CancellationToken.None);
-        routes["GET /api/v3/episode/5"] = ["""{"id":5,"seriesId":12,"episodeFileId":99,"hasFile":true}"""];
-        routes["GET /api/v3/episodefile/99"] = ["{\"id\":99,\"path\":" + JsonSerializer.Serialize(SymlinkFixture.SeriesInstance($"{SymlinkFixture.SeriesFolder}/Specials/{SymlinkFixture.LinkName}")) + "}"];
-        Assert.Equal(SymlinkSetupOutcome.Waiting, await service.FinishDeletionAsync((await store.GetLinkAsync(link.Id, CancellationToken.None))!, CancellationToken.None));
-        Assert.Equal(SymlinkOperationStatus.CleanupPending, (await store.GetLinkAsync(link.Id, CancellationToken.None))!.OperationStatus);
-        routes["GET /api/v3/episode/5"] = ["""{"id":5,"hasFile":false,"episodeFileId":0}"""];
-        Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishDeletionAsync((await store.GetLinkAsync(link.Id, CancellationToken.None))!, CancellationToken.None));
+        SymlinkLink link = await Service().CreateAsync(Pair, 4321, settings.Symlinks.Revision, null, CancellationToken.None);
+        link.SonarrFileId = 99;
+        link = await CompleteSetupAsync(link);
+        StubArrHandler unavailable = new([]) { Throws = new HttpRequestException("Sonarr is offline") };
+        Assert.True(await Service(unavailable).DeleteAndCleanupAsync(link.Id, link.Revision, CancellationToken.None));
+        SymlinkLink pending = (await store.GetLinkAsync(link.Id, CancellationToken.None))!;
+        Assert.Equal(SymlinkOperationStatus.CleanupPending, pending.OperationStatus);
+        Assert.Empty(await store.GetDeletionRefreshesAsync(CancellationToken.None));
+        Assert.False(files.EntryExists(link.LinkPath));
+
+        StubArrHandler recovered = new([]);
+        Assert.Equal(SymlinkSetupOutcome.Completed, await Service(recovered).FinishDeletionAsync(pending, CancellationToken.None));
+        RecordedRequest request = Assert.Single(recovered.Requests);
+        Assert.Equal("DELETE", request.Method);
+        Assert.Equal("/api/v3/episodefile/99", request.Path);
         Assert.Null(await store.GetLinkAsync(link.Id, CancellationToken.None));
+        Assert.Single(await store.GetDeletionRefreshesAsync(CancellationToken.None));
         Assert.Single(files.Removed);
         Assert.True(files.EntryExists(link.SourcePath));
     }
@@ -229,6 +235,14 @@ public sealed class SymlinkHardeningTests
         Dictionary<string, List<string>> routes = SymlinkFixture.HappyRoutes();
         routes["GET /api/v3/episode/6"] = ["""{ "id":6,"seriesId":12,"seasonNumber":0,"episodeNumber":6,"hasFile":false }"""];
         service = Service(new StubArrHandler(routes));
+        if (status != SymlinkOperationStatus.Active || step != SymlinkSetupStep.Completed)
+        {
+            Assert.False(SymlinkService.CanEdit(original));
+            var refused = await Assert.ThrowsAsync<ApiProblemException>(() => service.EditAsync(original.Id,
+                new SaveSymlinkLinkRequest { RadarrInstanceId = original.RadarrInstanceId, SonarrInstanceId = original.SonarrInstanceId, Revision = original.Revision }, CancellationToken.None));
+            Assert.Equal(409, refused.StatusCode);
+            return;
+        }
         SpecialMoviePair next = Pair with { SonarrEpisodeId = 6 };
         SymlinkLinkPlan plan = await service.PreviewAsync(next, 4321, CancellationToken.None, original.Id);
         SymlinkLink edited = (await service.EditAsync(original.Id, new SaveSymlinkLinkRequest { RadarrInstanceId = next.RadarrInstanceId,
@@ -303,14 +317,75 @@ public sealed class SymlinkHardeningTests
         Assert.True(files.EntryExists(link.LinkPath));
     }
 
-    private SymlinkService Service(StubArrHandler? handler = null)
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SlowLiveSweepDoesNotBlockDeletingALinkOrOverwriteItsChangedRevision(bool removeRow)
+    {
+        SymlinkLink link = await Service().CreateAsync(Pair, 4321, settings.Symlinks.Revision, null, CancellationToken.None);
+        link = await CompleteSetupAsync(link);
+        BlockingLiveHandler handler = new();
+        SymlinkLiveStateService live = new(new RadarrClient(new HttpClient(handler)), new SonarrClient(new HttpClient(handler)), TimeProvider.System);
+        SymlinkService service = Service(live: live);
+        FixedSettings configured = new(settings);
+        SonarrSpecialIntegrationService integration = new(store, configured,
+            new SonarrClient(new HttpClient(new StubArrHandler(SymlinkFixture.HappyRoutes()))),
+            new MediaPathMappingService(configured, files), files, TimeProvider.System,
+            NullLogger<SonarrSpecialIntegrationService>.Instance);
+        SymlinkSetupRunner runner = new(store, service, integration, NullLogger<SymlinkSetupRunner>.Instance);
+        Task<int> sweep = runner.RunDueSetupsAsync(CancellationToken.None);
+        try
+        {
+            await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(2));
+            using (await service.LockLinkAsync(link.Id, deadline.Token))
+            {
+                Assert.True(await service.DeleteAsync(link.Id, link.Revision, deadline.Token));
+                if (removeRow)
+                {
+                    SymlinkLink journal = (await store.GetLinkAsync(link.Id, deadline.Token))!;
+                    Assert.True(await store.CompleteDeletionAsync(journal, deadline.Token));
+                }
+            }
+        }
+        finally
+        {
+            handler.Release.TrySetResult();
+            await sweep.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        Assert.Null(await store.GetLinkAsync(link.Id, CancellationToken.None));
+        Assert.False(files.EntryExists(link.LinkPath));
+        Assert.True(files.EntryExists(link.SourcePath));
+    }
+
+    private async Task<SymlinkLink> CompleteSetupAsync(SymlinkLink link)
+    {
+        link.OperationStatus = SymlinkOperationStatus.Active;
+        link.SetupStep = SymlinkSetupStep.Completed;
+        Assert.True(await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None));
+        return (await store.GetLinkAsync(link.Id, CancellationToken.None))!;
+    }
+
+    private sealed class BlockingLiveHandler : HttpMessageHandler
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            Started.TrySetResult();
+            await Release.Task.WaitAsync(token);
+            throw new HttpRequestException("Live read unavailable");
+        }
+    }
+
+    private SymlinkService Service(StubArrHandler? handler = null, SymlinkLiveStateService? live = null)
     {
         handler ??= new(SymlinkFixture.HappyRoutes());
         FixedSettings configured = new(settings);
         return new(store, configured, new MediaPathMappingService(configured, files),
             new SymlinkCapabilityService(store, configured, files, TimeProvider.System, NullLogger<SymlinkCapabilityService>.Instance),
             requests, new RadarrClient(new HttpClient(handler)), new SonarrClient(new HttpClient(handler)), files, TimeProvider.System,
-            NullLogger<SymlinkService>.Instance);
+            NullLogger<SymlinkService>.Instance, live: live);
     }
 
     private static RadarrMovieFileResource Source() => JsonSerializer.Deserialize<List<RadarrMovieFileResource>>(

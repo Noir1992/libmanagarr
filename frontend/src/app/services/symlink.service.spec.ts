@@ -552,7 +552,27 @@ describe('SymlinkService', () => {
     expect(service.linkStates()['link-1'].error).toBe('Repair refused.');
   });
 
-  it('keeps deletion locked until the refreshed suggestions and removed row can be shown together', async () => {
+  it('tracks pending deletion refresh until its replacement suggestions arrive', async () => {
+    const pending = service.refreshProgress();
+    http.expectOne(`${base}/links`).flush([], { headers: { 'X-LibManagarr-Deletion-Refresh-Pending': 'true' } });
+    await settle();
+    expect(service.links()).toEqual([]);
+    expect(service.deletionRefreshPending()).toBeTrue();
+    http.expectOne(`${base}/suggestions`).flush([]);
+    http.expectOne(`${base}/rejections`).flush([]);
+    await pending;
+
+    const finished = service.refreshProgress();
+    http.expectOne(`${base}/links`).flush([], { headers: { 'X-LibManagarr-Deletion-Refresh-Pending': 'false' } });
+    await settle();
+    http.expectOne(`${base}/suggestions`).flush([suggestion()]);
+    http.expectOne(`${base}/rejections`).flush([]);
+    await finished;
+    expect(service.deletionRefreshPending()).toBeFalse();
+    expect(service.suggestions()).toHaveSize(1);
+  });
+
+  it('retains the deletion until removal and refreshed suggestions can be published together', async () => {
     const load = service.loadOverview();
     http.expectOne(`${base}/links`).flush([link('link-1', 3)]);
     await settle();
@@ -726,7 +746,7 @@ describe('SymlinkService', () => {
     http.expectNone(`${base}/links/link-1?revision=4`);
   });
 
-  it('retains a deleting row when loading its replacement suggestion fails and retries together', async () => {
+  it('retains the deleting row when its replacement suggestions fail to load', async () => {
     const load = service.loadOverview();
     http.expectOne(`${base}/links`).flush([{ ...link('link-1'), operationStatus: 'CleanupPending' }]);
     await settle();

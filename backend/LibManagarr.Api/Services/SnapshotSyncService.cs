@@ -101,10 +101,18 @@ public sealed class SnapshotSyncService(
     }
 
     /// <summary>Refreshes one series through the same persistence pipeline as a full sync.</summary>
-    public async Task<SyncInstanceResult> SyncSonarrSeriesAsync(string instanceId, int seriesId, CancellationToken cancellationToken)
+    public Task<SyncInstanceResult> SyncSonarrSeriesAsync(string instanceId, int seriesId, CancellationToken cancellationToken) =>
+        SyncSonarrSeriesCoreAsync(instanceId, seriesId, true, cancellationToken);
+
+    public Task<SyncInstanceResult> SyncSonarrSeriesAfterDeletionAsync(string instanceId, int seriesId, CancellationToken cancellationToken) =>
+        SyncSonarrSeriesCoreAsync(instanceId, seriesId, false, cancellationToken);
+
+    private async Task<SyncInstanceResult> SyncSonarrSeriesCoreAsync(string instanceId, int seriesId, bool requestMatching, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(seriesId);
+
         await SyncLock.WaitAsync(cancellationToken);
+
         try
         {
             AppSettings settings = await settingsService.GetAsync(cancellationToken);
@@ -114,7 +122,9 @@ public sealed class SnapshotSyncService(
             // Establish the baseline once; subsequent targeted syncs never read unrelated series.
             if (previous is null || (await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, cancellationToken))
                 .Any(e => e.InstanceId == instanceId && e.NeedsHistoryBackfill))
+            {
                 return await SyncSonarrAsync(instanceId, settings, cancellationToken);
+            }
 
             DateTimeOffset observedAt = DateTimeOffset.UtcNow;
             SonarrSeriesSnapshot series = await sonarrClient.FetchSeriesSnapshotAsync(instance, seriesId, cancellationToken);
@@ -134,7 +144,7 @@ public sealed class SnapshotSyncService(
             };
             merged.Series = merged.Series.OrderBy(value => value.Title, StringComparer.OrdinalIgnoreCase).ToList();
             await PersistSonarrSnapshotAsync(instance, previous, merged, resources, cancellationToken, seriesId: seriesId);
-            symlinkMatching.Request();
+            if (requestMatching) symlinkMatching.Request();
             logger.LogInformation("Synchronized Sonarr series {SeriesId} in instance {InstanceId}.", seriesId, instanceId);
             return new SyncInstanceResult { Message = "Sonarr series synchronized.", SyncedAt = observedAt, ItemCount = 1 };
         }
@@ -157,6 +167,7 @@ public sealed class SnapshotSyncService(
         IReadOnlyList<LibraryChangeHistoryEntry> persisted = await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, token);
         List<LibraryChangeHistoryEntry> combined = LibraryHistoryReconciler.MergeEvents(persisted, historyEntries);
         combined.AddRange(LibraryHistoryReconciler.InferSonarrDeletions(instance, previous, snapshot, combined, seriesId));
+        combined.AddRange(LibraryHistoryReconciler.InferSonarrAdditions(instance, previous, snapshot, combined, seriesId));
         IReadOnlyList<LibraryChangeHistoryEntry> seeds = LibraryHistorySeedBuilder.BuildSonarrSeeds(instance, snapshot, combined);
         combined = LibraryHistoryReconciler.MergeEvents(combined, seeds);
         // A targeted sync contains stale observations of other series; only a full sync can
@@ -166,11 +177,15 @@ public sealed class SnapshotSyncService(
                 snapshot.Series.SelectMany(series => series.Seasons).SelectMany(season => season.Episodes)
                     .Where(episode => episode.HasFile).Sum(episode => episode.File.Size ?? 0));
         if (backfill) LibraryHistoryReconciler.CompleteBackfill(combined, instance.Id);
+
         await historyStore.AppendSnapshotHistoryAsync(ArrApplicationKind.Sonarr, snapshot.InstanceId, snapshot.InstanceName,
             snapshot.SyncedAt, snapshot, token);
-        await historyStore.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr,
-            LibraryHistoryReconciler.Project(combined), token, combined);
+
+        List<LibraryChangeHistoryEntry> projected = LibraryHistoryReconciler.Project(combined);
+        await historyStore.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, projected, token, combined);
+
         LibraryFilterValues filterValues = LibraryFilterValuesBuilder.Build(instance.Id, snapshot);
+
         await settingsService.UpdateAsync(current =>
         {
             if (!current.SonarrInstances.Any(value => value.Id == instance.Id)) return;

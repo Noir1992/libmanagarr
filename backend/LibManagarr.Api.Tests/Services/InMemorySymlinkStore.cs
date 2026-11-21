@@ -18,6 +18,7 @@ internal sealed class InMemorySymlinkStore : ISymlinkStore
 
     private readonly Dictionary<string, SymlinkCapabilityCheck> checks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SymlinkLink> links = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, SymlinkDeletionRefresh> deletionRefreshes = [];
     private readonly List<SymlinkSuggestion> suggestions = [];
     private readonly Dictionary<SpecialMoviePair, SymlinkRejection> rejections = [];
     private readonly Dictionary<string, SymlinkMatchingState> matchingStates = new(StringComparer.OrdinalIgnoreCase);
@@ -74,6 +75,22 @@ internal sealed class InMemorySymlinkStore : ISymlinkStore
         if (!links.TryGetValue(id, out SymlinkLink? stored) || stored.Revision != expectedRevision) return Task.FromResult(false);
         links.Remove(id);
         return Task.FromResult(true);
+    }
+
+    public async Task<bool> CompleteDeletionAsync(SymlinkLink link, CancellationToken cancellationToken)
+    {
+        if (!await DeleteLinkAsync(link.Id, link.Revision, cancellationToken)) return false;
+        deletionRefreshes[link.Id] = new(link.Id, link.Pair, Copy(link));
+        return true;
+    }
+
+    public Task<IReadOnlyList<SymlinkDeletionRefresh>> GetDeletionRefreshesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SymlinkDeletionRefresh>>(deletionRefreshes.Values.ToList());
+
+    public Task RemoveDeletionRefreshAsync(string linkId, CancellationToken cancellationToken)
+    {
+        deletionRefreshes.Remove(linkId);
+        return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<SymlinkSuggestion>> GetSuggestionsAsync(CancellationToken cancellationToken) =>

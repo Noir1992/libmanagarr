@@ -54,7 +54,7 @@ public sealed class SymlinkAdoptionTests
             .Invoke(null, ["offer", confirm, settings, fixture.Service, fixture.Store, CancellationToken.None])!;
         SymlinkLinkDto adopted = Assert.IsType<Accepted<SymlinkLinkDto>>((await confirmTask).Result).Value!;
         Assert.Equal(88, adopted.SonarrFileId);
-        Assert.Equal(SymlinkOperationStatus.Active, adopted.OperationStatus);
+        Assert.Equal(repair ? SymlinkOperationStatus.Pending : SymlinkOperationStatus.Active, adopted.OperationStatus);
         if (!repair) Assert.Empty(fixture.Files.CreatedLinks);
         else Assert.Equal([ExistingPath], fixture.Files.CreatedLinks);
     }
@@ -158,7 +158,7 @@ public sealed class SymlinkAdoptionTests
         SymlinkLink repaired = await fixture.Service.CreateAsync(Pair, SymlinkFixture.RadarrFileId,
             SymlinkFixture.ConfigRevision, null, CancellationToken.None, plan.Draft.SourceVersion,
             Consent(plan) with { Repair = true });
-        Assert.Equal(SymlinkOperationStatus.Active, repaired.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, repaired.OperationStatus);
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, repaired.SetupStep);
         Assert.Null(repaired.ConfirmedMetadata);
         Assert.Null(repaired.PendingUpdate);

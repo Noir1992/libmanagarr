@@ -20,6 +20,7 @@ namespace LibManagarr.Api.Tests.Endpoints;
 /// confirm stops at the link and hands the Sonarr half to the register is proven here too, because it is
 /// what lets a request answer while an instance is still thinking.
 /// </summary>
+[Collection("Symlink gate isolation")]
 public sealed class SymlinkLinkEndpointTests
 {
     private const string RadarrInstance = SymlinkFixture.RadarrInstanceId;
@@ -132,7 +133,7 @@ public sealed class SymlinkLinkEndpointTests
         Assert.Equal(EpisodeTitle, dto.SonarrEpisodeTitle);
         Assert.Equal(SymlinkFixture.ExpectedLinkPath(), dto.LinkPath);
         // Only the link itself is proven by this call; the Sonarr steps run on from the row.
-        Assert.Equal(SymlinkOperationStatus.Active, dto.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, dto.OperationStatus);
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, dto.SetupStep);
         Assert.Equal([SymlinkFixture.ExpectedLinkPath()], files.CreatedLinks);
         SymlinkSuggestion decided = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None));
@@ -167,7 +168,7 @@ public sealed class SymlinkLinkEndpointTests
         await SeedRowAsync("link-2", movieId: 71, at: Start + TimeSpan.FromMinutes(5));
 
         IReadOnlyList<SymlinkLinkDto> rows = (await Invoke<Ok<IReadOnlyList<SymlinkLinkDto>>>(
-            "GetLinksAsync", new FixedSettings(Settings()), store, CancellationToken.None)).Value!;
+            "GetLinksAsync", new FixedSettings(Settings()), store, new DefaultHttpContext(), CancellationToken.None)).Value!;
 
         Assert.Equal(["link-2", "link-1"], rows.Select(row => row.Id));
         SymlinkLinkDto gone = rows[0];
@@ -315,6 +316,57 @@ public sealed class SymlinkLinkEndpointTests
     }
 
     [Fact]
+    public async Task DeletingAnIndependentLinkDoesNotWaitForAnotherLinksOperation()
+    {
+        SymlinkLink first = await SeedRowAsync("busy-link");
+        SymlinkLink other = await SeedRowAsync("independent-link");
+        other.SonarrEpisodeId++;
+        other.LinkPath = Path.Combine(Path.GetDirectoryName(other.LinkPath)!, "another-special.mkv");
+        Assert.True(await store.UpdateLinkAsync(other, other.Revision, CancellationToken.None));
+        other = (await store.GetLinkAsync(other.Id, CancellationToken.None))!;
+        FakeLinkFileSystem files = new();
+        files.Entries[first.LinkPath] = first.LinkText;
+        files.Entries[other.LinkPath] = other.LinkText;
+        Dictionary<string, List<string>> routes = SymlinkFixture.HappyRoutes();
+        routes[$"GET /api/v3/episode/{other.SonarrEpisodeId}"] =
+            [$$"""{"id":{{other.SonarrEpisodeId}},"hasFile":false,"episodeFileId":0}"""];
+        SymlinkService service = Links(new StubArrHandler(routes), files);
+
+        using IDisposable busy = await service.LockLinkAsync(first.Id, CancellationToken.None);
+        var result = await Invoke<Results<NoContent, NotFound, ProblemHttpResult>>("DeleteLinkAsync",
+            other.Id, other.Revision, service, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.IsType<NoContent>(result.Result);
+        Assert.True(files.EntryExists(first.LinkPath));
+        Assert.False(files.EntryExists(other.LinkPath));
+        Assert.Equal(first.Id, Assert.Single(await store.GetLinksAsync(CancellationToken.None)).Id);
+    }
+
+    [Fact]
+    public async Task LinksKeepTheCleanupRowUntilTheBackgroundRefreshFinishes()
+    {
+        SymlinkLink row = await SeedRowAsync("deleting", operation: SymlinkOperationStatus.CleanupPending);
+        Assert.True(await store.CompleteDeletionAsync(row, CancellationToken.None));
+        DefaultHttpContext context = new();
+        var pending = (await Invoke<Ok<IReadOnlyList<SymlinkLinkDto>>>("GetLinksAsync",
+            new FixedSettings(Settings()), store, context, CancellationToken.None)).Value!;
+
+        SymlinkLinkDto visible = Assert.Single(pending);
+        Assert.Equal(row.Id, visible.Id);
+        Assert.Equal(row.LinkPath, visible.LinkPath);
+        Assert.Equal(row.SourcePath, visible.SourcePath);
+        Assert.Equal(SymlinkOperationStatus.CleanupPending, visible.OperationStatus);
+        Assert.False(visible.CanEdit);
+        Assert.Equal("true", context.Response.Headers["X-LibManagarr-Deletion-Refresh-Pending"].ToString());
+
+        await store.RemoveDeletionRefreshAsync(row.Id, CancellationToken.None);
+        var finished = (await Invoke<Ok<IReadOnlyList<SymlinkLinkDto>>>("GetLinksAsync",
+            new FixedSettings(Settings()), store, context, CancellationToken.None)).Value!;
+        Assert.Empty(finished);
+        Assert.Equal("false", context.Response.Headers["X-LibManagarr-Deletion-Refresh-Pending"].ToString());
+    }
+
+    [Fact]
     public async Task Delete_RemovesOnlyTheLinkWithoutRejectingThePair()
     {
         SymlinkLink row = await SeedRowAsync("link-1");
@@ -323,17 +375,16 @@ public sealed class SymlinkLinkEndpointTests
         files.Entries[row.SourcePath] = null;
 
         Results<NoContent, NotFound, ProblemHttpResult> result = await Invoke<Results<NoContent, NotFound, ProblemHttpResult>>(
-            "DeleteLinkAsync", "link-1", 0L, Links(new NeverAskedHandler(), files), CancellationToken.None);
+            "DeleteLinkAsync", "link-1", 0L, Links(new StubArrHandler(SymlinkFixture.HappyRoutes()), files), CancellationToken.None);
 
         Assert.IsType<NoContent>(result.Result);
         Assert.Equal([row.LinkPath], files.Removed);
-        // The source stays untouched while the row tracks the pending Sonarr cleanup.
+        // The source stays untouched and slow library refresh is queued separately.
         Assert.True(files.Entries.ContainsKey(row.SourcePath));
-        Assert.Equal(SymlinkOperationStatus.CleanupPending, (await StoredAsync("link-1")).OperationStatus);
+        Assert.Null(await store.GetLinkAsync("link-1", CancellationToken.None));
+        Assert.Single(await store.GetDeletionRefreshesAsync(CancellationToken.None));
         // Deleting a link does not reject the pairing.
         Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
-        SymlinkService cleanup = Links(new StubArrHandler(SymlinkFixture.HappyRoutes()), files);
-        Assert.Equal(SymlinkSetupOutcome.Completed, await cleanup.FinishDeletionAsync(await StoredAsync("link-1"), CancellationToken.None));
         Assert.Empty(await store.GetRejectionsAsync(CancellationToken.None));
     }
 

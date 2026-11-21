@@ -326,6 +326,31 @@ public sealed class SymlinkServiceTests
     }
 
     [Fact]
+    public async Task UnfinishedSetupCannotBeEditedOrDeletedEvenIfAnOlderRowStillSaysActive()
+    {
+        StubArrHandler handler = new(HappyRoutes());
+        FakeLinkFileSystem files = new();
+        SymlinkService service = CreateService(handler, files);
+        foreach (var status in new[] { SymlinkOperationStatus.Pending, SymlinkOperationStatus.Active })
+        foreach (SymlinkSetupStep? step in new SymlinkSetupStep?[] { null, SymlinkSetupStep.LinkCreated,
+                     SymlinkSetupStep.MonitoringDisabled, SymlinkSetupStep.RescanRequested,
+                     SymlinkSetupStep.EpisodeAssigned, SymlinkSetupStep.MetadataMatched, SymlinkSetupStep.Renamed })
+        {
+            SymlinkLink link = await SeedRowAsync(status, step);
+            files.Entries[link.LinkPath] = link.LinkText;
+            Assert.False(SymlinkService.CanEdit(link));
+            ApiProblemException editing = await Assert.ThrowsAsync<ApiProblemException>(() => service.EditAsync(link.Id,
+                new SaveSymlinkLinkRequest { RadarrInstanceId = link.RadarrInstanceId, SonarrInstanceId = link.SonarrInstanceId, Revision = link.Revision }, CancellationToken.None));
+            ApiProblemException deleting = await Assert.ThrowsAsync<ApiProblemException>(() => service.DeleteAsync(link.Id, link.Revision, CancellationToken.None));
+            Assert.Equal(409, editing.StatusCode);
+            Assert.Equal(409, deleting.StatusCode);
+            Assert.True(files.EntryExists(link.LinkPath));
+            Assert.Equal(link.Revision, (await StoredAsync(link.Id)).Revision);
+        }
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task TheConfirmWritesTheLinkAndConfirmsTheEntryAndTheSuggestion()
     {
         await SeedSuggestionAsync();
@@ -336,7 +361,7 @@ public sealed class SymlinkServiceTests
         SymlinkLink link = await service.CreateAsync(Pair, RadarrFileId, ConfigRevision, "suggestion-1", CancellationToken.None);
 
         Assert.NotEqual(string.Empty, link.Id);
-        Assert.Equal(SymlinkOperationStatus.Active, link.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, link.OperationStatus);
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, link.SetupStep);
         Assert.Equal("suggestion-1", link.SuggestionId);
         Assert.Equal(ExpectedLinkPath(), link.LinkPath);
@@ -416,6 +441,56 @@ public sealed class SymlinkServiceTests
         Assert.Contains("path configuration changed", problem.Title);
         Assert.Empty(handler.Requests);
         Assert.Empty(await store.GetLinksAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletionWaitsForSonarrBeyondThreeSecondsWithoutSendingConfirmationReads()
+    {
+        SymlinkLink link = await SeedLinkAsync();
+        link.SonarrFileId = 99;
+        await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None);
+        link = await StoredAsync(link.Id);
+        FakeLinkFileSystem files = new();
+        files.Entries[link.LinkPath] = link.LinkText;
+        files.Entries[link.SourcePath] = null;
+        ControlledDeleteHandler handler = new();
+        SymlinkService service = CreateService(handler, files);
+        Task<bool> deleting = service.DeleteAndCleanupAsync(link.Id, link.Revision, CancellationToken.None);
+        try
+        {
+            await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await Task.Delay(TimeSpan.FromSeconds(3.2));
+            Assert.False(deleting.IsCompleted);
+            Assert.Equal(SymlinkOperationStatus.CleanupPending, (await StoredAsync(link.Id)).OperationStatus);
+            Assert.Empty(await store.GetDeletionRefreshesAsync(CancellationToken.None));
+        }
+        finally { handler.Reply.TrySetResult(new HttpResponseMessage(System.Net.HttpStatusCode.NoContent)); }
+        Assert.True(await deleting.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(1, handler.Requests);
+        Assert.Null(await store.GetLinkAsync(link.Id, CancellationToken.None));
+        Assert.Single(await store.GetDeletionRefreshesAsync(CancellationToken.None));
+        Assert.True(files.EntryExists(link.SourcePath));
+    }
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.NoContent)]
+    [InlineData(System.Net.HttpStatusCode.NotFound)]
+    public async Task SuccessfulOrAlreadyMissingStoredFileNeedsOnlyOneDelete(System.Net.HttpStatusCode response)
+    {
+        SymlinkLink link = await SeedLinkAsync();
+        link.SonarrFileId = 99;
+        await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None);
+        link = await StoredAsync(link.Id);
+        FakeLinkFileSystem files = new();
+        files.Entries[link.LinkPath] = link.LinkText;
+        ControlledDeleteHandler handler = new();
+        handler.Reply.SetResult(new HttpResponseMessage(response));
+        SymlinkService service = CreateService(handler, files);
+
+        Assert.True(await service.DeleteAndCleanupAsync(link.Id, link.Revision, CancellationToken.None));
+        Assert.Equal(1, handler.Requests);
+        Assert.Null(await store.GetLinkAsync(link.Id, CancellationToken.None));
+        Assert.Single(await store.GetDeletionRefreshesAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -522,7 +597,7 @@ public sealed class SymlinkServiceTests
         Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishCreationAsync(owed, CancellationToken.None));
 
         SymlinkLink stored = await StoredAsync(owed.Id);
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, stored.OperationStatus);
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
         // Adopting is not rewriting: nothing was written and nothing of that entry was touched.
         Assert.Empty(files.CreatedLinks);
@@ -541,7 +616,7 @@ public sealed class SymlinkServiceTests
 
         Assert.Equal([owed.LinkPath], files.CreatedLinks);
         SymlinkLink stored = await StoredAsync(owed.Id);
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, stored.OperationStatus);
         // The obstacle is gone once the link is proven, so the finding that named it does not stay behind.
         Assert.Empty(stored.Findings);
         Assert.True(await IsPassRequestedAsync());
@@ -581,7 +656,7 @@ public sealed class SymlinkServiceTests
     }
 
     [Fact]
-    public async Task DeletionKeepsItsJournalUntilTheTargetedLibrarySyncSucceeds()
+    public async Task DeletionCompletesWithoutWaitingForTheTargetedLibrarySync()
     {
         SymlinkLink link = await SeedLinkAsync();
         FakeLinkFileSystem files = new();
@@ -592,15 +667,11 @@ public sealed class SymlinkServiceTests
         Assert.True(await service.DeleteAsync(link.Id, link.Revision, CancellationToken.None));
 
         SymlinkLink journal = await StoredAsync(link.Id);
-        await Assert.ThrowsAsync<HttpRequestException>(() => service.FinishDeletionAsync(journal, CancellationToken.None));
-        Assert.Equal(SymlinkOperationStatus.CleanupPending, (await StoredAsync(link.Id)).OperationStatus);
-        Assert.False(files.EntryExists(link.LinkPath));
-        sync.Fail = false;
-        Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishDeletionAsync(await StoredAsync(link.Id), CancellationToken.None));
+        Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishDeletionAsync(journal, CancellationToken.None));
         Assert.Null(await store.GetLinkAsync(link.Id, CancellationToken.None));
-        Assert.Equal(2, sync.Calls);
-        Assert.Equal(SonarrInstanceId, sync.InstanceId);
-        Assert.Equal(SeriesId, sync.SeriesId);
+        Assert.Equal(0, sync.Calls);
+        var pending = Assert.Single(await store.GetDeletionRefreshesAsync(CancellationToken.None));
+        Assert.Equal(link.Pair, pending.Pair);
         Assert.Equal([link.LinkPath], files.Removed);
         Assert.True(files.EntryExists(link.SourcePath));
     }
@@ -608,9 +679,12 @@ public sealed class SymlinkServiceTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task DeletionTargetsOnlyItsOwnedSonarrFileWithoutARescan(bool ownedPath)
+    public async Task DeletionUsesItsStoredFileIdWithoutReadingTheCurrentEpisode(bool ownedPath)
     {
         SymlinkLink link = await SeedLinkAsync();
+        link.SonarrFileId = 99;
+        await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None);
+        link = await StoredAsync(link.Id);
         FakeLinkFileSystem files = new();
         files.Entries[link.LinkPath] = link.LinkText;
         files.Entries[link.SourcePath] = null;
@@ -631,7 +705,7 @@ public sealed class SymlinkServiceTests
         Assert.Equal(SymlinkSetupOutcome.Completed,
             await service.FinishDeletionAsync(await StoredAsync(link.Id), CancellationToken.None));
 
-        Assert.Equal(ownedPath ? 1 : 0, handler.Requests.Count(request => request.Method == "DELETE"));
+        Assert.Equal("DELETE", Assert.Single(handler.Requests).Method);
         Assert.DoesNotContain(handler.Requests, request => request.Path == "/api/v3/command");
         Assert.DoesNotContain(handler.Requests, request => request.Method == "DELETE" && request.Path != "/api/v3/episodefile/99");
         Assert.Null(await store.GetLinkAsync(link.Id, CancellationToken.None));
@@ -698,7 +772,22 @@ public sealed class SymlinkServiceTests
         Assert.Empty(await store.GetLinksAsync(CancellationToken.None));
     }
 
-    private SymlinkService CreateService(StubArrHandler handler, ISymlinkFileSystem files, AppSettings? settings = null, ISnapshotSyncService? snapshotSync = null)
+    private sealed class ControlledDeleteHandler : HttpMessageHandler
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<HttpResponseMessage> Reply { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Requests { get; private set; }
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            Assert.Equal(HttpMethod.Delete, request.Method);
+            Assert.Equal("/api/v3/episodefile/99", request.RequestUri!.AbsolutePath);
+            Requests++;
+            Started.TrySetResult();
+            return await Reply.Task.WaitAsync(token);
+        }
+    }
+
+    private SymlinkService CreateService(HttpMessageHandler handler, ISymlinkFileSystem files, AppSettings? settings = null, ISnapshotSyncService? snapshotSync = null)
     {
         FixedSettings snapshot = new(settings ?? Settings());
         return new SymlinkService(

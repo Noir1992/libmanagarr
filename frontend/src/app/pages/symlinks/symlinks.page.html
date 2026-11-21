@@ -228,6 +228,9 @@
           <h2 class="card-title" id="symlinks-links-title">{{ linksTitle() }}</h2>
           <span class="managed-links-summary">
             <span class="card-subtitle">({{ links().length }})</span>
+            @if (settingUpCount() > 0) {
+              <span class="status-pill" role="status">{{ t('symlinks.progress.count', { count: '' + settingUpCount() }) }}</span>
+            }
             @if (managedLinkWarningText(); as warningText) {
               <app-info-icon
                 class="managed-links-warning"
@@ -315,9 +318,7 @@
                             type="button"
                             mat-stroked-button
                             class="secondary-button"
-                            [disabled]="
-                              linkLocked(link) || !(link.canEdit ?? (link.operationStatus === 'Active' && link.setupStep === 'Completed'))
-                            "
+                            [disabled]="!canChangeLink(link)"
                             (click)="edit(link)"
                           >
                             {{ t('symlinks.edit') }}
@@ -327,7 +328,7 @@
                             type="button"
                             mat-flat-button
                             class="danger-button"
-                            [disabled]="linkLocked(link)"
+                            [disabled]="!canChangeLink(link)"
                             (click)="deleteAsync(link)"
                             [attr.aria-busy]="isDeleting(link)"
                           >
@@ -339,6 +340,13 @@
                         </div>
                       </div>
                     </div>
+
+                    @if (setupProgress(link); as progress) {
+                      <p class="setup-progress" role="status" aria-live="polite">
+                        <app-feedback-icon [state]="needsRepair(link) && !isRepairing(link) ? 'error' : 'loading'" variant="inline" />
+                        <span>{{ progress }}</span>
+                      </p>
+                    }
 
                     @if (expandedLinks().has(link.id)) {
                       <dl class="item-facts" [id]="'link-details-' + link.id" animate.enter="expand-in" animate.leave="expand-out">

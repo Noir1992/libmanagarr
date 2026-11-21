@@ -19,6 +19,10 @@ public interface ISymlinkStore
 
     Task<IReadOnlyList<SymlinkLink>> GetLinksAsync(CancellationToken cancellationToken);
 
+    async Task<IReadOnlyList<SymlinkLink>> GetEpisodeLinksAsync(SpecialMoviePair episode, CancellationToken cancellationToken) =>
+        (await GetLinksAsync(cancellationToken)).Where(link => link.SonarrInstanceId == episode.SonarrInstanceId
+            && link.SonarrSeriesId == episode.SonarrSeriesId && link.SonarrEpisodeId == episode.SonarrEpisodeId).ToArray();
+
     Task<SymlinkLink?> GetLinkAsync(string id, CancellationToken cancellationToken);
 
     Task InsertLinkAsync(SymlinkLink link, CancellationToken cancellationToken);
@@ -28,7 +32,18 @@ public interface ISymlinkStore
 
     Task<bool> DeleteLinkAsync(string id, long expectedRevision, CancellationToken cancellationToken);
 
+    /// <summary>Atomically removes a confirmed deletion and queues its library refresh.</summary>
+    Task<bool> CompleteDeletionAsync(SymlinkLink link, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<SymlinkDeletionRefresh>> GetDeletionRefreshesAsync(CancellationToken cancellationToken);
+
+    Task RemoveDeletionRefreshAsync(string linkId, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<SymlinkSuggestion>> GetSuggestionsAsync(CancellationToken cancellationToken);
+
+    async Task<IReadOnlyList<SymlinkSuggestion>> GetEpisodeSuggestionsAsync(SpecialMoviePair episode, CancellationToken cancellationToken) =>
+        (await GetSuggestionsAsync(cancellationToken)).Where(row => row.Pair.SonarrInstanceId == episode.SonarrInstanceId
+            && row.Pair.SonarrSeriesId == episode.SonarrSeriesId && row.Pair.SonarrEpisodeId == episode.SonarrEpisodeId).ToArray();
 
     Task<SymlinkSuggestion?> GetSuggestionAsync(string id, CancellationToken cancellationToken);
 

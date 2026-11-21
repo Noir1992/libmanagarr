@@ -24,6 +24,57 @@ public sealed class SymlinkSuggestionServiceTests
     private readonly InMemorySymlinkStore store = new();
 
     [Fact]
+    public async Task DeletionRefreshDoesNotWaitForFullMatchingOnAnotherEpisode()
+    {
+        AppSettings settings = Settings(specials: [Episode(6, SpecialTitle), Episode(5, SpecialTitle)]);
+        var blockedPair = new SpecialMoviePair(RadarrInstance, 70, SonarrInstance, 12, 6);
+        var deletedPair = new SpecialMoviePair(RadarrInstance, 70, SonarrInstance, 12, 5);
+        IDisposable blockedEpisode = await SymlinkOperationGate.EnterAsync(blockedPair, CancellationToken.None);
+        Task<SymlinkMatchingRun> fullPass = Service(settings).RefreshAsync(true, CancellationToken.None);
+        string? scopedSuggestionId = null;
+        try
+        {
+            Assert.False(fullPass.IsCompleted);
+            SymlinkMatchingRun scoped = await Service(settings).RefreshDeletedEpisodeAsync(deletedPair, CancellationToken.None)
+                .WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(1, scoped.Created);
+            scopedSuggestionId = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None)).Id;
+            Assert.False(fullPass.IsCompleted);
+        }
+        finally
+        {
+            blockedEpisode.Dispose();
+            await fullPass.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        var suggestions = await store.GetSuggestionsAsync(CancellationToken.None);
+        Assert.Equal(2, suggestions.Count);
+        Assert.Equal(scopedSuggestionId, Assert.Single(suggestions, s => s.Pair == deletedPair).Id);
+    }
+
+    [Fact]
+    public async Task DeletionRefreshOnlyChangesTheAffectedSpecialAndKeepsItsAlternatives()
+    {
+        AppSettings settings = Settings(specials: [Episode(5, SpecialTitle), Episode(6, SpecialTitle)],
+            movies: [Film(SpecialTitle, movieId: 70), Film(SpecialTitle, movieId: 71)]);
+        await Service(settings).RefreshAsync(true, CancellationToken.None);
+        var before = await store.GetSuggestionsAsync(CancellationToken.None);
+        var unrelated = before.Where(s => s.Pair.SonarrEpisodeId == 6).ToArray();
+        // Even a now-absent unrelated episode must not be marked stale by a scoped refresh.
+        settings.SonarrSnapshots[0].Series[0].Seasons[0].Episodes.RemoveAll(e => e.EpisodeId == 6);
+        await Service(settings).RefreshDeletedEpisodeAsync(before.First(s => s.Pair.SonarrEpisodeId == 5).Pair, CancellationToken.None);
+
+        var after = await store.GetSuggestionsAsync(CancellationToken.None);
+        foreach (var original in unrelated)
+        {
+            var unchanged = Assert.Single(after, s => s.Id == original.Id);
+            Assert.Equal(original.Revision, unchanged.Revision);
+            Assert.Equal(original.Status, unchanged.Status);
+        }
+        Assert.All(after.Where(s => s.Pair.SonarrEpisodeId == 5), s => Assert.Single(s.Alternatives));
+    }
+
+    [Fact]
     public async Task DisplayLanguageChanges_KeepSuggestionIdentityRevisionAndDecision()
     {
         AppSettings settings = Settings();
@@ -479,10 +530,12 @@ public sealed class SymlinkSuggestionServiceTests
         SymlinkService links = new(store, configured, new MediaPathMappingService(configured),
             new SymlinkCapabilityService(store, configured, files, clock, NullLogger<SymlinkCapabilityService>.Instance),
             new SymlinkSetupRequests(), new RadarrClient(new HttpClient(handler)), new SonarrClient(new HttpClient(handler)),
-            files, clock, NullLogger<SymlinkService>.Instance, matching: matching);
+            files, clock, NullLogger<SymlinkService>.Instance);
 
-        using IDisposable operation = await SymlinkOperationGate.EnterAsync(CancellationToken.None);
-        Assert.Equal(SymlinkSetupOutcome.Completed, await links.FinishDeletionAsync(journal, CancellationToken.None));
+        using (await links.LockLinkAsync(journal.Id, CancellationToken.None))
+            Assert.Equal(SymlinkSetupOutcome.Completed, await links.FinishDeletionAsync(journal, CancellationToken.None));
+        Assert.Single(await store.GetDeletionRefreshesAsync(CancellationToken.None));
+        await matching.RefreshDeletedEpisodeAsync(journal.Pair, CancellationToken.None);
 
         Assert.Null(await store.GetLinkAsync(journal.Id, CancellationToken.None));
         SymlinkSuggestion reopened = Assert.Single(await store.GetSuggestionsAsync(CancellationToken.None),

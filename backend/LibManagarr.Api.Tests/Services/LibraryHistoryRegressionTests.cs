@@ -120,6 +120,44 @@ public sealed class LibraryHistoryRegressionTests
     }
 
     [Fact]
+    public void LegacyReconciliationSeparatesMediaInstancesAndKindsAndPreservesPartialRecovery()
+    {
+        List<LibraryChangeHistoryEntry> history = [];
+        List<LibraryChangeHistoryEntry> retained = [];
+        for (int i = 0; i < 600; i++)
+        {
+            var deletion = Entry($"delete:{i}", LibraryChangeType.Deleted, At, 100);
+            var import = Entry($"import:{i}", LibraryChangeType.Added, At.AddSeconds(1), 60);
+            // Reuse media keys across instances and applications, just like their numeric IDs.
+            foreach (var entry in new[] { deletion, import })
+            {
+                entry.MediaKey = $"medium:{i / 4}";
+                entry.InstanceId = $"instance:{i % 2}";
+                entry.Kind = i % 4 < 2 ? ArrApplicationKind.Sonarr : ArrApplicationKind.Radarr;
+            }
+            var legacy = Assert.Single(LibraryChangeHistoryNormalizer.Normalize([deletion, import]));
+            legacy.IsLegacy = true;
+            legacy.DeltaSizeBytes = 0;
+            legacy.IsSizeDeltaKnown = false;
+            history.Add(legacy);
+            if (i % 3 == 0) history.AddRange([deletion, import]);
+            else
+            {
+                retained.Add(legacy);
+                if (i % 3 == 1) history.Add(import);
+            }
+        }
+
+        var projected = LibraryHistoryReconciler.Project(history);
+        Assert.Equal(600, projected.Count);
+        Assert.Equal(200, projected.Count(e => !e.IsLegacy && e.DeltaSizeBytes == -40));
+        Assert.Equal(400, projected.Count(e => e.IsLegacy));
+        foreach (var legacy in retained) Assert.Contains(legacy, projected);
+        // The journal itself must remain available for the next recovery attempt.
+        Assert.Equal(600, history.Count(e => e.IsLegacy && e.DeltaSizeBytes == 0));
+    }
+
+    [Fact]
     public void ADelayedHistoryEventReplacesAnInferredDeletion()
     {
         var inferred = Assert.Single(LibraryHistoryReconciler.InferRadarrDeletions(Instance, Radarr(100), Radarr(null), []));

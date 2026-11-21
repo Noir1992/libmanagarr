@@ -45,6 +45,7 @@ export class SymlinkService {
   private suggestionReadVersion = 0;
   private capabilityReadVersion = 0;
   private readonly linksState = signal<SymlinkLink[]>([]);
+  readonly deletionRefreshPending = signal(false);
   private linkReadVersion = 0;
   private progressRead: Promise<void> | null = null;
   private readonly rejectionsState = signal<SymlinkRejection[]>([]);
@@ -276,7 +277,7 @@ export class SymlinkService {
     try {
       const target = this.links().find((link) => link.id === id);
       await this.perform(this.linkBusy, id, () => this.deleteCurrentRevision(id, revision, target));
-      // Retain the locked row until both its removal and the refreshed suggestions can be published.
+      // Keep the cleanup row locked until the server has finished refreshing its suggestions.
       this.linkReadVersion++;
       this.linksState.update((links) => links.map((link) => (link.id === id ? { ...link, operationStatus: 'CleanupPending' } : link)));
       await this.reload(() => this.readOverview());
@@ -411,9 +412,10 @@ export class SymlinkService {
 
   private async readOverview(): Promise<void> {
     const linksVersion = ++this.linkReadVersion;
-    // The backend publishes the suggestion before removing the completed cleanup journal.
-    const links = await firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`));
+    const response = await firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`, { observe: 'response' }));
     if (linksVersion !== this.linkReadVersion) return;
+    const links = response.body ?? [];
+    this.deletionRefreshPending.set(response.headers.get('X-LibManagarr-Deletion-Refresh-Pending') === 'true');
     const suggestionsVersion = ++this.suggestionReadVersion;
     const [suggestions, rejections] = await Promise.all([
       firstValueFrom(this.http.get<SymlinkSuggestion[]>(`${this.url}/suggestions`)),
@@ -424,12 +426,9 @@ export class SymlinkService {
       await this.readOverview();
       return;
     }
-    // No awaited work between these writes: the view receives the lists in the same render.
+    // Publish removal and refreshed suggestions together, after all reads have succeeded.
     this.reconcileRepairs(links);
     this.linksState.set(links);
-    this.suggestionsState.set(suggestions);
-    this.rejectionsState.set(rejections);
-    this.overviewError.set(null);
     this.linkBusy.update((states) =>
       Object.fromEntries(
         Object.entries(states).map(([id, state]) => [
@@ -443,6 +442,9 @@ export class SymlinkService {
         ]),
       ),
     );
+    this.suggestionsState.set(suggestions);
+    this.rejectionsState.set(rejections);
+    this.overviewError.set(null);
   }
 
   private readSuggestions(): Promise<void> {

@@ -25,10 +25,18 @@ public static class LibraryHistoryReconciler
                 entry.DeltaSizeBytes = existing.DeltaSizeBytes;
             }
             events[key] = entry;
+            if (entry.ChangeType == LibraryChangeType.Added && !entry.IsInferred && entry.FileId is not null
+                && inferredByMedia.TryGetValue((entry.Kind, entry.InstanceId, entry.MediaKey), out var additions))
+            {
+                foreach (var candidate in additions.Where(p => p.Value.EventType == "libraryFileObserved"
+                    && p.Value.FileId == entry.FileId && p.Value.ObservedSince <= entry.OccurredAt
+                    && entry.OccurredAt <= p.Value.OccurredAt))
+                    events.Remove(candidate.Key);
+            }
             if (entry.ChangeType == LibraryChangeType.Deleted && !entry.IsInferred)
             {
                 if (inferredByMedia.TryGetValue((entry.Kind, entry.InstanceId, entry.MediaKey), out var inferred))
-                    foreach (var candidate in inferred.Where(p => p.Value.ObservedSince.HasValue
+                    foreach (var candidate in inferred.Where(p => p.Value.ChangeType == LibraryChangeType.Deleted && p.Value.ObservedSince.HasValue
                         && entry.OccurredAt >= p.Value.ObservedSince.Value && entry.OccurredAt <= p.Value.OccurredAt
                         && (entry.FileId is null || p.Value.FileId is null || entry.FileId == p.Value.FileId)
                         && (!entry.SizeBytes.HasValue || !p.Value.SizeBytes.HasValue || entry.SizeBytes == p.Value.SizeBytes)))
@@ -52,18 +60,38 @@ public static class LibraryHistoryReconciler
     {
         // A legacy merged update has no constituent events. Replace it only when both originals
         // can be recovered; otherwise keep it and suppress partially recovered duplicates.
+
         List<LibraryChangeHistoryEntry> original = events.Where(e => !(e.IsLegacy && e.ChangeType == LibraryChangeType.Updated)
             && !(e.EventType == LibraryInventoryHistoryBuilder.EventType && e.DeltaSizeBytes == 0)).ToList();
+
         List<LibraryChangeHistoryEntry> rebuilt = LibraryChangeHistoryNormalizer.Normalize(original);
+
+        // Index the normalized history once. A legacy entry only suppresses recovered events
+        // for its own medium; scanning the entire library for every legacy entry is unnecessary.
+        var sourceCounts = rebuilt.GroupBy(e => (e.Kind, e.InstanceId, e.SourceKey))
+            .ToDictionary(g => g.Key, g => g.Count());
+        var recoverableByMedia = rebuilt.Where(e => e.ChangeType is LibraryChangeType.Added or LibraryChangeType.Deleted)
+            .GroupBy(e => (e.Kind, e.InstanceId, e.MediaKey)).ToDictionary(g => g.Key, g => g.ToArray());
+        HashSet<LibraryChangeHistoryEntry> suppressed = [];
+        List<LibraryChangeHistoryEntry> retainedLegacy = [];
         foreach (LibraryChangeHistoryEntry legacy in events.Where(e => e.IsLegacy && e.ChangeType == LibraryChangeType.Updated))
         {
-            if (rebuilt.Any(e => e.Kind == legacy.Kind && e.InstanceId == legacy.InstanceId && e.SourceKey == legacy.SourceKey)) continue;
-            rebuilt.RemoveAll(e => e.Kind == legacy.Kind && e.InstanceId == legacy.InstanceId && e.MediaKey == legacy.MediaKey
-                && (e.OccurredAt == legacy.OccurredAt || legacy.SourceKey.Contains($":{e.OccurredAt:O}:", StringComparison.Ordinal))
-                && e.ChangeType is LibraryChangeType.Added or LibraryChangeType.Deleted);
-            rebuilt.Add(legacy);
+            var source = (legacy.Kind, legacy.InstanceId, legacy.SourceKey);
+            if (sourceCounts.ContainsKey(source)) continue;
+            if (recoverableByMedia.TryGetValue((legacy.Kind, legacy.InstanceId, legacy.MediaKey), out var recovered))
+                foreach (var entry in recovered)
+                {
+                    if (suppressed.Contains(entry) || (entry.OccurredAt != legacy.OccurredAt
+                        && !legacy.SourceKey.Contains($":{entry.OccurredAt:O}:", StringComparison.Ordinal))) continue;
+                    suppressed.Add(entry);
+                    var key = (entry.Kind, entry.InstanceId, entry.SourceKey);
+                    if (--sourceCounts[key] == 0) sourceCounts.Remove(key);
+                }
+            retainedLegacy.Add(legacy);
+            sourceCounts[source] = 1;
         }
-        return rebuilt.OrderBy(e => e.OccurredAt).ToList();
+
+        return rebuilt.Where(e => !suppressed.Contains(e)).Concat(retainedLegacy).OrderBy(e => e.OccurredAt).ToList();
     }
 
     public static IReadOnlyList<LibraryChangeHistoryEntry> InferSonarrDeletions(ArrInstanceSettings instance,
@@ -85,6 +113,58 @@ public static class LibraryHistoryReconciler
         Infer(instance, ArrApplicationKind.Radarr,
             previous is null ? [] : LibraryChangeHistoryBuilder.RadarrFiles(previous), LibraryChangeHistoryBuilder.RadarrFiles(current),
             previous?.SyncedAt ?? current.SyncedAt, current.SyncedAt, events);
+
+    /// <summary>Rescans attach files without creating Sonarr import history. Record their observed arrival.</summary>
+    public static IReadOnlyList<LibraryChangeHistoryEntry> InferSonarrAdditions(ArrInstanceSettings instance,
+        SonarrInstanceSnapshot? previous, SonarrInstanceSnapshot current,
+        IReadOnlyList<LibraryChangeHistoryEntry> events, int? seriesId = null)
+    {
+        var previousFiles = previous is null ? [] : LibraryChangeHistoryBuilder.SonarrFiles(previous);
+        var previousEpisodes = (previous?.Series ?? []).SelectMany(s => s.Seasons)
+            .SelectMany(s => s.Episodes).Select(e => e.EpisodeId).ToHashSet();
+        var observedSince = previous is null ? [] : LibraryChangeHistoryBuilder.SonarrObservationTimes(previous);
+        var latest = events.Where(e => e.Kind == ArrApplicationKind.Sonarr && e.InstanceId == instance.Id
+                && e.OccurredAt <= current.SyncedAt && e.ChangeType is LibraryChangeType.Added or LibraryChangeType.Deleted)
+            .GroupBy(e => e.MediaKey).ToDictionary(g => g.Key,
+                g => g.OrderBy(e => e.OccurredAt).ThenBy(e => e.HistoryId ?? NumericId(e.SourceKey)).Last());
+        List<LibraryChangeHistoryEntry> additions = [];
+        foreach (var series in current.Series.Where(s => !seriesId.HasValue || s.SeriesId == seriesId))
+        foreach (var episode in series.Seasons.SelectMany(s => s.Episodes).Where(e => e.HasFile && e.EpisodeId > 0))
+        {
+            string key = LibraryChangeHistoryBuilder.BuildSonarrMediaKey(instance.Id, episode.EpisodeId);
+            latest.TryGetValue(key, out var last);
+            DateTimeOffset since = observedSince.GetValueOrDefault(episode.EpisodeId,
+                previous?.LastFullSyncAt ?? previous?.SyncedAt ?? current.SyncedAt);
+            bool newlyPresent = previousEpisodes.Contains(episode.EpisodeId) && !previousFiles.ContainsKey(episode.EpisodeId);
+            bool missingImport = last?.ChangeType == LibraryChangeType.Deleted;
+            if (!newlyPresent && !missingImport) continue;
+            if (last?.ChangeType == LibraryChangeType.Added && last.OccurredAt >= since
+                && (last.FileId is null || last.FileId == episode.File.Id?.ToString(System.Globalization.CultureInfo.InvariantCulture))) continue;
+            // With no previous observation, initial inventory is handled by the seed builder.
+            if (missingImport && last!.OccurredAt > since) since = last.OccurredAt;
+            additions.Add(new LibraryChangeHistoryEntry
+            {
+                SourceKey = $"snapshot-add:{key}:{current.SyncedAt:O}",
+                Kind = ArrApplicationKind.Sonarr,
+                InstanceId = instance.Id,
+                InstanceName = instance.Name,
+                MediaKey = key,
+                OccurredAt = current.SyncedAt,
+                ObservedSince = since,
+                ChangeType = LibraryChangeType.Added,
+                IsInferred = true,
+                EventType = "libraryFileObserved",
+                EntityTitle = episode.Title,
+                SeriesTitle = series.Title,
+                FilePath = episode.File.Path ?? episode.File.RelativePath,
+                FileId = episode.File.Id?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                SizeBytes = episode.File.Size,
+                DeltaSizeBytes = episode.File.Size ?? 0,
+                IsSizeDeltaKnown = episode.File.Size.HasValue
+            });
+        }
+        return additions;
+    }
 
     private static IReadOnlyList<LibraryChangeHistoryEntry> Infer(ArrInstanceSettings instance, ArrApplicationKind kind,
         Dictionary<int, LibraryChangeHistoryBuilder.FileInfo> previous, Dictionary<int, LibraryChangeHistoryBuilder.FileInfo> current,

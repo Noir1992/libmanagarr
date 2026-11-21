@@ -23,4 +23,15 @@ public sealed class SymlinkSetupRequests
     {
         _ = await signal.Reader.ReadAsync(cancellationToken);
     }
+
+    public async Task WaitForRequestOrDelayAsync(TimeSpan delay, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource timeout = new(delay, clock);
+        using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, cancellationToken);
+        try { await WaitForRequestAsync(linked.Token); }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            // A retry is due; external cancellation must still propagate.
+        }
+    }
 }

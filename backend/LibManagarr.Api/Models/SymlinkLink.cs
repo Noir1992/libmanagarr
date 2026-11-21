@@ -6,6 +6,7 @@ namespace LibManagarr.Api.Models;
 /// </summary>
 public enum SymlinkOperationStatus
 {
+    /// <summary>The filesystem link or any of its Sonarr setup steps is still pending.</summary>
     Pending,
     Active,
     Conflict,

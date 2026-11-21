@@ -51,7 +51,7 @@ public sealed class SymlinkSetupBackgroundService(
 
                 if (waiting > 0)
                 {
-                    await Task.Delay(PollDelay, clock, stoppingToken);
+                    await requests.WaitForRequestOrDelayAsync(PollDelay, clock, stoppingToken);
                     requests.Request();
                 }
             }
