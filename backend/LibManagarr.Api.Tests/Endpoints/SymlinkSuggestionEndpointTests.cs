@@ -74,7 +74,7 @@ public sealed class SymlinkSuggestionEndpointTests
     }
 
     [Fact]
-    public async Task Suggestions_IncludeTheLiveFileCheckWithoutAdoptingOrChangingStoredRows()
+    public async Task Suggestions_IncludeTheCachedFileCheckWithoutAdoptingOrChangingStoredRows()
     {
         AppSettings settings = ExistingEpisodeFileInspectorTests.Settings();
         SymlinkSuggestion suggestion = ExistingEpisodeFileInspectorTests.Suggestion();
@@ -87,8 +87,10 @@ public sealed class SymlinkSuggestionEndpointTests
         files.Entries[episode] = Path.GetRelativePath(Path.GetDirectoryName(episode)!, source);
         ExistingEpisodeFileInspector inspector = ExistingEpisodeFileInspectorTests.Inspector(settings, files,
             ExistingEpisodeFileInspectorTests.Handler(episode, source));
+        SymlinkInspectionCache cache = new();
+        cache.Store(settings, suggestion, await inspector.CheckAsync(settings, suggestion, CancellationToken.None));
         Ok<IReadOnlyList<SymlinkSuggestionDto>> response = await Invoke<Ok<IReadOnlyList<SymlinkSuggestionDto>>>(
-            "GetSuggestionsAsync", new StubSettingsService(settings), store, inspector, CancellationToken.None);
+            "GetSuggestionsAsync", new StubSettingsService(settings), store, cache, CancellationToken.None);
         ExistingEpisodeFileCheck check = Assert.Single(response.Value!).ExistingFileCheck!;
         Assert.Equal(ExistingEpisodeFileStatus.Matches, check.Status);
         Assert.Equal(source, check.ActualTarget);
@@ -317,6 +319,9 @@ public sealed class SymlinkSuggestionEndpointTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await cookieless.GetAsync("/api/settings/symlinks/suggestions")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await cookieless.GetAsync("/api/settings/symlinks/rejections")).StatusCode);
 
+        Assert.Equal(HttpStatusCode.Unauthorized, (await cookieless.GetAsync("/api/settings/symlinks/events")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await cookieless.GetAsync("/api/settings/symlinks/count")).StatusCode);
+
         using IServiceScope scope = factory.Services.CreateScope();
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<SymlinkSuggestionService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ExistingEpisodeFileInspector>());
@@ -329,10 +334,7 @@ public sealed class SymlinkSuggestionEndpointTests
     private static async Task<IReadOnlyList<SymlinkSuggestionDto>> GetSuggestions(AppSettings settings, InMemorySymlinkStore store)
     {
         StubSettingsService settingsService = new(settings);
-        using HttpClient http = new(new NeverAskedHandler());
-        ExistingEpisodeFileInspector inspector = new(new SonarrClient(http), new RadarrClient(http),
-            new MediaPathMappingService(settingsService), new FakeLinkFileSystem(), new FakeTimeProvider(Start));
-        return (await Invoke<Ok<IReadOnlyList<SymlinkSuggestionDto>>>("GetSuggestionsAsync", settingsService, store, inspector, CancellationToken.None)).Value!;
+        return (await Invoke<Ok<IReadOnlyList<SymlinkSuggestionDto>>>("GetSuggestionsAsync", settingsService, store, new SymlinkInspectionCache(), CancellationToken.None)).Value!;
     }
 
     private static async Task<IReadOnlyList<SymlinkRejectionDto>> GetRejections(AppSettings settings, InMemorySymlinkStore store) =>

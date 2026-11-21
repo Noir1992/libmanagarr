@@ -79,3 +79,34 @@ The UI is then available at `http://localhost:8080`. During the first start an a
 ## License
 
 LibManagarr is released under the [Apache License 2.0](LICENSE).
+
+### Symlink live updates and reverse proxies
+
+Authenticated browser sessions open one Server-Sent Events connection at
+`/api/settings/symlinks/events`. Allow streaming responses through your proxy and
+keep its idle timeout above the 20-second keepalive interval. The endpoint sends
+`Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`; disable any
+additional response buffering or caching on this route. For nginx, for example:
+
+```nginx
+location = /api/settings/symlinks/events {
+    proxy_pass http://libmanagarr:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 60s;
+}
+```
+
+Preserve your deployment's existing forwarded headers and authentication cookies.
+HTTP/2 on the browser-facing connection is recommended when many tabs are open.
+Reconnects always reconcile current state; events are not archived or replayed.
+Debug logs under `SymlinkEvents` record connections; browser debug logs record
+reconnects and refreshed areas, without logging keepalives.
+
+The menu reads `/api/settings/symlinks/count`, which counts stored pending rows
+without contacting Arr or probing files. Existing-file checks used for display are
+cached in memory, refreshed asynchronously after relevant writes and every five
+minutes to detect external filesystem changes. Preview and confirmation still
+validate the current filesystem and source versions immediately before acting.

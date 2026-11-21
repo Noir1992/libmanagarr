@@ -202,7 +202,7 @@ describe('SymlinkService', () => {
     http.expectOne(base).flush({ ...settings(), enabled: false });
     await load;
     const disabledPoll = service.refreshCount();
-    http.expectOne(`${base}/suggestions`).flush([]);
+    http.expectOne(`${base}/count`).flush({ count: 0 });
     await disabledPoll;
     expect(service.pendingCount()).toBe(0);
 
@@ -210,9 +210,9 @@ describe('SymlinkService', () => {
     http.expectOne(base).flush({ ...settings(), enabled: true });
     await save;
     expect(service.saving()).toBeFalse();
-    const refresh = http.expectOne(`${base}/suggestions`);
+    const refresh = http.expectOne(`${base}/count`);
     expect(refresh.request.method).toBe('GET');
-    refresh.flush([suggestion()]);
+    refresh.flush({ count: 1 });
     await settle();
     expect(service.pendingCount()).toBe(1);
     http.expectNone(`${base}/links`);
@@ -224,29 +224,29 @@ describe('SymlinkService', () => {
     http.expectOne(base).flush({ ...settings(), enabled: false });
     await load;
     const oldPoll = service.refreshCount();
-    const oldRequest = http.expectOne(`${base}/suggestions`);
+    const oldRequest = http.expectOne(`${base}/count`);
 
     const save = service.saveSettings({ mediaRoot: '/media', enabled: true });
     http.expectOne(base).flush({ ...settings(), enabled: true });
     await save;
-    http.expectOne(`${base}/suggestions`).flush([suggestion()]);
+    http.expectOne(`${base}/count`).flush({ count: 1 });
     await settle();
     expect(service.pendingCount()).toBe(1);
 
-    oldRequest.flush([]);
+    oldRequest.flush({ count: 0 });
     await oldPoll;
     expect(service.pendingCount()).toBe(1);
   });
 
   it('hides the count when disabled and ignores in-flight responses without starting another read', async () => {
     const oldPoll = service.refreshCount();
-    const oldRequest = http.expectOne(`${base}/suggestions`);
+    const oldRequest = http.expectOne(`${base}/count`);
     const save = service.saveSettings({ mediaRoot: '/media', enabled: false });
     http.expectOne(base).flush({ ...settings(), enabled: false });
     await save;
     expect(service.pendingCount()).toBe(0);
-    http.expectNone(`${base}/suggestions`);
-    oldRequest.flush([suggestion()]);
+    http.expectNone(`${base}/count`);
+    oldRequest.flush({ count: 1 });
     await oldPoll;
     expect(service.suggestions()).toEqual([]);
     expect(service.pendingCount()).toBe(0);
@@ -259,7 +259,7 @@ describe('SymlinkService', () => {
     const save = service.saveSettings({ mediaRoot: '/media', enabled: true });
     http.expectOne(base).flush({ ...settings(), enabled: true });
     await save;
-    http.expectOne(`${base}/suggestions`).flush({ title: 'Count unavailable' }, { status: 503, statusText: 'Unavailable' });
+    http.expectOne(`${base}/count`).flush({ title: 'Count unavailable' }, { status: 503, statusText: 'Unavailable' });
     await settle();
     expect(service.settings()?.enabled).toBeTrue();
     expect(service.settingsError()).toBeNull();
@@ -557,10 +557,11 @@ describe('SymlinkService', () => {
     http.expectOne(`${base}/links`).flush([], { headers: { 'X-LibManagarr-Deletion-Refresh-Pending': 'true' } });
     await settle();
     expect(service.links()).toEqual([]);
-    expect(service.deletionRefreshPending()).toBeTrue();
+    expect(service.deletionRefreshPending()).toBeFalse();
     http.expectOne(`${base}/suggestions`).flush([]);
     http.expectOne(`${base}/rejections`).flush([]);
     await pending;
+    expect(service.deletionRefreshPending()).toBeTrue();
 
     const finished = service.refreshProgress();
     http.expectOne(`${base}/links`).flush([], { headers: { 'X-LibManagarr-Deletion-Refresh-Pending': 'false' } });
@@ -613,25 +614,50 @@ describe('SymlinkService', () => {
     expect(service.linkStates()['link-1'].deleting).toBeFalse();
   });
 
-  it('retries the coherent overview when a menu count read supersedes its suggestions request', async () => {
+  it('keeps count reads independent from an in-flight coherent overview', async () => {
     const overview = service.loadOverview();
     http.expectOne(`${base}/links`).flush([link('link-1')]);
     await settle();
-    const oldSuggestions = http.expectOne(`${base}/suggestions`);
-    const oldRejections = http.expectOne(`${base}/rejections`);
+    const suggestions = http.expectOne(`${base}/suggestions`);
+    const rejections = http.expectOne(`${base}/rejections`);
     const count = service.refreshCount();
-    http.expectOne(`${base}/suggestions`).flush([suggestion()]);
+    http.expectOne(`${base}/count`).flush({ count: 1 });
     await count;
-    oldSuggestions.flush([]);
-    oldRejections.flush([]);
-    await settle();
-    http.expectOne(`${base}/links`).flush([link('link-1')]);
-    await settle();
-    http.expectOne(`${base}/suggestions`).flush([suggestion()]);
-    http.expectOne(`${base}/rejections`).flush([]);
+    suggestions.flush([suggestion()]);
+    rejections.flush([]);
     await overview;
+    expect(service.pendingCount()).toBe(1);
     expect(service.links()).toHaveSize(1);
     expect(service.suggestions()).toEqual([suggestion()]);
+  });
+
+  it('acknowledges a consistent overview revision for later SSE deduplication', async () => {
+    const pending = service.loadOverview();
+    const headers = { 'X-Symlink-Generation': 'server', 'X-Symlink-Revision': '7' };
+    http.expectOne(`${base}/links`).flush([link()], { headers });
+    await settle();
+    http.expectOne(`${base}/suggestions`).flush([suggestion()], { headers });
+    http.expectOne(`${base}/rejections`).flush([], { headers });
+    await pending;
+    expect(service.isAreaCurrent('suggestions', 'server', 7)).toBeTrue();
+    expect(service.isAreaCurrent('links', 'server', 8)).toBeFalse();
+    expect(service.isAreaCurrent('links', 'restarted', 0)).toBeFalse();
+  });
+
+  it('does not publish mixed list revisions from concurrent backend writes', async () => {
+    const pending = service.loadOverview().catch(() => undefined);
+    const headers = { 'X-Symlink-Generation': 'server', 'X-Symlink-Revision': '7' };
+    http.expectOne(`${base}/links`).flush([link()], { headers });
+    await settle();
+    http.expectOne(`${base}/suggestions`).flush([suggestion()], {
+      headers: { ...headers, 'X-Symlink-Revision': '8' },
+    });
+    http.expectOne(`${base}/rejections`).flush([], { headers });
+    await pending;
+    expect(service.links()).toEqual([]);
+    expect(service.suggestions()).toEqual([]);
+    expect(service.isAreaCurrent('links', 'server', 7)).toBeFalse();
+    expect(service.overviewError()).toBeTruthy();
   });
 
   async function respondOverview(links: SymlinkLink[], suggestions: SymlinkSuggestion[] = []): Promise<void> {

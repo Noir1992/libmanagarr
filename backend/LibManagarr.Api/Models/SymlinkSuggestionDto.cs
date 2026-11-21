@@ -46,6 +46,8 @@ public sealed class SymlinkSuggestionDto
 
     public List<SymlinkSuggestionReason> Reasons { get; set; } = [];
 
+    public string ExistingFileCheckState { get; set; } = "Unchecked";
+
     public ExistingEpisodeFileCheck? ExistingFileCheck { get; set; }
 
     public List<SymlinkSuggestionAlternative> Alternatives { get; set; } = [];

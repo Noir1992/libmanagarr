@@ -79,6 +79,9 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     builder.Services.AddSingleton<ScheduledTaskExecutionService>();
     builder.Services.AddHostedService<ScheduledTaskBackgroundService>();
     builder.Services.AddSingleton<ISymlinkFileSystem, RealSymlinkFileSystem>();
+    builder.Services.AddSingleton<SymlinkChangeHub>();
+    builder.Services.AddSingleton<SymlinkInspectionCache>();
+    builder.Services.AddHostedService<SymlinkInspectionBackgroundService>();
     builder.Services.AddSingleton<ISymlinkStore, SqliteSymlinkStore>();
     builder.Services.AddScoped<MediaPathMappingService>();
     builder.Services.AddScoped<SharedMediaPathService>();

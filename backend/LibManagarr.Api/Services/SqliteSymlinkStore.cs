@@ -12,7 +12,7 @@ namespace LibManagarr.Api.Services;
 /// coordination through <see cref="BackupWriteGate"/> and an export never captures a half written row.
 /// </summary>
 public sealed class SqliteSymlinkStore(
-    StoragePaths paths, TimeProvider clock, BackupOperationCoordinator writes, ILogger<SqliteSymlinkStore> logger) : ISymlinkStore
+    StoragePaths paths, TimeProvider clock, BackupOperationCoordinator writes, ILogger<SqliteSymlinkStore> logger, SymlinkChangeHub? changes = null) : ISymlinkStore
 {
     private const string LinkColumns = """
         id,revision,radarr_instance_id,radarr_movie_id,radarr_file_id,sonarr_instance_id,sonarr_series_id,
@@ -41,6 +41,16 @@ public sealed class SqliteSymlinkStore(
     private readonly SemaphoreSlim initializationGate = new(1, 1);
     private readonly BackupWriteGate writeGate = new(writes);
     private bool initialized;
+
+    public async Task<int> CountPendingSuggestionsAsync(CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        await using SqliteConnection connection = await OpenAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM symlink_suggestions WHERE status=$status";
+        command.Parameters.AddWithValue("$status", (int)SymlinkSuggestionStatus.Pending);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+    }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -101,7 +111,7 @@ public sealed class SqliteSymlinkStore(
             command.Parameters.AddWithValue("$at", SqliteScheduledTaskStore.Timestamp(check.CheckedAt ?? clock.GetUtcNow()));
             command.Parameters.AddWithValue("$revision", check.ConfigRevision);
             command.Parameters.AddWithValue("$process", (object?)check.ProcessId ?? DBNull.Value);
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            if (await command.ExecuteNonQueryAsync(cancellationToken) > 0) changes?.Publish("settings");
         }
         finally
         {
@@ -156,7 +166,7 @@ public sealed class SqliteSymlinkStore(
             using SqliteCommand command = connection.CreateCommand();
             command.CommandText = $"INSERT INTO symlink_links ({LinkColumns}) VALUES ({InsertValues(LinkColumns)})";
             AddLinkParameters(command, link);
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            if (await command.ExecuteNonQueryAsync(cancellationToken) > 0) changes?.Publish("links");
         }
         finally
         {
@@ -191,7 +201,9 @@ public sealed class SqliteSymlinkStore(
                 """;
             AddLinkParameters(command, link);
             command.Parameters.AddWithValue("$expected", expectedRevision);
-            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            bool changed = await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            if (changed) changes?.Publish("links");
+            return changed;
         }
         finally
         {
@@ -210,7 +222,9 @@ public sealed class SqliteSymlinkStore(
             command.CommandText = "DELETE FROM symlink_links WHERE id=$id AND revision=$expected";
             command.Parameters.AddWithValue("$id", id);
             command.Parameters.AddWithValue("$expected", expectedRevision);
-            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            bool changed = await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            if (changed) changes?.Publish("links");
+            return changed;
         }
         finally
         {
@@ -239,6 +253,7 @@ public sealed class SqliteSymlinkStore(
             queue.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(new SymlinkDeletionRefresh(link.Id, link.Pair, link), Json));
             await queue.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            changes?.Publish("links");
             return true;
         }
         finally { writeGate.Release(); }
@@ -267,7 +282,7 @@ public sealed class SqliteSymlinkStore(
             using SqliteCommand command = connection.CreateCommand();
             command.CommandText = "DELETE FROM symlink_deletion_refreshes WHERE link_id=$id";
             command.Parameters.AddWithValue("$id", linkId);
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            if (await command.ExecuteNonQueryAsync(cancellationToken) > 0) changes?.Publish("links", "suggestions", "count");
         }
         finally { writeGate.Release(); }
     }
@@ -350,7 +365,7 @@ public sealed class SqliteSymlinkStore(
                         WHERE id=$id
                         """;
                     AddSuggestionParameters(update, suggestion);
-                    await update.ExecuteNonQueryAsync(cancellationToken);
+                    if (await update.ExecuteNonQueryAsync(cancellationToken) > 0) changes?.Publish("suggestions", "count", "inspect");
                     return;
                 }
             }
@@ -358,7 +373,7 @@ public sealed class SqliteSymlinkStore(
             using SqliteCommand insert = connection.CreateCommand();
             insert.CommandText = $"INSERT INTO symlink_suggestions ({SuggestionColumns}) VALUES ({InsertValues(SuggestionColumns)})";
             AddSuggestionParameters(insert, suggestion);
-            await insert.ExecuteNonQueryAsync(cancellationToken);
+            if (await insert.ExecuteNonQueryAsync(cancellationToken) > 0) changes?.Publish("suggestions", "count", "inspect");
         }
         finally
         {
@@ -387,7 +402,9 @@ public sealed class SqliteSymlinkStore(
                 """;
             AddSuggestionParameters(command, suggestion);
             command.Parameters.AddWithValue("$expected", expectedRevision);
-            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            bool changed = await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            if (changed) changes?.Publish("suggestions", "count", "inspect");
+            return changed;
         }
         finally
         {
@@ -453,7 +470,7 @@ public sealed class SqliteSymlinkStore(
             AddPair(command, pair);
             command.Parameters.AddWithValue("$detail", (object?)detail ?? DBNull.Value);
             command.Parameters.AddWithValue("$at", SqliteScheduledTaskStore.Timestamp(at));
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            if (await command.ExecuteNonQueryAsync(cancellationToken) > 0) changes?.Publish("rejections", "suggestions", "count");
         }
         finally
         {
@@ -471,7 +488,9 @@ public sealed class SqliteSymlinkStore(
             using SqliteCommand command = connection.CreateCommand();
             command.CommandText = $"DELETE FROM symlink_rejections WHERE {PairPredicate}";
             AddPair(command, pair);
-            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            bool changed = await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            if (changed) changes?.Publish("rejections", "suggestions", "count");
+            return changed;
         }
         finally
         {

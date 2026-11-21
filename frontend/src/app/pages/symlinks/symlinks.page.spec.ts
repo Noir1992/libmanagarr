@@ -1,3 +1,4 @@
+import { SymlinkLiveService } from '../../services/symlink-live.service';
 import { MediaTitlesService } from '../../services/media-titles.service';
 import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { MatMenuHarness } from '@angular/material/menu/testing';
@@ -215,6 +216,10 @@ describe('SymlinksPage', () => {
         { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
         provideRouter([]),
         { provide: SymlinkService, useValue: stub },
+        {
+          provide: SymlinkLiveService,
+          useValue: { reconcile: jasmine.createSpy(), activatePage: jasmine.createSpy(), deactivatePage: jasmine.createSpy() },
+        },
         { provide: MatDialog, useValue: dialog },
       ],
     }).compileComponents();
@@ -499,10 +504,8 @@ describe('SymlinksPage', () => {
     expect(JSON.parse(globalThis.localStorage.getItem('filters:symlinks') ?? '{}')).toEqual(jasmine.objectContaining({ status: '' }));
   });
 
-  it('reads the register and the path configuration together', () => {
-    // The paths are what the preview is drawn from, so the offers are unusable without them.
-    expect(stub.loadOverview).toHaveBeenCalledTimes(1);
-    expect(stub.loadSettings).toHaveBeenCalledTimes(1);
+  it('registers for initial loading through the shared connection', () => {
+    expect(TestBed.inject(SymlinkLiveService).activatePage).toHaveBeenCalledTimes(1);
   });
 
   it('names the pair and both titles without a redundant open badge', () => {
@@ -895,7 +898,7 @@ describe('SymlinksPage', () => {
     expect(actionButtons(1).some((candidate) => candidate.textContent?.includes('Repair'))).toBeFalse();
   });
 
-  it('retains a locked deletion and swaps it for its suggestion after polling completes', async () => {
+  it('retains a locked deletion and swaps it for its suggestion after an event refresh completes', async () => {
     fixture.destroy();
     spyOnProperty(globalThis.document, 'hidden', 'get').and.returnValue(false);
     const intervals = spyOn(globalThis, 'setInterval').and.callThrough();
@@ -913,8 +916,8 @@ describe('SymlinksPage', () => {
     expect(actionButtons(1).every((button) => button.disabled)).toBeTrue();
     expect(cards()[1].querySelector('.danger-button .feedback-icon.spinning')).not.toBeNull();
 
-    const poll = intervals.calls.allArgs().find((args) => args[1] === 5000)![0] as () => void;
-    poll();
+    expect(intervals.calls.allArgs().some((args) => args[1] === 5000)).toBeFalse();
+    await stub.refreshProgress();
     await settle();
 
     expect(stub.refreshProgress).toHaveBeenCalledTimes(1);

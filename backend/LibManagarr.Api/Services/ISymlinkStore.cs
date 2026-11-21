@@ -9,6 +9,9 @@ namespace LibManagarr.Api.Services;
 /// </summary>
 public interface ISymlinkStore
 {
+    async Task<int> CountPendingSuggestionsAsync(CancellationToken cancellationToken) =>
+        (await GetSuggestionsAsync(cancellationToken)).Count(row => row.Status == SymlinkSuggestionStatus.Pending);
+
     Task InitializeAsync(CancellationToken cancellationToken);
 
     Task<SymlinkCapabilityCheck?> GetCapabilityCheckAsync(string storageAreaId, CancellationToken cancellationToken);
