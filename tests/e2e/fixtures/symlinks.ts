@@ -11,6 +11,7 @@ import { arrRequest, expected } from './library.js';
 export interface ArrSeries {
   id: number;
   title: string;
+  path: string;
   monitored: boolean;
 }
 export interface ArrEpisode {

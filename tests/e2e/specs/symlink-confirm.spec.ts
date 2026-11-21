@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { apiKey, instanceSettings, login, mutation, prepareAccount, syncInstance } from '../fixtures/app.js';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chownSync, readFileSync, renameSync, statSync, unlinkSync } from 'node:fs';
+import { chownSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { configureLibrary, expected } from '../fixtures/library.js';
 import {
@@ -23,6 +23,15 @@ test('E15: confirming an offer links the film file that the baseline paired with
   test.setTimeout(480_000);
   await prepareAccount(request);
   const pair = await seededPair(request);
+  // This seeded series starts without files or folders. Provision its folders for
+  // Sonarr's UID so it can rename the managed link into the configured season folder.
+  const specialsPath = join(pair.series.path, 'Specials');
+  const prepareSpecialsFolder = () => {
+    mkdirSync(specialsPath, { recursive: true });
+    chownSync(pair.series.path, 1000, 1000);
+    chownSync(specialsPath, 1000, 1000);
+  };
+  prepareSpecialsFolder();
   // Exercise the actual monitoring write: an already-unmonitored seed would skip that API call.
   const monitoring = await request.put(`http://sonarr:8989/api/v3/episode/${pair.episode.id}`, {
     headers: { 'X-Api-Key': apiKey },
@@ -65,15 +74,17 @@ test('E15: confirming an offer links the film file that the baseline paired with
   await page.getByRole('button', { name: 'Managed links', exact: true }).click();
   const link = rowsOf(page, 'Managed links').filter({ hasText: pair.film.title });
   await expect(link).toHaveCount(1);
-  await expect(link.getByText('Active', { exact: true })).toBeVisible();
-  // Sonarr setup and the targeted library sync continue in the background after creating the file link.
-  await expect(link.getByRole('button', { name: 'Delete', exact: true })).toBeVisible();
+  await expect(link.getByText('Setting up', { exact: true })).toBeVisible();
+  await expect(link.getByRole('button', { name: 'Edit', exact: true })).toBeDisabled();
+  await expect(link.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
 
-  // The Sonarr half of the setup is owed to a background run, so the register decides when it is through —
-  // and only a reload can then bring that state onto the screen.
+  // Sonarr setup and the targeted library sync finish in the background. The UI polls the
+  // register and only marks the link active and enables its actions after setup completes.
   const settled = () => managedLinks(request).then((values) => values.find((value) => value.sourcePath === pair.filmFile.path)?.setupStep);
   await expect.poll(settled, { timeout: 180_000 }).toBe('Completed');
+  await expect(link.getByText('Active', { exact: true })).toBeVisible();
   await expect(link.getByRole('button', { name: 'Edit', exact: true })).toBeEnabled({ timeout: 15_000 });
+  await expect(link.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled();
 
   const links = await managedLinks(request);
   expect(links).toHaveLength(1);
@@ -161,6 +172,9 @@ test('E15: confirming an offer links the film file that the baseline paired with
   const sourceHash = createHash('sha256').update(readFileSync(upgradedPath)).digest('hex');
   const sourceStat = statSync(upgradedPath);
 
+  // Sonarr removes the now-empty source folder after the first rename. The test app
+  // runs as root, so provision it for Sonarr again before it recreates the upgraded link.
+  prepareSpecialsFolder();
   await instanceSettings(page);
   await syncInstance(page, 'Radarr');
   await page.goto('/symlinks');

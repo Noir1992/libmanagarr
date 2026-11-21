@@ -23,6 +23,7 @@ test('save real Arr instances, synchronize media and open details', async ({ req
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog').getByText(/1080p/).first()).toBeVisible();
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toBeHidden();
   await page.getByRole('searchbox').fill(baseline.seriesTitle);
   await expect(page.getByText(baseline.movieTitle, { exact: true })).toBeHidden();
   const seriesRow = page.getByRole('article').filter({ has: page.getByText(baseline.seriesTitle, { exact: true }) });
