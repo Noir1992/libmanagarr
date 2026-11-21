@@ -2,13 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { scenarios, parseOptions, selectScenarios, verifyScenarioFiles } from './scenarios.mjs';
 
-test('full contains all 21 scenarios and every core scenario', () => {
+test('full contains all 22 scenarios and every core scenario', () => {
   assert.equal(parseOptions([]).suite, 'full');
-  assert.equal(selectScenarios({}).length, 21);
+  assert.equal(selectScenarios({}).length, 22);
   const core = selectScenarios({ suite: 'core' });
   const full = selectScenarios({ suite: 'full' });
   assert.equal(core.length, 13);
-  assert.equal(full.length, 21);
+  assert.equal(full.length, 22);
   for (const scenario of core) assert.ok(full.includes(scenario));
   assert.deepEqual(
     core.slice(0, 4).map((item) => item.id),

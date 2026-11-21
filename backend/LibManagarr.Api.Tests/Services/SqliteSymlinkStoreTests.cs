@@ -18,6 +18,30 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         new(Paths, clock, new BackupOperationCoordinator(clock), NullLogger<SqliteSymlinkStore>.Instance);
 
     [Fact]
+    public async Task NotificationsFollowSuccessfulWritesAndReadsDoNotPublish()
+    {
+        SymlinkChangeHub hub = new();
+        SqliteSymlinkStore store = new(Paths, clock, new BackupOperationCoordinator(clock),
+            NullLogger<SqliteSymlinkStore>.Instance, hub);
+        using var subscription = hub.Subscribe();
+        subscription.Reader.TryRead(out _);
+        SymlinkLink link = NewLink("event-link");
+        await store.InsertLinkAsync(link, CancellationToken.None);
+        Assert.True(subscription.Reader.TryRead(out var inserted));
+        Assert.Contains("links", inserted!.Areas);
+        Assert.NotNull(await store.GetLinkAsync(link.Id, CancellationToken.None));
+        Assert.False(await store.UpdateLinkAsync(link, 9999, CancellationToken.None));
+        Assert.False(await store.DeleteLinkAsync(link.Id, 9999, CancellationToken.None));
+        Assert.False(subscription.Reader.TryRead(out _));
+        await store.UpsertSuggestionAsync(NewSuggestion("event-offer"), CancellationToken.None);
+        Assert.True(subscription.Reader.TryRead(out var offered));
+        Assert.True(offered!.Revision > inserted.Revision);
+        Assert.Contains("count", offered.Areas);
+        Assert.Equal(1, await store.CountPendingSuggestionsAsync(CancellationToken.None));
+        Assert.False(subscription.Reader.TryRead(out _));
+    }
+
+    [Fact]
     public async Task EpisodeReadsExcludeOtherSeriesAndIncludeAlternativeMovies()
     {
         SqliteSymlinkStore store = CreateStore();

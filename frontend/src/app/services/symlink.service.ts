@@ -1,4 +1,4 @@
-import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams, HttpHeaders } from '@angular/common/http';
 import { computed, inject, Injectable, signal, WritableSignal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -43,6 +43,38 @@ export class SymlinkService {
   private readonly settingsState = signal<SymlinkSettings | null>(null);
   private readonly suggestionsState = signal<SymlinkSuggestion[]>([]);
   private suggestionReadVersion = 0;
+  private settingsReadVersion = 0;
+  private rejectionReadVersion = 0;
+  private countReadVersion = 0;
+  private readonly applied = new Map<string, { generation: string; revision: number }>();
+
+  isAreaCurrent(area: string, generation: string, revision: number): boolean {
+    const applied = this.applied.get(area);
+    return applied?.generation === generation && applied.revision >= revision;
+  }
+
+  private acknowledge(headers: HttpHeaders, ...areas: string[]): void {
+    const generation = headers.get('X-Symlink-Generation');
+    const revision = Number(headers.get('X-Symlink-Revision') ?? '-1');
+    if (!generation || revision < 0 || !Number.isFinite(revision)) return;
+    for (const area of areas) this.applied.set(area, { generation, revision });
+  }
+
+  private readonly countState = signal<number | null>(null);
+
+  invalidateReads(): void {
+    this.linkReadVersion++;
+    this.suggestionReadVersion++;
+    this.rejectionReadVersion++;
+    this.settingsReadVersion++;
+    this.countReadVersion++;
+  }
+
+  async refreshAreas(areas: ReadonlySet<string>): Promise<void> {
+    if (areas.has('settings')) await this.loadSettings();
+    if (areas.has('suggestions') || areas.has('rejections') || areas.has('settings')) await this.loadOverview();
+    else if (areas.has('links')) await this.readLinks();
+  }
   private capabilityReadVersion = 0;
   private readonly linksState = signal<SymlinkLink[]>([]);
   readonly deletionRefreshPending = signal(false);
@@ -56,8 +88,10 @@ export class SymlinkService {
 
   readonly settings = this.settingsState.asReadonly();
   readonly suggestions = this.suggestionsState.asReadonly();
-  readonly pendingCount = computed(() =>
-    this.settings()?.enabled === false ? 0 : this.suggestions().filter((value) => value.status === 'Pending').length,
+  readonly pendingCount = computed(
+    () =>
+      this.countState() ??
+      (this.settings()?.enabled === false ? 0 : this.suggestions().filter((value) => value.status === 'Pending').length),
   );
   readonly links = computed(() =>
     this.linksState().map((link) => {
@@ -97,10 +131,15 @@ export class SymlinkService {
   }
 
   async loadSettings(): Promise<void> {
+    const version = ++this.settingsReadVersion;
     this.settingsLoading.set(true);
     this.settingsError.set(null);
     try {
-      this.settingsState.set(await firstValueFrom(this.http.get<SymlinkSettings>(this.url)));
+      const response = await firstValueFrom(this.http.get<SymlinkSettings>(this.url, { observe: 'response' }));
+      if (version === this.settingsReadVersion) {
+        this.settingsState.set(response.body);
+        this.acknowledge(response.headers, 'settings');
+      }
     } catch (error) {
       this.settingsError.set(this.message(error, 'settings.symlinks.loadError'));
       throw error;
@@ -115,6 +154,7 @@ export class SymlinkService {
    * server here would throw away the edit that was meant to fix it.
    */
   async saveSettings(settings: SymlinkSettingsInput): Promise<SymlinkSettings> {
+    this.invalidateReads();
     const { mediaRoot } = settings;
     const wasEnabled = this.settings()?.enabled !== false;
     const enabled = settings.enabled ?? this.settings()?.enabled ?? true;
@@ -123,12 +163,16 @@ export class SymlinkService {
     this.fieldErrors.set({});
     try {
       const saved = await firstValueFrom(this.http.put<SymlinkSettings>(this.url, { mediaRoot, enabled }));
+      this.invalidateReads();
       this.capabilityReadVersion++;
       this.capabilityChecking.set(false);
       this.capabilityError.set(null);
       const isEnabled = saved.enabled !== false;
       // Responses started before the switch changed must not replace the new state.
-      if (wasEnabled !== isEnabled) this.suggestionReadVersion++;
+      if (wasEnabled !== isEnabled) {
+        this.invalidateReads();
+        this.countState.set(isEnabled ? null : 0);
+      }
       this.settingsState.set(saved);
       if (!wasEnabled && isEnabled) void this.refreshCount();
       return saved;
@@ -211,7 +255,7 @@ export class SymlinkService {
       () => Promise.all([this.loadSettings(), this.readSuggestions()]),
     );
     this.linkReadVersion++;
-    this.linksState.update((links) => [link, ...links.filter((existing) => existing.id !== link.id)]);
+    this.acceptLink(link, true);
     await this.reload(() => this.readSuggestions());
     return link;
   }
@@ -220,14 +264,18 @@ export class SymlinkService {
     const rejected = await this.perform(this.suggestionBusy, id, () =>
       firstValueFrom(this.http.post<SymlinkSuggestion>(`${this.url}/suggestions/${encodeURIComponent(id)}/reject`, { detail })),
     );
-    this.suggestionsState.update((suggestions) => suggestions.map((suggestion) => (suggestion.id === id ? rejected : suggestion)));
+    this.suggestionsState.update((suggestions) =>
+      suggestions.map((suggestion) => (suggestion.id === id && suggestion.revision <= rejected.revision ? rejected : suggestion)),
+    );
     await this.reload(() => this.readRejections());
     return rejected;
   }
 
   /** Forgets one decline, which lets the next pass offer the pair again. */
   async reactivateRejection(pair: SpecialMoviePairRequest): Promise<void> {
+    this.invalidateReads();
     await firstValueFrom(this.http.post<void>(`${this.url}/rejections/reactivate`, pair));
+    this.invalidateReads();
     this.rejectionsState.update((rejections) =>
       rejections.filter(
         (rejection) =>
@@ -252,7 +300,7 @@ export class SymlinkService {
       () => firstValueFrom(this.http.post<SymlinkLink>(`${this.url}/links/${encodeURIComponent(id)}/check`, null)),
       () => this.readLinks(),
     );
-    this.linksState.update((links) => links.map((existing) => (existing.id === checked.id ? checked : existing)));
+    this.acceptLink(checked);
     return checked;
   }
 
@@ -263,7 +311,7 @@ export class SymlinkService {
       () => firstValueFrom(this.http.put<SymlinkLink>(`${this.url}/links/${encodeURIComponent(id)}/follow-up`, { autoFollowUp, revision })),
       () => this.readLinks(),
     );
-    this.linksState.update((links) => links.map((existing) => (existing.id === updated.id ? updated : existing)));
+    this.acceptLink(updated);
     return updated;
   }
 
@@ -340,9 +388,7 @@ export class SymlinkService {
       () => this.readLinks(),
     );
     this.linkReadVersion++;
-    this.linksState.update((values) =>
-      values.some((value) => value.id === link.id) ? values.map((value) => (value.id === link.id ? link : value)) : [link, ...values],
-    );
+    this.acceptLink(link, true);
     return link;
   }
 
@@ -365,6 +411,15 @@ export class SymlinkService {
       this.removeRepair(id);
       throw error;
     }
+  }
+
+  private acceptLink(link: SymlinkLink, insert = false): void {
+    this.linksState.update((links) => {
+      const existing = links.find((value) => value.id === link.id);
+      if (existing && existing.revision > link.revision) return links;
+      if (existing) return links.map((value) => (value.id === link.id ? link : value));
+      return insert ? [link, ...links] : links;
+    });
   }
 
   private removeRepair(id: string): void {
@@ -398,8 +453,18 @@ export class SymlinkService {
     }
   }
 
-  async refreshCount(): Promise<void> {
-    await this.reload(() => this.readSuggestions());
+  async refreshCount(strict = false): Promise<void> {
+    const version = ++this.countReadVersion;
+    try {
+      const response = await firstValueFrom(this.http.get<{ count: number }>(`${this.url}/count`, { observe: 'response' }));
+      if (version === this.countReadVersion) {
+        this.countState.set(response.body?.count ?? 0);
+        this.acknowledge(response.headers, 'count');
+      }
+    } catch (error) {
+      this.overviewError.set(this.message(error, 'symlinks.loadError'));
+      if (strict) throw error;
+    }
   }
 
   refreshProgress(): Promise<void> {
@@ -411,21 +476,34 @@ export class SymlinkService {
   }
 
   private async readOverview(): Promise<void> {
+    const rejectionVersion = ++this.rejectionReadVersion;
     const linksVersion = ++this.linkReadVersion;
     const response = await firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`, { observe: 'response' }));
     if (linksVersion !== this.linkReadVersion) return;
     const links = response.body ?? [];
-    this.deletionRefreshPending.set(response.headers.get('X-LibManagarr-Deletion-Refresh-Pending') === 'true');
     const suggestionsVersion = ++this.suggestionReadVersion;
     const [suggestions, rejections] = await Promise.all([
-      firstValueFrom(this.http.get<SymlinkSuggestion[]>(`${this.url}/suggestions`)),
-      firstValueFrom(this.http.get<SymlinkRejection[]>(`${this.url}/rejections`)),
+      firstValueFrom(this.http.get<SymlinkSuggestion[]>(`${this.url}/suggestions`, { observe: 'response' })),
+      firstValueFrom(this.http.get<SymlinkRejection[]>(`${this.url}/rejections`, { observe: 'response' })),
     ]);
     if (linksVersion !== this.linkReadVersion) return;
+    if (rejectionVersion !== this.rejectionReadVersion) return;
+    const revision = response.headers.get('X-Symlink-Revision');
+    const generation = response.headers.get('X-Symlink-Generation');
+    if (
+      revision === '-1' ||
+      [suggestions, rejections].some(
+        (value) => value.headers.get('X-Symlink-Revision') !== revision || value.headers.get('X-Symlink-Generation') !== generation,
+      )
+    ) {
+      throw new Error('Symlink state changed during the read.');
+    }
     if (suggestionsVersion !== this.suggestionReadVersion) {
       await this.readOverview();
       return;
     }
+    this.acknowledge(response.headers, 'links', 'suggestions', 'rejections');
+    this.deletionRefreshPending.set(response.headers.get('X-LibManagarr-Deletion-Refresh-Pending') === 'true');
     // Publish removal and refreshed suggestions together, after all reads have succeeded.
     this.reconcileRepairs(links);
     this.linksState.set(links);
@@ -442,30 +520,39 @@ export class SymlinkService {
         ]),
       ),
     );
-    this.suggestionsState.set(suggestions);
-    this.rejectionsState.set(rejections);
+    this.suggestionsState.set(suggestions.body ?? []);
+    this.rejectionsState.set(rejections.body ?? []);
     this.overviewError.set(null);
   }
 
   private readSuggestions(): Promise<void> {
     const version = ++this.suggestionReadVersion;
-    return firstValueFrom(this.http.get<SymlinkSuggestion[]>(`${this.url}/suggestions`)).then((suggestions) => {
-      if (version === this.suggestionReadVersion) this.suggestionsState.set(suggestions);
+    return firstValueFrom(this.http.get<SymlinkSuggestion[]>(`${this.url}/suggestions`, { observe: 'response' })).then((response) => {
+      if (version === this.suggestionReadVersion) {
+        this.suggestionsState.set(response.body ?? []);
+        this.acknowledge(response.headers, 'suggestions');
+      }
     });
   }
 
   private readRejections(): Promise<void> {
-    return firstValueFrom(this.http.get<SymlinkRejection[]>(`${this.url}/rejections`)).then((rejections) =>
-      this.rejectionsState.set(rejections),
-    );
+    const version = ++this.rejectionReadVersion;
+    return firstValueFrom(this.http.get<SymlinkRejection[]>(`${this.url}/rejections`, { observe: 'response' })).then((response) => {
+      if (version === this.rejectionReadVersion) {
+        this.rejectionsState.set(response.body ?? []);
+        this.acknowledge(response.headers, 'rejections');
+      }
+    });
   }
 
   private readLinks(): Promise<void> {
     const version = ++this.linkReadVersion;
-    return firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`)).then((links) => {
+    return firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`, { observe: 'response' })).then((response) => {
       if (version === this.linkReadVersion) {
+        const links = response.body ?? [];
         this.reconcileRepairs(links);
         this.linksState.set(links);
+        this.acknowledge(response.headers, 'links');
       }
     });
   }
@@ -497,9 +584,11 @@ export class SymlinkService {
     request: () => Promise<T>,
     conflict?: () => Promise<unknown>,
   ): Promise<T> {
+    this.invalidateReads();
     this.updateState(states, key, { busy: true, error: null, success: false });
     try {
       const result = await request();
+      this.invalidateReads();
       this.updateState(states, key, { success: true });
       return result;
     } catch (error) {

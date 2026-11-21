@@ -1,3 +1,4 @@
+import { SymlinkLiveService } from '../../services/symlink-live.service';
 import { MediaTitlesService } from '../../services/media-titles.service';
 import { SearchClearWidget } from '../../widgets/search-clear/search-clear.widget';
 import { ChangeDetectionStrategy, Component, computed, effect, untracked, DestroyRef, inject, OnInit, Signal, signal } from '@angular/core';
@@ -300,9 +301,11 @@ export class SymlinksPage implements OnInit {
       const revision = this.mediaTitles.revision();
       if (revision === previous) return;
       previous = revision;
-      untracked(() => void this.loadAsync());
+      untracked(() => this.live.reconcile());
     });
   }
+
+  private readonly live = inject(SymlinkLiveService);
 
   ngOnInit(): void {
     const [field, direction] = (globalThis.localStorage.getItem(SymlinksPage.SORT_KEY) ?? '').split(':');
@@ -310,18 +313,8 @@ export class SymlinksPage implements OnInit {
     if (direction === LibrarySortDirection.ASCENDING || direction === LibrarySortDirection.DESCENDING) this.sortDirection.set(direction);
     this.persistSort();
     this.restoreSections();
-    void this.loadAsync();
-    const timer = globalThis.setInterval(() => {
-      if (
-        !globalThis.document.hidden &&
-        (this.symlinks.deletionRefreshPending() ||
-          this.symlinks
-            .links()
-            .some((link) => this.isRepairing(link) || link.operationStatus !== 'Active' || link.setupStep !== 'Completed'))
-      )
-        void this.symlinks.refreshProgress();
-    }, 5000);
-    this.destroy.onDestroy(() => globalThis.clearInterval(timer));
+    this.live.activatePage();
+    this.destroy.onDestroy(() => this.live.deactivatePage());
   }
 
   protected clearTitleSearch(): void {

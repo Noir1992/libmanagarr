@@ -19,6 +19,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AppI18nService } from './services/app-i18n.service';
 import { AuthService } from './services/auth.service';
 import { ReleasesService } from './services/releases.service';
+import { SymlinkLiveService } from './services/symlink-live.service';
 import { SymlinkService } from './services/symlink.service';
 
 const NARROW_VIEWPORT_QUERY: string = '(max-width: 820px)';
@@ -37,6 +38,7 @@ export class App implements OnInit, OnDestroy {
   private readonly authService: AuthService = inject(AuthService);
   private readonly releasesService: ReleasesService = inject(ReleasesService);
   protected readonly symlinks = inject(SymlinkService);
+  private readonly symlinkLive = inject(SymlinkLiveService);
   private narrowMediaQuery?: MediaQueryList;
   protected readonly navigationOpen: WritableSignal<boolean> = signal<boolean>(false);
   protected readonly narrowViewport: WritableSignal<boolean> = signal<boolean>(false);
@@ -76,11 +78,8 @@ export class App implements OnInit, OnDestroy {
   constructor() {
     effect((onCleanup) => {
       if (this.authService.state() !== 'authenticated') return;
-      void this.symlinks.refreshCount();
-      const timer = globalThis.setInterval(() => {
-        if (!globalThis.document.hidden) void this.symlinks.refreshCount();
-      }, 60000);
-      onCleanup(() => globalThis.clearInterval(timer));
+      this.symlinkLive.start();
+      onCleanup(() => this.symlinkLive.stop());
     });
   }
 

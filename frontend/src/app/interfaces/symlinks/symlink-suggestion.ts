@@ -37,6 +37,7 @@ export interface SymlinkSuggestion {
   seasonNumber: number;
   episodeNumber: number;
   reasons: SymlinkSuggestionReason[];
+  existingFileCheckState?: 'Unchecked' | 'Stale' | 'Current';
   existingFileCheck?: ExistingEpisodeFileCheck | null;
   alternatives: SymlinkSuggestionAlternative[];
   detail: string | null;

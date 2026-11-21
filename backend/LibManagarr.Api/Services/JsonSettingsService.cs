@@ -28,10 +28,12 @@ public sealed class JsonSettingsService : ISettingsService
     private readonly LogFileService logFileService;
     private readonly IHistoryStore historyStore;
     private AppSettings? snapshot;
+    private readonly SymlinkChangeHub? changes;
 
     public JsonSettingsService(StoragePaths storagePaths, LogFileService logFileService, IHistoryStore historyStore,
-        BackupOperationCoordinator writes)
+        BackupOperationCoordinator writes, SymlinkChangeHub? changes = null)
     {
+        this.changes = changes;
         this.logFileService = logFileService;
         this.historyStore = historyStore;
         storageLock = new BackupWriteGate(writes);
@@ -99,6 +101,7 @@ public sealed class JsonSettingsService : ISettingsService
             await historyStore.ReplaceLibraryFilterValuesAsync(published.LibraryFilterValues, cancellationToken);
             Volatile.Write(ref snapshot, published);
             logFileService.UpdateSettings(published.Logging);
+            changes?.Publish(SymlinkChangeHub.All);
             return normalized;
         }
         finally

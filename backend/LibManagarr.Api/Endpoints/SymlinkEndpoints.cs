@@ -17,6 +17,20 @@ public static class SymlinkEndpoints
 {
     public static RouteGroupBuilder MapSymlinkEndpoints(this RouteGroupBuilder group)
     {
+        group.AddEndpointFilter(async (context, next) =>
+        {
+            if (!context.HttpContext.Request.Path.StartsWithSegments("/api/settings/symlinks")
+                || !HttpMethods.IsGet(context.HttpContext.Request.Method) || context.HttpContext.Request.Path.Value!.EndsWith("/events"))
+                return await next(context);
+            SymlinkChangeHub hub = context.HttpContext.RequestServices.GetRequiredService<SymlinkChangeHub>();
+            long before = hub.Revision;
+            object? result = await next(context);
+            context.HttpContext.Response.Headers["X-Symlink-Generation"] = hub.Generation;
+            context.HttpContext.Response.Headers["X-Symlink-Revision"] = before == hub.Revision ? before.ToString() : "-1";
+            return result;
+        });
+        group.MapGet("/symlinks/events", StreamChangesAsync);
+        group.MapGet("/symlinks/count", GetCountAsync);
         group.MapGet("/symlinks", GetSymlinksAsync);
         group.MapGet("/symlinks/directories", BrowseDirectories);
         group.MapPut("/symlinks", SaveSymlinksAsync);
@@ -39,6 +53,52 @@ public static class SymlinkEndpoints
         group.MapPost("/symlinks/links/{id}/check", CheckLinkAsync).AddEndpointFilter(RequireEnabledAsync);
         group.MapDelete("/symlinks/links/{id}", DeleteLinkAsync).AddEndpointFilter(RequireEnabledAsync);
         return group;
+    }
+
+    private static async Task StreamChangesAsync(HttpContext context, SymlinkChangeHub changes,
+        IHostApplicationLifetime lifetime, ILoggerFactory logs)
+    {
+        using CancellationTokenSource stop = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, lifetime.ApplicationStopping);
+        CancellationToken token = stop.Token;
+        using SymlinkChangeHub.Subscription subscription = changes.Subscribe();
+        context.Response.ContentType = "text/event-stream";
+        context.Response.Headers.CacheControl = "no-cache, no-transform";
+        context.Response.Headers["X-Accel-Buffering"] = "no";
+        context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
+        ILogger logger = logs.CreateLogger("SymlinkEvents");
+        logger.LogDebug("Symlink event stream connected.");
+        using PeriodicTimer timer = new(TimeSpan.FromSeconds(20));
+        try
+        {
+            Task<SymlinkChange> next = subscription.Reader.ReadAsync(token).AsTask();
+            Task<bool> tick = timer.WaitForNextTickAsync(token).AsTask();
+            while (!token.IsCancellationRequested)
+            {
+                if (await Task.WhenAny(next, tick) == next)
+                {
+                    SymlinkChange change = await next;
+                    await context.Response.WriteAsync($"data: {JsonSerializer.Serialize(change, new JsonSerializerOptions(JsonSerializerDefaults.Web))}\n\n", token);
+                    next = subscription.Reader.ReadAsync(token).AsTask();
+                }
+                else
+                {
+                    await tick;
+                    await context.Response.WriteAsync(": keepalive\n\n", token);
+                    tick = timer.WaitForNextTickAsync(token).AsTask();
+                }
+                await context.Response.Body.FlushAsync(token);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (IOException) { /* Client disconnected. */ }
+        finally { logger.LogDebug("Symlink event stream disconnected."); }
+    }
+
+    private static async Task<IResult> GetCountAsync(ISettingsService settings, ISymlinkStore store, CancellationToken token)
+    {
+        bool enabled = (await settings.GetSnapshotAsync(token)).Symlinks.Enabled;
+        int count = enabled ? await store.CountPendingSuggestionsAsync(token) : 0;
+        return TypedResults.Ok(new { Count = count });
     }
 
     private static async ValueTask<object?> RequireEnabledAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
@@ -117,7 +177,7 @@ public static class SymlinkEndpoints
     private static async Task<Ok<IReadOnlyList<SymlinkSuggestionDto>>> GetSuggestionsAsync(
         ISettingsService settingsService,
         ISymlinkStore store,
-        ExistingEpisodeFileInspector inspector,
+        SymlinkInspectionCache cache,
         CancellationToken cancellationToken)
     {
         AppSettings settings = await settingsService.GetSnapshotAsync(cancellationToken);
@@ -129,14 +189,15 @@ public static class SymlinkEndpoints
             .OrderByDescending(suggestion => suggestion.CreatedAt)
             .ThenBy(suggestion => suggestion.Id, StringComparer.OrdinalIgnoreCase).ToArray();
         SymlinkSuggestionDto[] results = new SymlinkSuggestionDto[ordered.Length];
-        await Parallel.ForEachAsync(Enumerable.Range(0, ordered.Length),
-            new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken }, async (index, token) =>
+        for (int index = 0; index < ordered.Length; index++)
         {
             SymlinkSuggestion suggestion = ordered[index];
             SymlinkSuggestionDto dto = SuggestionDto(suggestion, settings.Symlinks.Revision, titles);
-            dto.ExistingFileCheck = await inspector.CheckAsync(settings, suggestion, token);
+            var inspection = cache.Read(settings, suggestion);
+            dto.ExistingFileCheck = inspection.Check;
+            dto.ExistingFileCheckState = !inspection.Checked ? "Unchecked" : inspection.Stale ? "Stale" : "Current";
             results[index] = dto;
-        });
+        }
         return TypedResults.Ok<IReadOnlyList<SymlinkSuggestionDto>>(results);
     }
 
