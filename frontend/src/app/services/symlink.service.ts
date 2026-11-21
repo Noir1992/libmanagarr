@@ -48,8 +48,6 @@ export class SymlinkService {
   readonly deletionRefreshPending = signal(false);
   private linkReadVersion = 0;
   private progressRead: Promise<void> | null = null;
-  // TEMP: correlate the user click with the eventual removal after polling and suggestion loading.
-  private readonly deletionTimingStarts = new Map<string, number>();
   private readonly rejectionsState = signal<SymlinkRejection[]>([]);
   private readonly suggestionBusy = signal<Record<string, SymlinkActionState>>({});
   private readonly linkBusy = signal<Record<string, SymlinkActionState>>({});
@@ -276,23 +274,16 @@ export class SymlinkService {
     )
       return;
     this.updateState(this.linkBusy, id, { deleting: true });
-    const started = performance.now();
-    this.deletionTimingStarts.set(id, started);
-    this.traceDeletionTiming('ui-delete-start', started, { linkId: id });
     try {
       const target = this.links().find((link) => link.id === id);
       await this.perform(this.linkBusy, id, () => this.deleteCurrentRevision(id, revision, target));
-      this.traceDeletionTiming('ui-delete-response', started, { linkId: id });
       // Keep the cleanup row locked until the server has finished refreshing its suggestions.
       this.linkReadVersion++;
       this.linksState.update((links) => links.map((link) => (link.id === id ? { ...link, operationStatus: 'CleanupPending' } : link)));
       await this.reload(() => this.readOverview());
     } catch (error) {
       // A failed response may still have left a durable deletion queued on the server.
-      this.traceDeletionTiming('ui-delete-error', started, { linkId: id });
       await this.reload(() => this.readOverview());
-      if (!this.links().some((link) => link.id === id && ['DeletePending', 'CleanupPending'].includes(link.operationStatus)))
-        this.deletionTimingStarts.delete(id);
       this.updateState(this.linkBusy, id, { deleting: false });
       throw error;
     }
@@ -420,41 +411,18 @@ export class SymlinkService {
   }
 
   private async readOverview(): Promise<void> {
-    const started = performance.now();
-    let tracing =
-      this.deletionTimingStarts.size > 0 ||
-      this.deletionRefreshPending() ||
-      this.links().some((link) => ['DeletePending', 'CleanupPending'].includes(link.operationStatus));
     const linksVersion = ++this.linkReadVersion;
-    if (tracing) this.traceDeletionTiming('ui-overview-start', started, { linksVersion });
     const response = await firstValueFrom(this.http.get<SymlinkLink[]>(`${this.url}/links`, { observe: 'response' }));
     if (linksVersion !== this.linkReadVersion) return;
     const links = response.body ?? [];
     this.deletionRefreshPending.set(response.headers.get('X-LibManagarr-Deletion-Refresh-Pending') === 'true');
-    tracing =
-      tracing || this.deletionRefreshPending() || links.some((link) => ['DeletePending', 'CleanupPending'].includes(link.operationStatus));
-    if (tracing)
-      this.traceDeletionTiming('ui-links-loaded', started, {
-        linksVersion,
-        refreshPending: this.deletionRefreshPending(),
-        cleanupIds: links.filter((link) => ['DeletePending', 'CleanupPending'].includes(link.operationStatus)).map((link) => link.id),
-      });
     const suggestionsVersion = ++this.suggestionReadVersion;
-    const listStarted = performance.now();
-    if (tracing) this.traceDeletionTiming('ui-suggestions-and-rejections-start', listStarted, { linksVersion });
     const [suggestions, rejections] = await Promise.all([
-      firstValueFrom(this.http.get<SymlinkSuggestion[]>(`${this.url}/suggestions`)).then((rows) => {
-        if (tracing) this.traceDeletionTiming('ui-suggestions-loaded', listStarted, { linksVersion, count: rows.length });
-        return rows;
-      }),
-      firstValueFrom(this.http.get<SymlinkRejection[]>(`${this.url}/rejections`)).then((rows) => {
-        if (tracing) this.traceDeletionTiming('ui-rejections-loaded', listStarted, { linksVersion, count: rows.length });
-        return rows;
-      }),
+      firstValueFrom(this.http.get<SymlinkSuggestion[]>(`${this.url}/suggestions`)),
+      firstValueFrom(this.http.get<SymlinkRejection[]>(`${this.url}/rejections`)),
     ]);
     if (linksVersion !== this.linkReadVersion) return;
     if (suggestionsVersion !== this.suggestionReadVersion) {
-      if (tracing) this.traceDeletionTiming('ui-overview-retry-superseded', started, { linksVersion });
       await this.readOverview();
       return;
     }
@@ -477,28 +445,6 @@ export class SymlinkService {
     this.suggestionsState.set(suggestions);
     this.rejectionsState.set(rejections);
     this.overviewError.set(null);
-    if (tracing) this.traceDeletionTiming('ui-overview-published', started, { linksVersion });
-    for (const [linkId, deletionStarted] of this.deletionTimingStarts) {
-      const visible = links.find((link) => link.id === linkId);
-      this.traceDeletionTiming(visible ? 'ui-delete-still-visible' : 'ui-delete-finished', deletionStarted, {
-        linkId,
-        status: visible?.operationStatus ?? 'removed',
-      });
-      if (!visible) this.deletionTimingStarts.delete(linkId);
-    }
-  }
-
-  /** TEMP: remove after diagnosing deletion latency. Visible in the browser console. */
-  private traceDeletionTiming(stage: string, started: number, details: Record<string, unknown>): void {
-    console.info(
-      '[TEMP symlink-delete]',
-      stage,
-      JSON.stringify({
-        at: new Date().toISOString(),
-        elapsedMs: Math.round(performance.now() - started),
-        ...details,
-      }),
-    );
   }
 
   private readSuggestions(): Promise<void> {

@@ -88,7 +88,6 @@ public sealed class SymlinkService(
 
     public async Task<IDisposable> LockLinkAsync(string id, CancellationToken token, SpecialMoviePair? destination = null)
     {
-        using IDisposable? timing = TemporarySymlinkDeleteTiming.Current(logger, "link-lock-acquire");
         return await SymlinkOperationGate.EnterLinkAsync(store, id, token, destination);
     }
 
@@ -528,7 +527,6 @@ public sealed class SymlinkService(
     /// </summary>
     public async Task<bool> DeleteAndCleanupAsync(string id, long expectedRevision, CancellationToken cancellationToken)
     {
-        using IDisposable timing = TemporarySymlinkDeleteTiming.Start(logger, $"link={id}", "delete-and-cleanup-total");
         if (!await DeleteAsync(id, expectedRevision, cancellationToken)) return false;
         // Await Sonarr's DELETE response. The recorded file ID is the deletion target;
         // no separate deadline or confirmation GET is needed.
@@ -550,8 +548,6 @@ public sealed class SymlinkService(
 
     public async Task<bool> DeleteAsync(string id, long expectedRevision, CancellationToken cancellationToken)
     {
-        using IDisposable total = TemporarySymlinkDeleteTiming.Start(logger, $"link={id}", "local-delete-total");
-        using IDisposable validation = TemporarySymlinkDeleteTiming.Current(logger, "local-validation")!;
         await RequireEnabledAsync(cancellationToken);
         SymlinkLink? link = await store.GetLinkAsync(id, cancellationToken);
         if (link is null) return false;
@@ -569,14 +565,11 @@ public sealed class SymlinkService(
                 "The file at that path is not one LibManagarr created. Remove it yourself if it is truly unwanted, then delete this entry again.");
         }
 
-        validation.Dispose();
         link.OperationStatus = SymlinkOperationStatus.DeletePending;
         link.SonarrScanCommandId = null;
         link.UpdatedAt = clock.GetUtcNow();
-        using (TemporarySymlinkDeleteTiming.Current(logger, "save-delete-intent"))
-            if (!await store.UpdateLinkAsync(link, expectedRevision, cancellationToken)) throw StaleRevision();
+        if (!await store.UpdateLinkAsync(link, expectedRevision, cancellationToken)) throw StaleRevision();
 
-        using IDisposable unlink = TemporarySymlinkDeleteTiming.Current(logger, "filesystem-unlink")!;
         if (files.EntryExists(link.LinkPath))
         {
             try
@@ -593,12 +586,10 @@ public sealed class SymlinkService(
             }
         }
 
-        unlink.Dispose();
         // The file is gone. Retain the cleanup journal until the complete workflow finishes.
         link.OperationStatus = SymlinkOperationStatus.CleanupPending;
         link.UpdatedAt = clock.GetUtcNow();
-        using (TemporarySymlinkDeleteTiming.Current(logger, "save-cleanup-state"))
-            if (!await store.UpdateLinkAsync(link, expectedRevision + 1, cancellationToken)) throw StaleRevision();
+        if (!await store.UpdateLinkAsync(link, expectedRevision + 1, cancellationToken)) throw StaleRevision();
         setupRequests.Request();
         logger.LogInformation("Removed the managed link {LinkId} at {LinkPath}.", link.Id, link.LinkPath);
         return true;
@@ -663,8 +654,6 @@ public sealed class SymlinkService(
     /// </summary>
     public async Task<SymlinkSetupOutcome> FinishDeletionAsync(SymlinkLink link, CancellationToken cancellationToken)
     {
-        using IDisposable total = TemporarySymlinkDeleteTiming.Start(logger, $"link={link.Id}", "finish-deletion-total");
-        using IDisposable local = TemporarySymlinkDeleteTiming.Current(logger, "cleanup-local-check")!;
         if (!await IsEnabledAsync(cancellationToken)) return SymlinkSetupOutcome.Waiting;
         SymlinkPathGuard.CheckParents(files, link.LinkPath);
         if (files.EntryExists(link.LinkPath) && !IsOwnLinkAt(link, link.LinkPath))
@@ -694,7 +683,6 @@ public sealed class SymlinkService(
             link.Revision++;
         }
 
-        local.Dispose();
         if (!await CleanupDeletedEpisodeFileAsync(link, cancellationToken))
         {
             Note(link, "sonarr-cleanup-pending", "The recorded Sonarr episode-file deletion is still pending.");
@@ -704,10 +692,8 @@ public sealed class SymlinkService(
 
         // The deletion is complete. Save the remaining library work atomically with removing
         // the row so a slow refresh neither delays the user nor gets lost across a restart.
-        using (TemporarySymlinkDeleteTiming.Current(logger, "persist-refresh-queue"))
-            if (!await store.CompleteDeletionAsync(link, cancellationToken)) return SymlinkSetupOutcome.Blocked;
+        if (!await store.CompleteDeletionAsync(link, cancellationToken)) return SymlinkSetupOutcome.Blocked;
         deletionRefresh?.Request();
-        logger.LogInformation("[TEMP symlink-delete] link={LinkId} refresh queued", link.Id);
 
         logger.LogInformation("Removed the managed link {LinkId} that an earlier run owed.", link.Id);
         return SymlinkSetupOutcome.Completed;
@@ -1642,7 +1628,6 @@ public sealed class SymlinkService(
 
     private async Task<bool> CleanupDeletedEpisodeFileAsync(SymlinkLink link, CancellationToken token)
     {
-        using IDisposable? timing = TemporarySymlinkDeleteTiming.Current(logger, "sonarr-delete-total");
         // A link without a confirmed Sonarr file ID has no registered file record to remove.
         // Never substitute the episode's current file for the ID recorded by this managed link.
         if (link.SonarrFileId is not > 0) return true;

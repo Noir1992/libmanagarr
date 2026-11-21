@@ -13,21 +13,15 @@ public sealed class SymlinkDeletionRefreshService(
         bool retry = false;
         foreach (var series in pending.GroupBy(r => (r.Pair.SonarrInstanceId, r.Pair.SonarrSeriesId)))
         {
-            using IDisposable total = TemporarySymlinkDeleteTiming.Start(logger,
-                $"links={string.Join(',', series.Select(r => r.LinkId))} sonarr={series.Key.SonarrInstanceId} series={series.Key.SonarrSeriesId}",
-                "background-refresh-total");
             try
             {
-                using (TemporarySymlinkDeleteTiming.Current(logger, "refresh-series-history-filters"))
-                    await snapshots.SyncSonarrSeriesAfterDeletionAsync(series.Key.SonarrInstanceId, series.Key.SonarrSeriesId, token);
+                await snapshots.SyncSonarrSeriesAfterDeletionAsync(series.Key.SonarrInstanceId, series.Key.SonarrSeriesId, token);
                 foreach (var episode in series.GroupBy(r => r.Pair.SonarrEpisodeId))
                 {
-                    using IDisposable? timing = TemporarySymlinkDeleteTiming.Current(logger, $"refresh-suggestions episode={episode.Key}");
                     await matching.RefreshDeletedEpisodeAsync(episode.First().Pair, token);
                 }
                 foreach (SymlinkDeletionRefresh completed in series)
                 {
-                    using IDisposable? timing = TemporarySymlinkDeleteTiming.Current(logger, $"remove-cleanup-display link={completed.LinkId}");
                     await store.RemoveDeletionRefreshAsync(completed.LinkId, token);
                 }
             }

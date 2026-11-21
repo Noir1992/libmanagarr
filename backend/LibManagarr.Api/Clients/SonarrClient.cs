@@ -4,11 +4,10 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using LibManagarr.Api.Models;
-using LibManagarr.Api.Services;
 
 namespace LibManagarr.Api.Clients;
 
-public sealed class SonarrClient(HttpClient httpClient, ILogger<SonarrClient>? logger = null)
+public sealed class SonarrClient(HttpClient httpClient)
 {
     public async Task<IReadOnlyList<ArrRootFolderResource>> FetchRootFoldersAsync(
         ArrInstanceSettings instance, CancellationToken cancellationToken) =>
@@ -222,15 +221,10 @@ public sealed class SonarrClient(HttpClient httpClient, ILogger<SonarrClient>? l
     /// <summary>Removes one episode-file record. The caller must already have removed and verified its owned link.</summary>
     public async Task DeleteEpisodeFileAsync(ArrInstanceSettings instance, int episodeFileId, CancellationToken cancellationToken)
     {
-        using IDisposable? timing = TemporarySymlinkDeleteTiming.Current(logger,
-            $"Sonarr DELETE instance={instance.Id} file={episodeFileId}");
         using HttpRequestMessage request = new(HttpMethod.Delete,
             $"{NormalizeBaseUrl(instance.BaseUrl)}/api/v3/episodefile/{episodeFileId}");
         request.Headers.Add("X-Api-Key", instance.ApiKey);
         using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
-        if (timing is not null)
-            logger!.LogInformation("[TEMP symlink-delete] Sonarr DELETE instance={InstanceId} file={FileId} status={StatusCode}",
-                instance.Id, episodeFileId, (int)response.StatusCode);
         if (response.StatusCode != System.Net.HttpStatusCode.NotFound) EnsureSuccessResponse(response, request);
     }
 
@@ -413,7 +407,6 @@ public sealed class SonarrClient(HttpClient httpClient, ILogger<SonarrClient>? l
         string relativeUrl,
         CancellationToken cancellationToken)
     {
-        using IDisposable? timing = TemporarySymlinkDeleteTiming.Current(logger, $"Sonarr GET instance={instance.Id} {relativeUrl}");
         using HttpRequestMessage request = new(HttpMethod.Get, $"{NormalizeBaseUrl(instance.BaseUrl)}{relativeUrl}");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Add("X-Api-Key", instance.ApiKey);

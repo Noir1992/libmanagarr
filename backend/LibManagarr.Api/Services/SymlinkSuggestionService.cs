@@ -61,16 +61,13 @@ public sealed class SymlinkSuggestionService(
     {
         if (episodeScope is not null)
         {
-            using IDisposable? scopedWork = TemporarySymlinkDeleteTiming.Current(logger, "matching-work");
             return await RunAsync(force, cancellationToken, episodeScope);
         }
 
-        using IDisposable? waiting = TemporarySymlinkDeleteTiming.Current(logger, "matching-pass-lock-wait");
         await PassLock.WaitAsync(cancellationToken);
-        waiting?.Dispose();
+
         try
         {
-            using IDisposable? work = TemporarySymlinkDeleteTiming.Current(logger, "matching-work");
             return await RunAsync(force, cancellationToken, episodeScope);
         }
         finally
@@ -168,9 +165,9 @@ public sealed class SymlinkSuggestionService(
         {
             SpecialMovieMatch match = candidate.Match;
             matched[match.Pair] = match;
-            using IDisposable? waiting = TemporarySymlinkDeleteTiming.Current(logger, $"matching-episode-lock-wait episode={match.Pair.SonarrEpisodeId}");
+
             using IDisposable operation = await SymlinkOperationGate.EnterAsync(match.Pair, cancellationToken);
-            waiting?.Dispose();
+
             // Creation/deletion may have finished since this matching pass began. Read the
             // reservation and suggestion again under the same episode lock used by those writes.
             if ((await store.GetEpisodeLinksAsync(match.Pair, cancellationToken)).Any(link => link.Pair == match.Pair)) continue;

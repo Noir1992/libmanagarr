@@ -21,7 +21,6 @@ public sealed class SymlinkDeletionRefreshBackgroundService(
 
             try
             {
-                using IDisposable timing = TemporarySymlinkDeleteTiming.Start(logger, "refresh-worker", "retry-wait-up-to-10s");
                 await requests.WaitOrDelayAsync(TimeSpan.FromSeconds(10), clock, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }

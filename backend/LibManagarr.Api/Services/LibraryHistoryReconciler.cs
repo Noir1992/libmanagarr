@@ -56,18 +56,16 @@ public static class LibraryHistoryReconciler
     private static bool HasEventSize(LibraryChangeHistoryEntry entry) => entry.EventData?.Any(p =>
         p.Key.Equals("Size", StringComparison.OrdinalIgnoreCase) && long.TryParse(p.Value, out long size) && size >= 0) == true;
 
-    public static List<LibraryChangeHistoryEntry> Project(IReadOnlyList<LibraryChangeHistoryEntry> events, ILogger? logger = null)
+    public static List<LibraryChangeHistoryEntry> Project(IReadOnlyList<LibraryChangeHistoryEntry> events)
     {
         // A legacy merged update has no constituent events. Replace it only when both originals
         // can be recovered; otherwise keep it and suppress partially recovered duplicates.
-        using IDisposable? filter = TemporarySymlinkDeleteTiming.Current(logger, "history-project-filter");
+
         List<LibraryChangeHistoryEntry> original = events.Where(e => !(e.IsLegacy && e.ChangeType == LibraryChangeType.Updated)
             && !(e.EventType == LibraryInventoryHistoryBuilder.EventType && e.DeltaSizeBytes == 0)).ToList();
-        filter?.Dispose();
-        List<LibraryChangeHistoryEntry> rebuilt;
-        using (TemporarySymlinkDeleteTiming.Current(logger, $"history-project-normalize rows={original.Count}"))
-            rebuilt = LibraryChangeHistoryNormalizer.Normalize(original);
-        using IDisposable? legacyTiming = TemporarySymlinkDeleteTiming.Current(logger, "history-project-legacy-reconcile");
+
+        List<LibraryChangeHistoryEntry> rebuilt = LibraryChangeHistoryNormalizer.Normalize(original);
+
         // Index the normalized history once. A legacy entry only suppresses recovered events
         // for its own medium; scanning the entire library for every legacy entry is unnecessary.
         var sourceCounts = rebuilt.GroupBy(e => (e.Kind, e.InstanceId, e.SourceKey))
@@ -92,8 +90,7 @@ public static class LibraryHistoryReconciler
             retainedLegacy.Add(legacy);
             sourceCounts[source] = 1;
         }
-        legacyTiming?.Dispose();
-        using IDisposable? sort = TemporarySymlinkDeleteTiming.Current(logger, $"history-project-sort rows={rebuilt.Count}");
+
         return rebuilt.Where(e => !suppressed.Contains(e)).Concat(retainedLegacy).OrderBy(e => e.OccurredAt).ToList();
     }
 
