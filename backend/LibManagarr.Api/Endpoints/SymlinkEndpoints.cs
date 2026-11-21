@@ -75,7 +75,7 @@ public static class SymlinkEndpoints
     private static async Task<Results<Accepted<SymlinkLinkDto>, ProblemHttpResult>> SaveLinkAsync(
         SaveSymlinkLinkRequest request, SymlinkService links, ISettingsService settings, CancellationToken cancellationToken)
     {
-        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
+        using IDisposable lease = await SymlinkOperationGate.EnterAsync(request.ToPair(), cancellationToken);
         try
         {
             SymlinkLink created = await links.CreateAsync(request.ToPair(), request.RadarrFileId,
@@ -89,7 +89,7 @@ public static class SymlinkEndpoints
     private static async Task<Results<Accepted<SymlinkLinkDto>, NotFound, ProblemHttpResult>> EditLinkAsync(
         string id, SaveSymlinkLinkRequest request, SymlinkService links, ISettingsService settings, CancellationToken cancellationToken)
     {
-        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
+        using IDisposable lease = await links.LockLinkAsync(id, cancellationToken, request.ToPair());
         try
         {
             SymlinkLink? changed = await links.EditAsync(id, request, cancellationToken);
@@ -103,7 +103,7 @@ public static class SymlinkEndpoints
     private static async Task<Results<Accepted<SymlinkLinkDto>, NotFound, ProblemHttpResult>> RetryLinkAsync(
         string id, RetrySymlinkRequest request, SymlinkService links, ISettingsService settings, CancellationToken cancellationToken)
     {
-        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
+        using IDisposable lease = await links.LockLinkAsync(id, cancellationToken);
         try
         {
             SymlinkLink? changed = await links.RetryAsync(id, request.Revision, cancellationToken);
@@ -177,8 +177,10 @@ public static class SymlinkEndpoints
         ISymlinkStore store,
         CancellationToken cancellationToken)
     {
-        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
         SymlinkSuggestion? suggestion = await store.GetSuggestionAsync(id, cancellationToken);
+        if (suggestion is null) return TypedResults.NotFound();
+        using IDisposable lease = await SymlinkOperationGate.EnterAsync(suggestion.Pair, cancellationToken);
+        suggestion = await store.GetSuggestionAsync(id, cancellationToken);
         if (suggestion is null) return TypedResults.NotFound();
 
         try
@@ -261,15 +263,24 @@ public static class SymlinkEndpoints
     private static async Task<Ok<IReadOnlyList<SymlinkLinkDto>>> GetLinksAsync(
         ISettingsService settingsService,
         ISymlinkStore store,
+        HttpContext context,
         CancellationToken cancellationToken)
     {
         AppSettings settings = await settingsService.GetSnapshotAsync(cancellationToken);
         SnapshotTitles titles = SnapshotTitles.Collect(settings);
 
-        return TypedResults.Ok<IReadOnlyList<SymlinkLinkDto>>((await store.GetLinksAsync(cancellationToken))
+        IReadOnlyList<SymlinkLink> registered = await store.GetLinksAsync(cancellationToken);
+        IReadOnlyList<SymlinkDeletionRefresh> refreshing = await store.GetDeletionRefreshesAsync(cancellationToken);
+        context.Response.Headers["X-LibManagarr-Deletion-Refresh-Pending"] =
+            refreshing.Count > 0 ? "true" : "false";
+
+        // Keep confirmed removals visible as locked cleanup rows until their suggestions and
+        // library refresh have finished. They no longer reserve a live filesystem link.
+        return TypedResults.Ok<IReadOnlyList<SymlinkLinkDto>>(refreshing.Select(refresh => DeletionDto(refresh, titles))
+            .Concat(registered.Select(link => LinkDto(link, titles)))
+            .DistinctBy(link => link.Id)
             .OrderByDescending(link => link.CreatedAt)
             .ThenBy(link => link.Id, StringComparer.OrdinalIgnoreCase)
-            .Select(link => LinkDto(link, titles))
             .ToList());
     }
 
@@ -293,7 +304,7 @@ public static class SymlinkEndpoints
         SymlinkService links,
         CancellationToken cancellationToken)
     {
-        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
+        using IDisposable lease = await links.LockLinkAsync(id, cancellationToken);
         try
         {
             SymlinkLink? updated = await links.SetAutoFollowUpAsync(id, request.AutoFollowUp, request.Revision, cancellationToken);
@@ -332,10 +343,10 @@ public static class SymlinkEndpoints
         SymlinkService links,
         CancellationToken cancellationToken)
     {
-        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
+        using IDisposable lease = await links.LockLinkAsync(id, cancellationToken);
         try
         {
-            return await links.DeleteAsync(id, revision, cancellationToken)
+            return await links.DeleteAndCleanupAsync(id, revision, cancellationToken)
                 ? TypedResults.NoContent()
                 : TypedResults.NotFound();
         }
@@ -363,7 +374,7 @@ public static class SymlinkEndpoints
         SymlinkCapabilityService capability,
         CancellationToken cancellationToken)
     {
-        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
+        using IDisposable lease = await SymlinkOperationGate.EnterExclusiveAsync(cancellationToken);
         SymlinkSettings? candidate;
         try
         {
@@ -539,6 +550,21 @@ public static class SymlinkEndpoints
             DecidedAt = suggestion.DecidedAt
         };
 
+    private static SymlinkLinkDto DeletionDto(SymlinkDeletionRefresh refresh, SnapshotTitles titles)
+    {
+        // Older queued refreshes only stored the pair; still show their cleanup after an update.
+        SymlinkLink row = refresh.Link ?? new SymlinkLink
+        {
+            Id = refresh.LinkId, RadarrInstanceId = refresh.Pair.RadarrInstanceId, RadarrMovieId = refresh.Pair.RadarrMovieId,
+            SonarrInstanceId = refresh.Pair.SonarrInstanceId, SonarrSeriesId = refresh.Pair.SonarrSeriesId,
+            SonarrEpisodeId = refresh.Pair.SonarrEpisodeId
+        };
+        SymlinkLinkDto result = LinkDto(row, titles);
+        result.OperationStatus = SymlinkOperationStatus.CleanupPending;
+        result.CanEdit = false;
+        return result;
+    }
+
     private static SymlinkLinkDto LinkDto(SymlinkLink link, SnapshotTitles titles) => new()
         {
             Id = link.Id,
@@ -562,7 +588,8 @@ public static class SymlinkEndpoints
             LinkText = link.LinkText,
             SourcePath = link.SourcePath,
             CanEdit = SymlinkService.CanEdit(link),
-            OperationStatus = link.OperationStatus,
+            OperationStatus = link.OperationStatus == SymlinkOperationStatus.Active && link.SetupStep != SymlinkSetupStep.Completed
+                ? SymlinkOperationStatus.Pending : link.OperationStatus,
             SetupStep = link.SetupStep,
             Findings = [.. link.Findings],
             MonitoringOriginal = link.MonitoringOriginal,

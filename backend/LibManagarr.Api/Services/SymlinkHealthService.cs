@@ -190,7 +190,7 @@ public sealed class SymlinkHealthService(
     /// </summary>
     private async Task<RowAnswer> CheckRowAsync(SymlinkLink row, AppSettings snapshot, CancellationToken cancellationToken, SymlinkLiveEvidence? evidence = null)
     {
-        using IDisposable lease = await SymlinkOperationGate.EnterAsync(cancellationToken);
+        using IDisposable lease = await links.LockLinkAsync(row.Id, cancellationToken);
         SymlinkLink? currentRow = await store.GetLinkAsync(row.Id, cancellationToken);
         if (currentRow is null) return new RowAnswer(false, false, false);
         row = currentRow;
@@ -235,6 +235,7 @@ public sealed class SymlinkHealthService(
             && findings.Any(value => value.Code is MonitoringReopenedCode or ReleaseGroupDeviationCode or LanguagesDeviationCode or "naming-outdated" or "metadata-quality-deviation" or "metadata-media-info-deviation")
             && !findings.Any(value => value.Code is LinkLostCode or EntryNotALinkCode or LinkMovedCode or "arr-unreachable" or "sonarr-file-not-the-link"))
         {
+            row.OperationStatus = SymlinkOperationStatus.Pending;
             row.SetupStep = SymlinkSetupStep.MonitoringDisabled;
             row.SonarrScanCommandId = null;
             row.SonarrRenameCommandId = null;

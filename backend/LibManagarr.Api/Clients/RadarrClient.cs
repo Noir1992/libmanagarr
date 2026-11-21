@@ -1,9 +1,10 @@
 using System.Net.Http.Headers;
 using LibManagarr.Api.Models;
+using LibManagarr.Api.Services;
 
 namespace LibManagarr.Api.Clients;
 
-public sealed class RadarrClient(HttpClient httpClient)
+public sealed class RadarrClient(HttpClient httpClient, ILogger<RadarrClient>? logger = null)
 {
     public async Task<IReadOnlyList<ArrRootFolderResource>> FetchRootFoldersAsync(
         ArrInstanceSettings instance, CancellationToken cancellationToken) =>
@@ -169,6 +170,7 @@ public sealed class RadarrClient(HttpClient httpClient)
         string relativeUrl,
         CancellationToken cancellationToken)
     {
+        using IDisposable? timing = TemporarySymlinkDeleteTiming.Current(logger, $"Radarr GET instance={instance.Id} {relativeUrl}");
         using HttpRequestMessage request = new(HttpMethod.Get, $"{NormalizeBaseUrl(instance.BaseUrl)}{relativeUrl}");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Add("X-Api-Key", instance.ApiKey);

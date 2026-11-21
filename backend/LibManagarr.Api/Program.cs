@@ -86,6 +86,9 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     builder.Services.AddSingleton<SymlinkCapabilityService>();
     builder.Services.AddSingleton<SymlinkMatchingRequests>();
     builder.Services.AddSingleton<SymlinkSetupRequests>();
+    builder.Services.AddSingleton<SymlinkDeletionRefreshRequests>();
+    builder.Services.AddScoped<SymlinkDeletionRefreshService>();
+    builder.Services.AddHostedService<SymlinkDeletionRefreshBackgroundService>();
     builder.Services.AddScoped<SymlinkSuggestionService>();
     builder.Services.AddScoped<SymlinkService>();
     builder.Services.AddScoped<SymlinkHealthService>();
@@ -257,6 +260,18 @@ static async Task<int> RunHostAsync(string[] args, ApplicationRestart restart)
     });
     app.UseAuthentication();
     app.UseAuthorization();
+
+    // TEMP: measure the reads that must finish before the deleting row disappears in the UI.
+    app.Use(async (context, next) =>
+    {
+        bool measured = (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsDelete(context.Request.Method))
+            && (context.Request.Path.StartsWithSegments("/api/settings/symlinks/links")
+                || context.Request.Path == "/api/settings/symlinks/suggestions"
+                || context.Request.Path == "/api/settings/symlinks/rejections");
+        using IDisposable? timing = measured ? TemporarySymlinkDeleteTiming.Start(app.Logger,
+            $"http={context.TraceIdentifier} {context.Request.Method} {context.Request.Path}", "http-request") : null;
+        await next(context);
+    });
     app.UseMiddleware<ApiAntiforgeryMiddleware>();
     app.UseRateLimiter();
 

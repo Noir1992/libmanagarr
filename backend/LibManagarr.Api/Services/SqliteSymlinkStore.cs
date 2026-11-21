@@ -121,6 +121,19 @@ public sealed class SqliteSymlinkStore(
         return result;
     }
 
+    public async Task<IReadOnlyList<SymlinkLink>> GetEpisodeLinksAsync(SpecialMoviePair episode, CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        await using SqliteConnection connection = await OpenAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = $"SELECT {LinkColumns} FROM symlink_links WHERE sonarr_instance_id=$instance AND sonarr_series_id=$series AND sonarr_episode_id=$episode";
+        AddEpisode(command, episode);
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        List<SymlinkLink> result = [];
+        while (await reader.ReadAsync(cancellationToken)) result.Add(ReadLink(reader));
+        return result;
+    }
+
     public async Task<SymlinkLink?> GetLinkAsync(string id, CancellationToken cancellationToken)
     {
         await InitializeAsync(cancellationToken);
@@ -205,6 +218,60 @@ public sealed class SqliteSymlinkStore(
         }
     }
 
+    public async Task<bool> CompleteDeletionAsync(SymlinkLink link, CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        await writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using SqliteConnection connection = await OpenAsync(cancellationToken);
+            await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            using SqliteCommand remove = connection.CreateCommand();
+            remove.Transaction = transaction;
+            remove.CommandText = "DELETE FROM symlink_links WHERE id=$id AND revision=$revision";
+            remove.Parameters.AddWithValue("$id", link.Id);
+            remove.Parameters.AddWithValue("$revision", link.Revision);
+            if (await remove.ExecuteNonQueryAsync(cancellationToken) != 1) return false;
+            using SqliteCommand queue = connection.CreateCommand();
+            queue.Transaction = transaction;
+            queue.CommandText = "INSERT INTO symlink_deletion_refreshes (link_id,payload) VALUES ($id,$payload)";
+            queue.Parameters.AddWithValue("$id", link.Id);
+            queue.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(new SymlinkDeletionRefresh(link.Id, link.Pair, link), Json));
+            await queue.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        }
+        finally { writeGate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<SymlinkDeletionRefresh>> GetDeletionRefreshesAsync(CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        await using SqliteConnection connection = await OpenAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT payload FROM symlink_deletion_refreshes ORDER BY link_id";
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        List<SymlinkDeletionRefresh> pending = [];
+        while (await reader.ReadAsync(cancellationToken))
+            pending.Add(JsonSerializer.Deserialize<SymlinkDeletionRefresh>(reader.GetString(0), Json)!);
+        return pending;
+    }
+
+    public async Task RemoveDeletionRefreshAsync(string linkId, CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        await writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using SqliteConnection connection = await OpenAsync(cancellationToken);
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM symlink_deletion_refreshes WHERE link_id=$id";
+            command.Parameters.AddWithValue("$id", linkId);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally { writeGate.Release(); }
+    }
+
     public async Task<IReadOnlyList<SymlinkSuggestion>> GetSuggestionsAsync(CancellationToken cancellationToken)
     {
         await InitializeAsync(cancellationToken);
@@ -215,6 +282,26 @@ public sealed class SqliteSymlinkStore(
         List<SymlinkSuggestion> result = [];
         while (await reader.ReadAsync(cancellationToken)) result.Add(ReadSuggestion(reader));
         return result;
+    }
+
+    public async Task<IReadOnlyList<SymlinkSuggestion>> GetEpisodeSuggestionsAsync(SpecialMoviePair episode, CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        await using SqliteConnection connection = await OpenAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = $"SELECT {SuggestionColumns} FROM symlink_suggestions WHERE sonarr_instance_id=$instance AND sonarr_series_id=$series AND sonarr_episode_id=$episode ORDER BY created_at,id";
+        AddEpisode(command, episode);
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        List<SymlinkSuggestion> result = [];
+        while (await reader.ReadAsync(cancellationToken)) result.Add(ReadSuggestion(reader));
+        return result;
+    }
+
+    private static void AddEpisode(SqliteCommand command, SpecialMoviePair episode)
+    {
+        command.Parameters.AddWithValue("$instance", episode.SonarrInstanceId);
+        command.Parameters.AddWithValue("$series", episode.SonarrSeriesId);
+        command.Parameters.AddWithValue("$episode", episode.SonarrEpisodeId);
     }
 
     public async Task<SymlinkSuggestion?> GetSuggestionAsync(string id, CancellationToken cancellationToken)

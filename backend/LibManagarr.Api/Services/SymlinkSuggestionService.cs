@@ -41,27 +41,37 @@ public sealed class SymlinkSuggestionService(
     ];
 
     /// <summary>
-    /// One pass at a time. Two passes at once would write the same pair twice, and the second one would
-    /// lose against the unique index — so the background run and the manual action share this gate.
+    /// Serialize full passes and their instance signatures. Episode refreshes use the episode gate
+    /// at each write and must not wait for a full library pass to finish.
     /// </summary>
     private static readonly SemaphoreSlim PassLock = new(1, 1);
 
     public async Task<SymlinkMatchingRun> RefreshAsync(bool force, CancellationToken cancellationToken)
     {
-        using IDisposable operation = await SymlinkOperationGate.EnterAsync(cancellationToken);
         return await RefreshCoreAsync(force, cancellationToken);
     }
 
-    /// <summary>Called under the operation gate after Sonarr cleanup, before the deletion journal is removed.</summary>
-    public Task<SymlinkMatchingRun> RefreshAfterDeletionAsync(string linkId, CancellationToken cancellationToken) =>
-        RefreshCoreAsync(true, cancellationToken, linkId);
-
-    private async Task<SymlinkMatchingRun> RefreshCoreAsync(bool force, CancellationToken cancellationToken, string? deletedLinkId = null)
+    public async Task<SymlinkMatchingRun> RefreshDeletedEpisodeAsync(SpecialMoviePair pair, CancellationToken cancellationToken)
     {
+        return await RefreshCoreAsync(true, cancellationToken, episodeScope: pair);
+    }
+
+    private async Task<SymlinkMatchingRun> RefreshCoreAsync(bool force, CancellationToken cancellationToken,
+        SpecialMoviePair? episodeScope = null)
+    {
+        if (episodeScope is not null)
+        {
+            using IDisposable? scopedWork = TemporarySymlinkDeleteTiming.Current(logger, "matching-work");
+            return await RunAsync(force, cancellationToken, episodeScope);
+        }
+
+        using IDisposable? waiting = TemporarySymlinkDeleteTiming.Current(logger, "matching-pass-lock-wait");
         await PassLock.WaitAsync(cancellationToken);
+        waiting?.Dispose();
         try
         {
-            return await RunAsync(force, cancellationToken, deletedLinkId);
+            using IDisposable? work = TemporarySymlinkDeleteTiming.Current(logger, "matching-work");
+            return await RunAsync(force, cancellationToken, episodeScope);
         }
         finally
         {
@@ -76,6 +86,9 @@ public sealed class SymlinkSuggestionService(
     public async Task<bool> RejectAsync(string suggestionId, string? detail, CancellationToken cancellationToken)
     {
         SymlinkSuggestion? suggestion = await store.GetSuggestionAsync(suggestionId, cancellationToken);
+        if (suggestion is null) return false;
+        using IDisposable operation = await SymlinkOperationGate.EnterAsync(suggestion.Pair, cancellationToken);
+        suggestion = await store.GetSuggestionAsync(suggestionId, cancellationToken);
         if (suggestion is null) return false;
 
         DateTimeOffset now = clock.GetUtcNow();
@@ -96,7 +109,10 @@ public sealed class SymlinkSuggestionService(
     /// </summary>
     public async Task<bool> ReactivateAsync(SpecialMoviePair pair, CancellationToken cancellationToken)
     {
-        if (!await store.RemoveRejectionAsync(pair, cancellationToken)) return false;
+        using (await SymlinkOperationGate.EnterAsync(pair, cancellationToken))
+        {
+            if (!await store.RemoveRejectionAsync(pair, cancellationToken)) return false;
+        }
         await RefreshAsync(force: true, cancellationToken);
         return true;
     }
@@ -107,11 +123,11 @@ public sealed class SymlinkSuggestionService(
     /// signature is for. <paramref name="force"/> is the „refresh suggestions" action, which re-reads
     /// even when nothing looks different, because the user just asked for it.
     /// </summary>
-    private async Task<SymlinkMatchingRun> RunAsync(bool force, CancellationToken cancellationToken, string? deletedLinkId)
+    private async Task<SymlinkMatchingRun> RunAsync(bool force, CancellationToken cancellationToken, SpecialMoviePair? episodeScope)
     {
         AppSettings settings = await settingsService.GetSnapshotAsync(cancellationToken);
         if (!settings.Symlinks.Enabled) return new SymlinkMatchingRun(0, 0, 0, 0, 0);
-        List<InstanceSignature> signatures = CollectSignatures(settings);
+        List<InstanceSignature> signatures = episodeScope is null ? CollectSignatures(settings) : [];
         Dictionary<string, SymlinkMatchingState> storedStates = [];
         foreach (SymlinkMatchingState state in await store.GetMatchingStatesAsync(cancellationToken))
         {
@@ -124,14 +140,14 @@ public sealed class SymlinkSuggestionService(
             return new SymlinkMatchingRun(signatures.Count, 0, 0, 0, 0);
         }
 
-        List<Candidate> candidates = CollectCandidates(settings);
-        HashSet<SpecialMoviePair> managed = (await store.GetLinksAsync(cancellationToken))
-            .Where(link => link.Id != deletedLinkId || link.OperationStatus != SymlinkOperationStatus.CleanupPending)
-            .Select(link => link.Pair)
-            .ToHashSet();
+        List<Candidate> candidates = CollectCandidates(settings, episodeScope);
         Dictionary<SpecialMoviePair, List<SymlinkSuggestion>> history = [];
-        foreach (SymlinkSuggestion suggestion in await store.GetSuggestionsAsync(cancellationToken))
+        IReadOnlyList<SymlinkSuggestion> existingSuggestions = episodeScope is null
+            ? await store.GetSuggestionsAsync(cancellationToken)
+            : await store.GetEpisodeSuggestionsAsync(episodeScope, cancellationToken);
+        foreach (SymlinkSuggestion suggestion in existingSuggestions)
         {
+            if (episodeScope is not null && !SameEpisode(suggestion.Pair, episodeScope)) continue;
             if (!history.TryGetValue(suggestion.Pair, out List<SymlinkSuggestion>? rows))
             {
                 rows = [];
@@ -152,9 +168,14 @@ public sealed class SymlinkSuggestionService(
         {
             SpecialMovieMatch match = candidate.Match;
             matched[match.Pair] = match;
-            List<SymlinkSuggestion> rows = history.TryGetValue(match.Pair, out List<SymlinkSuggestion>? known) ? known : [];
-            // Historic confirmations cannot reserve a pairing after its managed link was deleted.
-            if (managed.Contains(match.Pair)) continue;
+            using IDisposable? waiting = TemporarySymlinkDeleteTiming.Current(logger, $"matching-episode-lock-wait episode={match.Pair.SonarrEpisodeId}");
+            using IDisposable operation = await SymlinkOperationGate.EnterAsync(match.Pair, cancellationToken);
+            waiting?.Dispose();
+            // Creation/deletion may have finished since this matching pass began. Read the
+            // reservation and suggestion again under the same episode lock used by those writes.
+            if ((await store.GetEpisodeLinksAsync(match.Pair, cancellationToken)).Any(link => link.Pair == match.Pair)) continue;
+            List<SymlinkSuggestion> rows = (await store.GetEpisodeSuggestionsAsync(match.Pair, cancellationToken))
+                .Where(row => row.Pair == match.Pair).ToList();
             if (await store.IsRejectedAsync(match.Pair, cancellationToken))
             {
                 skippedRejected += 1;
@@ -226,17 +247,24 @@ public sealed class SymlinkSuggestionService(
     /// candidate — nothing can be linked yet — but its download changes the instance signature, so a
     /// later pass reports the pair once the file is there.
     /// </summary>
-    private static List<Candidate> CollectCandidates(AppSettings settings)
+    private static bool SameEpisode(SpecialMoviePair pair, SpecialMoviePair scope) =>
+        string.Equals(pair.SonarrInstanceId, scope.SonarrInstanceId, StringComparison.OrdinalIgnoreCase)
+        && pair.SonarrSeriesId == scope.SonarrSeriesId && pair.SonarrEpisodeId == scope.SonarrEpisodeId;
+
+    private static List<Candidate> CollectCandidates(AppSettings settings, SpecialMoviePair? episodeScope = null)
     {
         List<Candidate> candidates = [];
         foreach (SonarrInstanceSnapshot sonarr in settings.SonarrSnapshots)
         {
+            if (episodeScope is not null && !string.Equals(sonarr.InstanceId, episodeScope.SonarrInstanceId, StringComparison.OrdinalIgnoreCase)) continue;
             foreach (SonarrSeriesSnapshot series in sonarr.Series)
             {
+                if (episodeScope is not null && series.SeriesId != episodeScope.SonarrSeriesId) continue;
                 foreach (SonarrSeasonSnapshot season in series.Seasons.Where(season => season.SeasonNumber == 0))
                 {
                     foreach (SonarrEpisodeSnapshot episode in season.Episodes)
                     {
+                        if (episodeScope is not null && episode.EpisodeId != episodeScope.SonarrEpisodeId) continue;
                         foreach (RadarrInstanceSnapshot radarr in settings.RadarrSnapshots)
                         {
                             foreach (RadarrMovieSnapshot movie in radarr.Movies)
@@ -298,7 +326,10 @@ public sealed class SymlinkSuggestionService(
         foreach (SymlinkSuggestion suggestion in existing.Where(row => ReportableStatuses.Contains(row.Status)))
         {
             if (matched.ContainsKey(suggestion.Pair)) continue;
-            SymlinkSuggestion stale = Copy(suggestion);
+            using IDisposable operation = await SymlinkOperationGate.EnterAsync(suggestion.Pair, cancellationToken);
+            SymlinkSuggestion? current = await store.GetSuggestionAsync(suggestion.Id, cancellationToken);
+            if (current is null || current.Revision != suggestion.Revision || !ReportableStatuses.Contains(current.Status)) continue;
+            SymlinkSuggestion stale = Copy(current);
             stale.Status = SymlinkSuggestionStatus.Stale;
             stale.Detail = "The current snapshots no longer contain this pair.";
             stale.UpdatedAt = at;

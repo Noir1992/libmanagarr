@@ -131,7 +131,7 @@ public sealed class SymlinkFollowUpTests
         Assert.Equal(
             SymlinkTestPaths.LibManagarr($"movies/{MovieFolder}/{SymlinkFixture.UpgradedFileName}"),
             stored.SourcePath);
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, stored.OperationStatus);
         // The file it was named for is gone, so the scan, the attribution, the reading and the naming all
         // run again for what is there now. Monitoring is left as the entry made it.
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
@@ -250,8 +250,8 @@ public sealed class SymlinkFollowUpTests
         Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishUpdateAsync(entry, CancellationToken.None));
 
         SymlinkLink stored = await StoredAsync("link-1");
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
-        Assert.Equal(SymlinkSetupStep.Completed, stored.SetupStep);
+        Assert.Equal(SymlinkOperationStatus.Pending, stored.OperationStatus);
+        Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
         Assert.Equal(RadarrFileId, stored.RadarrFileId);
         Assert.Equal(CurrentVersion, stored.SourceVersion);
         Assert.Empty(stored.Findings);
@@ -328,7 +328,7 @@ public sealed class SymlinkFollowUpTests
         SymlinkLink stored = await StoredAsync(entry.Id);
         Assert.Null(stored.PendingUpdate);
         Assert.StartsWith(SymlinkService.SourceVersionOf(SymlinkFixture.UpgradedRadarrFileId, SymlinkFixture.UpgradedSize) + ":", stored.SourceVersion);
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, stored.OperationStatus);
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
         Assert.True(restarted.ResolvesToSource(stored));
         Assert.Null(stored.ConfirmedMetadata);
@@ -379,7 +379,7 @@ public sealed class SymlinkFollowUpTests
 
         Assert.Equal(SymlinkSetupOutcome.Completed, await service.FinishUpdateAsync(swapped, CancellationToken.None));
         SymlinkLink stored = await StoredAsync(entry.Id);
-        Assert.Equal(SymlinkOperationStatus.Active, stored.OperationStatus);
+        Assert.Equal(SymlinkOperationStatus.Pending, stored.OperationStatus);
         Assert.Equal(SymlinkSetupStep.MonitoringDisabled, stored.SetupStep);
         Assert.Null(stored.ConfirmedMetadata);
         Assert.Null(stored.AppliedFilename);

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -74,10 +75,12 @@ public sealed class SqliteHistoryStore : IHistoryStore
 
     private readonly string connectionString;
     private readonly BackupWriteGate storageGate;
+    private readonly ILogger<SqliteHistoryStore>? logger;
     private bool schemaApplied;
 
-    public SqliteHistoryStore(StoragePaths storagePaths, BackupOperationCoordinator writes)
+    public SqliteHistoryStore(StoragePaths storagePaths, BackupOperationCoordinator writes, ILogger<SqliteHistoryStore>? logger = null)
     {
+        this.logger = logger;
         Directory.CreateDirectory(storagePaths.ConfigDirectory);
         storageGate = new BackupWriteGate(writes);
         connectionString = new SqliteConnectionStringBuilder
@@ -118,15 +121,22 @@ public sealed class SqliteHistoryStore : IHistoryStore
     {
         ArgumentNullException.ThrowIfNull(entries);
 
+        using IDisposable? waiting = TemporarySymlinkDeleteTiming.Current(logger, "history-db-write-gate-wait");
         await storageGate.WaitAsync(cancellationToken);
+        waiting?.Dispose();
         try
         {
+            using IDisposable? opening = TemporarySymlinkDeleteTiming.Current(logger, "history-db-open-and-schema");
             await using SqliteConnection connection = await OpenConnectionAsync(cancellationToken);
+            opening?.Dispose();
+            using IDisposable? beginning = TemporarySymlinkDeleteTiming.Current(logger, "history-db-begin-transaction");
             await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            beginning?.Dispose();
 
-            await WriteLibraryHistoryAsync(connection, transaction, kind, entries, rawEntries, cancellationToken);
+            await WriteLibraryHistoryAsync(connection, transaction, kind, entries, rawEntries, cancellationToken, logger);
 
-            await transaction.CommitAsync(cancellationToken);
+            using (TemporarySymlinkDeleteTiming.Current(logger, "history-db-commit"))
+                await transaction.CommitAsync(cancellationToken);
         }
         finally
         {
@@ -136,19 +146,30 @@ public sealed class SqliteHistoryStore : IHistoryStore
 
     private static async Task WriteLibraryHistoryAsync(SqliteConnection connection, SqliteTransaction transaction,
         ArrApplicationKind kind, IReadOnlyList<LibraryChangeHistoryEntry> entries,
-        IReadOnlyList<LibraryChangeHistoryEntry>? rawEntries, CancellationToken cancellationToken)
+        IReadOnlyList<LibraryChangeHistoryEntry>? rawEntries, CancellationToken cancellationToken, ILogger? logger = null)
     {
-        await using (SqliteCommand delete = connection.CreateCommand())
+        // Read persisted payloads inside the same transaction used for all changes. Unchanged
+        // rows retain their IDs and never dirty the database or its indexes.
+        Dictionary<(string Instance, string Source), Queue<(long Id, string? Payload)>> existing = [];
+        using (TemporarySymlinkDeleteTiming.Current(logger, "history-db-read-projected"))
         {
-            delete.Transaction = transaction;
-            delete.CommandText = "DELETE FROM library_history WHERE kind = $kind";
-            delete.Parameters.AddWithValue("$kind", KindToText(kind));
-            await delete.ExecuteNonQueryAsync(cancellationToken);
+            await using SqliteCommand read = connection.CreateCommand();
+            read.Transaction = transaction;
+            read.CommandText = "SELECT id, instance_id, source_key, metadata FROM library_history WHERE kind = $kind ORDER BY id";
+            read.Parameters.AddWithValue("$kind", KindToText(kind));
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var key = (reader.GetString(1), reader.GetString(2));
+                if (!existing.TryGetValue(key, out var rows)) existing[key] = rows = new();
+                rows.Enqueue((reader.GetInt64(0), reader.IsDBNull(3) ? null : reader.GetString(3)));
+            }
         }
 
+        using IDisposable? projectedWrite = TemporarySymlinkDeleteTiming.Current(logger, $"history-db-sync-projected rows={entries.Count}");
         await using SqliteCommand insert = connection.CreateCommand();
         insert.Transaction = transaction;
-        insert.CommandText = """
+        const string insertSql = """
         INSERT INTO library_history (
             source_key, kind, instance_id, instance_name, occurred_at, media_key,
             change_type, entity_title, series_title, file_path, size_bytes, delta_size_bytes, metadata)
@@ -156,6 +177,14 @@ public sealed class SqliteHistoryStore : IHistoryStore
             $sourceKey, $kind, $instanceId, $instanceName, $occurredAt, $mediaKey,
             $changeType, $entityTitle, $seriesTitle, $filePath, $sizeBytes, $deltaSizeBytes, $metadata)
         """;
+        const string updateSql = """
+        UPDATE library_history SET source_key = $sourceKey, kind = $kind, instance_id = $instanceId,
+            instance_name = $instanceName, occurred_at = $occurredAt, media_key = $mediaKey,
+            change_type = $changeType, entity_title = $entityTitle, series_title = $seriesTitle,
+            file_path = $filePath, size_bytes = $sizeBytes, delta_size_bytes = $deltaSizeBytes, metadata = $metadata
+        WHERE id = $id
+        """;
+        SqliteParameter rowId = insert.Parameters.Add("$id", SqliteType.Integer);
         SqliteParameter sourceKey = insert.Parameters.Add("$sourceKey", SqliteType.Text);
         SqliteParameter kindParameter = insert.Parameters.Add("$kind", SqliteType.Text);
         SqliteParameter instanceId = insert.Parameters.Add("$instanceId", SqliteType.Text);
@@ -170,8 +199,29 @@ public sealed class SqliteHistoryStore : IHistoryStore
         SqliteParameter deltaSizeBytes = insert.Parameters.Add("$deltaSizeBytes", SqliteType.Integer);
         SqliteParameter metadata = insert.Parameters.Add("$metadata", SqliteType.Text);
 
+        // TEMP: aggregate row timings rather than writing one log per history event.
+        bool trace = projectedWrite is not null;
+        long serializeTicks = 0, sqlTicks = 0, payloadChars = 0;
+        int inserted = 0, updated = 0, unchanged = 0, deleted = 0;
         foreach (LibraryChangeHistoryEntry entry in entries)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            long started = trace ? Stopwatch.GetTimestamp() : 0;
+            string payload = JsonSerializer.Serialize(entry, PayloadSerializerOptions);
+            if (trace)
+            {
+                serializeTicks += Stopwatch.GetTimestamp() - started;
+                payloadChars += payload.Length;
+            }
+            (long Id, string? Payload)? previous = existing.TryGetValue((entry.InstanceId, entry.SourceKey), out var rows)
+                && rows.TryDequeue(out var row) ? row : null;
+            if (previous is { } stored && stored.Payload == payload)
+            {
+                unchanged++;
+                continue;
+            }
+            insert.CommandText = previous.HasValue ? updateSql : insertSql;
+            rowId.Value = previous?.Id ?? 0;
             sourceKey.Value = entry.SourceKey;
             kindParameter.Value = KindToText(entry.Kind);
             instanceId.Value = entry.InstanceId;
@@ -184,30 +234,114 @@ public sealed class SqliteHistoryStore : IHistoryStore
             filePath.Value = (object?)entry.FilePath ?? DBNull.Value;
             sizeBytes.Value = (object?)entry.SizeBytes ?? DBNull.Value;
             deltaSizeBytes.Value = entry.DeltaSizeBytes;
-            metadata.Value = JsonSerializer.Serialize(entry, PayloadSerializerOptions);
+            metadata.Value = payload;
+            started = trace ? Stopwatch.GetTimestamp() : 0;
             await insert.ExecuteNonQueryAsync(cancellationToken);
+            if (trace) sqlTicks += Stopwatch.GetTimestamp() - started;
+            if (previous.HasValue) updated++; else inserted++;
         }
-
-        if (rawEntries is not null)
+        using (TemporarySymlinkDeleteTiming.Current(logger, "history-db-delete-obsolete-projected"))
         {
-            await using SqliteCommand clear = connection.CreateCommand();
-            clear.Transaction = transaction;
-            clear.CommandText = "DELETE FROM library_history_events WHERE kind = $kind";
-            clear.Parameters.AddWithValue("$kind", KindToText(kind));
-            await clear.ExecuteNonQueryAsync(cancellationToken);
-            foreach (LibraryChangeHistoryEntry entry in rawEntries)
+            await using SqliteCommand delete = connection.CreateCommand();
+            delete.Transaction = transaction;
+            delete.CommandText = "DELETE FROM library_history WHERE id = $id";
+            var id = delete.Parameters.Add("$id", SqliteType.Integer);
+            foreach (var remaining in existing.Values.SelectMany(rows => rows))
             {
-                await using SqliteCommand raw = connection.CreateCommand();
-                raw.Transaction = transaction;
-                raw.CommandText = "INSERT INTO library_history_events (kind, instance_id, source_key, payload) VALUES ($kind, $instance, $key, $payload)";
-                raw.Parameters.AddWithValue("$kind", KindToText(kind));
-                raw.Parameters.AddWithValue("$instance", entry.InstanceId);
-                raw.Parameters.AddWithValue("$key", entry.SourceKey);
-                raw.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(entry, PayloadSerializerOptions));
-                await raw.ExecuteNonQueryAsync(cancellationToken);
+                id.Value = remaining.Id;
+                deleted += await delete.ExecuteNonQueryAsync(cancellationToken);
             }
         }
+        LogHistoryWriteTiming(logger, trace, "projected", entries.Count, payloadChars, serializeTicks, sqlTicks,
+            inserted, updated, unchanged, deleted);
+        projectedWrite?.Dispose();
 
+        // Omitting rawEntries preserves the raw journal, as before. Supplying an empty list
+        // explicitly removes its entries for this kind, atomically with the projection.
+        if (rawEntries is not null)
+            await SyncRawHistoryAsync(connection, transaction, kind, rawEntries, cancellationToken, logger);
+    }
+
+    private static async Task SyncRawHistoryAsync(SqliteConnection connection, SqliteTransaction transaction,
+        ArrApplicationKind kind, IReadOnlyList<LibraryChangeHistoryEntry> entries, CancellationToken token, ILogger? logger)
+    {
+        Dictionary<(string Instance, string Source), string> existing = [];
+        using (TemporarySymlinkDeleteTiming.Current(logger, "history-db-read-raw"))
+        {
+            await using SqliteCommand read = connection.CreateCommand();
+            read.Transaction = transaction;
+            read.CommandText = "SELECT instance_id, source_key, payload FROM library_history_events WHERE kind = $kind";
+            read.Parameters.AddWithValue("$kind", KindToText(kind));
+            await using var reader = await read.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+                existing.Add((reader.GetString(0), reader.GetString(1)), reader.GetString(2));
+        }
+        using IDisposable? timing = TemporarySymlinkDeleteTiming.Current(logger, $"history-db-sync-raw rows={entries.Count}");
+        bool trace = timing is not null;
+        long serializeTicks = 0, sqlTicks = 0, payloadChars = 0;
+        int inserted = 0, updated = 0, unchanged = 0, deleted = 0;
+        await using SqliteCommand write = connection.CreateCommand();
+        write.Transaction = transaction;
+        write.Parameters.AddWithValue("$kind", KindToText(kind));
+        var instance = write.Parameters.Add("$instance", SqliteType.Text);
+        var key = write.Parameters.Add("$key", SqliteType.Text);
+        var json = write.Parameters.Add("$payload", SqliteType.Text);
+        foreach (var entry in entries)
+        {
+            token.ThrowIfCancellationRequested();
+            long started = trace ? Stopwatch.GetTimestamp() : 0;
+            string payload = JsonSerializer.Serialize(entry, PayloadSerializerOptions);
+            if (trace)
+            {
+                serializeTicks += Stopwatch.GetTimestamp() - started;
+                payloadChars += payload.Length;
+            }
+            bool found = existing.Remove((entry.InstanceId, entry.SourceKey), out string? previous);
+            if (found && previous == payload)
+            {
+                unchanged++;
+                continue;
+            }
+            // A duplicate input key is deliberately an INSERT and still fails the primary key,
+            // rolling back the entire transaction rather than silently discarding an event.
+            write.CommandText = found
+                ? "UPDATE library_history_events SET payload = $payload WHERE kind = $kind AND instance_id = $instance AND source_key = $key"
+                : "INSERT INTO library_history_events (kind, instance_id, source_key, payload) VALUES ($kind, $instance, $key, $payload)";
+            instance.Value = entry.InstanceId;
+            key.Value = entry.SourceKey;
+            json.Value = payload;
+            started = trace ? Stopwatch.GetTimestamp() : 0;
+            await write.ExecuteNonQueryAsync(token);
+            if (trace) sqlTicks += Stopwatch.GetTimestamp() - started;
+            if (found) updated++; else inserted++;
+        }
+        using (TemporarySymlinkDeleteTiming.Current(logger, "history-db-delete-obsolete-raw"))
+        {
+            await using SqliteCommand delete = connection.CreateCommand();
+            delete.Transaction = transaction;
+            delete.CommandText = "DELETE FROM library_history_events WHERE kind = $kind AND instance_id = $instance AND source_key = $key";
+            delete.Parameters.AddWithValue("$kind", KindToText(kind));
+            var deletedInstance = delete.Parameters.Add("$instance", SqliteType.Text);
+            var deletedKey = delete.Parameters.Add("$key", SqliteType.Text);
+            foreach (var remaining in existing.Keys)
+            {
+                deletedInstance.Value = remaining.Instance;
+                deletedKey.Value = remaining.Source;
+                deleted += await delete.ExecuteNonQueryAsync(token);
+            }
+        }
+        LogHistoryWriteTiming(logger, trace, "raw", entries.Count, payloadChars, serializeTicks, sqlTicks,
+            inserted, updated, unchanged, deleted);
+    }
+
+    private static void LogHistoryWriteTiming(ILogger? logger, bool trace, string rowsKind, int rows,
+        long payloadChars, long serializeTicks, long sqlTicks, int inserted, int updated, int unchanged, int deleted)
+    {
+        if (!trace) return;
+        logger!.LogInformation("[TEMP symlink-delete] {Context} phase=history-db-row-summary rowsKind={RowsKind} rows={Rows} inserted={Inserted} updated={Updated} unchanged={Unchanged} deleted={Deleted} payloadChars={PayloadChars} serializeMs={SerializeMs} sqlMs={SqlMs}",
+            TemporarySymlinkDeleteTiming.CurrentContext, rowsKind, rows, inserted, updated, unchanged, deleted, payloadChars,
+            Math.Round(serializeTicks * 1000d / Stopwatch.Frequency, 1),
+            Math.Round(sqlTicks * 1000d / Stopwatch.Frequency, 1));
     }
 
     public async Task<IReadOnlyList<LibraryChangeHistoryEntry>> GetLibraryHistoryAsync(ArrApplicationKind? kind, CancellationToken cancellationToken)

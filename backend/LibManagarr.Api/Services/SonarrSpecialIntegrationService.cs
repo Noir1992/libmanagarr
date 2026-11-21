@@ -52,6 +52,8 @@ public sealed class SonarrSpecialIntegrationService(
         }
 
         SymlinkSetupStep open = link.SetupStep ?? SymlinkSetupStep.LinkCreated;
+        if (open != SymlinkSetupStep.Completed && link.OperationStatus == SymlinkOperationStatus.Active)
+            link.OperationStatus = SymlinkOperationStatus.Pending;
         if (open == SymlinkSetupStep.Renamed && capability is not null)
         {
             SymlinkCapabilityCheck check = await capability.GetStatusAsync(link.StorageAreaId, cancellationToken);
@@ -326,6 +328,17 @@ public sealed class SonarrSpecialIntegrationService(
                 link.NamingRevision = NamingRevisionOf(naming);
                 if (!IsSamePath(link.LinkPath, translated.Path!) && files.EntryExists(translated.Path!))
                     return Conflict(link, "rename-destination-taken", "The proposed path already contains an unregistered entry.");
+                if (IsSamePath(link.LinkPath, translated.Path!))
+                {
+                    if (!await OwnsEpisodeFileAsync(link, instance, cancellationToken))
+                        return Conflict(link, "sonarr-file-not-the-link", "The episode file changed before its name could be verified.");
+                    link.AppliedFilename = FileNameOf(link.LinkPath);
+                    return await FinishVerifiedAsync(link, cancellationToken);
+                }
+                if (Path.GetRelativePath(Path.GetDirectoryName(translated.Path!)!, link.SourcePath) == link.LinkText)
+                    return await QueueRenameAsync(link, instance, sonarrFileId, cancellationToken);
+                // A move that changes the relative target must be performed locally; Sonarr's
+                // verified move would otherwise read a broken link at its destination.
                 link.NamingMove = new(link.LinkPath, translated.Path!, Path.GetRelativePath(Path.GetDirectoryName(translated.Path!)!, link.SourcePath));
                 if (!await PersistAsync(link, cancellationToken)) return SymlinkSetupOutcome.Blocked;
                 return await FinishNameMoveAsync(link, instance, cancellationToken);
@@ -372,9 +385,7 @@ public sealed class SonarrSpecialIntegrationService(
             string destination = Path.Combine(Path.GetDirectoryName(link.LinkPath)!, proposal.NewFilename);
             if (files.EntryExists(destination))
                 return Conflict(link, "rename-destination-taken", "The proposed path already contains an unregistered entry.");
-            link.NamingMove = new(link.LinkPath, destination, Path.GetRelativePath(Path.GetDirectoryName(destination)!, link.SourcePath));
-            if (!await PersistAsync(link, cancellationToken)) return SymlinkSetupOutcome.Blocked;
-            return await FinishNameMoveAsync(link, instance, cancellationToken);
+            return await QueueRenameAsync(link, instance, sonarrFileId, cancellationToken);
         }
 
         SonarrCommandResource? status =
@@ -396,6 +407,13 @@ public sealed class SonarrSpecialIntegrationService(
             return Conflict(link, "renamed-path-not-translatable", renamed.Failure!);
         }
 
+        if (FileNameOf(file.Path) != link.DesiredFilename)
+        {
+            Note(link, "rename-association-unconfirmed", "Sonarr has not confirmed the requested filename yet.");
+            return status?.Queued is { } queuedAt && clock.GetUtcNow() - queuedAt < CommandWaitBudget
+                ? SymlinkSetupOutcome.Waiting : SymlinkSetupOutcome.Blocked;
+        }
+
         if (!IsSamePath(renamed.Path!, link.LinkPath))
         {
             SymlinkSetupOutcome? trouble = AdoptRenamedPath(link, renamed.Path!);
@@ -403,8 +421,23 @@ public sealed class SonarrSpecialIntegrationService(
         }
 
         link.AppliedFilename = FileNameOf(file.Path);
+        link.Findings.RemoveAll(value => value.Code == "rename-association-unconfirmed");
         link.SonarrRenameCommandId = null;
         return await FinishVerifiedAsync(link, cancellationToken);
+    }
+
+    private async Task<SymlinkSetupOutcome> QueueRenameAsync(
+        SymlinkLink link, ArrInstanceSettings instance, int fileId, CancellationToken token)
+    {
+        if (!await OwnsEpisodeFileAsync(link, instance, token))
+            return Conflict(link, "sonarr-file-not-the-link", "The episode file changed before renaming.");
+        SonarrCommandResource? queued = await sonarr.StartRenameFilesAsync(instance, link.SonarrSeriesId, [fileId], token);
+        if (queued?.Id is null)
+            return Pause(link, "rename-not-queued", "Sonarr returned no command for the managed file rename.");
+        // Sonarr updates the same file record and writes a rename event. Deleting the old
+        // path ourselves followed by a rescan instead produces a misleading missing event.
+        link.SonarrRenameCommandId = queued.Id.Value.ToString(CultureInfo.InvariantCulture);
+        return SymlinkSetupOutcome.Waiting;
     }
 
     /// <summary>

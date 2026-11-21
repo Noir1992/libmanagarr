@@ -161,7 +161,7 @@ public sealed class SymlinkCapabilityService(
     /// <summary>Checks capability for the current revision and disables the feature when the environment cannot support it.</summary>
     public async Task<AppSettings> CheckAndUpdateAsync(CancellationToken token)
     {
-        using IDisposable operation = await SymlinkOperationGate.EnterAsync(token);
+        using IDisposable operation = await SymlinkOperationGate.EnterExclusiveAsync(token);
         AppSettings current = await settings.GetSnapshotAsync(token);
         bool available = await CheckConfigurationAsync(current, token);
         if (!available && current.Symlinks.Enabled)

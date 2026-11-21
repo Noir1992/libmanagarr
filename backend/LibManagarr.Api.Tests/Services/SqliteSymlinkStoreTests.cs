@@ -18,6 +18,77 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         new(Paths, clock, new BackupOperationCoordinator(clock), NullLogger<SqliteSymlinkStore>.Instance);
 
     [Fact]
+    public async Task EpisodeReadsExcludeOtherSeriesAndIncludeAlternativeMovies()
+    {
+        SqliteSymlinkStore store = CreateStore();
+        SymlinkLink selected = NewLink("selected");
+        SymlinkLink unrelated = NewLink("unrelated");
+        unrelated.SonarrSeriesId++;
+        await store.InsertLinkAsync(selected, CancellationToken.None);
+        await store.InsertLinkAsync(unrelated, CancellationToken.None);
+        SymlinkSuggestion first = NewSuggestion("first");
+        first.Pair = selected.Pair;
+        SymlinkSuggestion alternative = NewSuggestion("alternative");
+        alternative.Pair = selected.Pair with { RadarrMovieId = 99 };
+        SymlinkSuggestion other = NewSuggestion("other");
+        other.Pair = unrelated.Pair;
+        await store.UpsertSuggestionAsync(first, CancellationToken.None);
+        await store.UpsertSuggestionAsync(alternative, CancellationToken.None);
+        await store.UpsertSuggestionAsync(other, CancellationToken.None);
+
+        Assert.Equal(selected.Id, Assert.Single(await store.GetEpisodeLinksAsync(selected.Pair, CancellationToken.None)).Id);
+        var suggestions = await store.GetEpisodeSuggestionsAsync(selected.Pair, CancellationToken.None);
+        Assert.Equal(new[] { "alternative", "first" }, suggestions.Select(s => s.Id).Order().ToArray());
+        Assert.Single(await store.GetEpisodeSuggestionsAsync(unrelated.Pair, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task MigrationOnlyMarksUnfinishedActiveLinksAsPending()
+    {
+        SqliteSymlinkStore store = CreateStore();
+        SymlinkLink unfinished = NewLink("unfinished");
+        unfinished.SetupStep = SymlinkSetupStep.RescanRequested;
+        SymlinkLink completed = NewLink("completed");
+        completed.SonarrEpisodeId++;
+        completed.SetupStep = SymlinkSetupStep.Completed;
+        await store.InsertLinkAsync(unfinished, CancellationToken.None);
+        await store.InsertLinkAsync(completed, CancellationToken.None);
+        await ExecuteSqlAsync("DELETE FROM schema_migrations WHERE migration_id='symlinks-v10'");
+
+        SqliteSymlinkStore upgraded = CreateStore();
+        var pending = (await upgraded.GetLinkAsync(unfinished.Id, CancellationToken.None))!;
+        Assert.Equal(SymlinkOperationStatus.Pending, pending.OperationStatus);
+        Assert.Equal(SymlinkSetupStep.RescanRequested, pending.SetupStep);
+        Assert.Equal(unfinished.Revision + 1, pending.Revision);
+        Assert.Equal(SymlinkOperationStatus.Active, (await upgraded.GetLinkAsync(completed.Id, CancellationToken.None))!.OperationStatus);
+    }
+
+    [Fact]
+    public async Task CompletedDeletionAtomicallyQueuesRefreshAndSurvivesReopeningTheStore()
+    {
+        SqliteSymlinkStore store = CreateStore();
+        SymlinkLink link = NewLink("deleted");
+        await store.InsertLinkAsync(link, CancellationToken.None);
+        link.Revision++;
+        Assert.False(await store.CompleteDeletionAsync(link, CancellationToken.None));
+        Assert.Empty(await store.GetDeletionRefreshesAsync(CancellationToken.None));
+        Assert.NotNull(await store.GetLinkAsync(link.Id, CancellationToken.None));
+        link.Revision--;
+        Assert.True(await store.CompleteDeletionAsync(link, CancellationToken.None));
+
+        SqliteSymlinkStore reopened = CreateStore();
+        Assert.Null(await reopened.GetLinkAsync(link.Id, CancellationToken.None));
+        SymlinkDeletionRefresh pending = Assert.Single(await reopened.GetDeletionRefreshesAsync(CancellationToken.None));
+        Assert.Equal(link.Pair, pending.Pair);
+        Assert.NotNull(pending.Link);
+        Assert.Equal(link.LinkPath, pending.Link.LinkPath);
+        Assert.Equal(link.SourcePath, pending.Link.SourcePath);
+        Assert.Equal(link.CreatedAt, pending.Link.CreatedAt);
+        await reopened.RemoveDeletionRefreshAsync(pending.LinkId, CancellationToken.None);
+        Assert.Empty(await CreateStore().GetDeletionRefreshesAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task NewInstallation_CreatesTheTablesAndStartsEmpty()
     {
         SqliteSymlinkStore store = CreateStore();
@@ -36,7 +107,7 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT migration_id FROM schema_migrations ORDER BY migration_id";
         Assert.Equal(
-            ["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4", "symlinks-v5", "symlinks-v6", "symlinks-v7", "symlinks-v8"],
+            ["symlinks-v1", "symlinks-v10", "symlinks-v11", "symlinks-v2", "symlinks-v3", "symlinks-v4", "symlinks-v5", "symlinks-v6", "symlinks-v7", "symlinks-v8", "symlinks-v9"],
             await ReadAllAsync(command));
     }
 
@@ -60,7 +131,7 @@ public sealed class SqliteSymlinkStoreTests : IDisposable
         await connection.OpenAsync();
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT migration_id FROM schema_migrations ORDER BY migration_id";
-        Assert.Equal(["symlinks-v1", "symlinks-v2", "symlinks-v3", "symlinks-v4", "symlinks-v5", "symlinks-v6", "symlinks-v7", "symlinks-v8"], await ReadAllAsync(command));
+        Assert.Equal(["symlinks-v1", "symlinks-v10", "symlinks-v11", "symlinks-v2", "symlinks-v3", "symlinks-v4", "symlinks-v5", "symlinks-v6", "symlinks-v7", "symlinks-v8", "symlinks-v9"], await ReadAllAsync(command));
         // A step is marked once, so reopening an installed database does not replay it — which for the
         // widening step matters more than for a create, because the second ALTER would fail outright.
         await CreateStore().InitializeAsync(CancellationToken.None);

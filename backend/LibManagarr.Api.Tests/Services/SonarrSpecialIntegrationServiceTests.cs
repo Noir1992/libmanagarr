@@ -81,7 +81,7 @@ public sealed class SonarrSpecialIntegrationServiceTests
 
         Assert.Equal(equivalent ? SymlinkSetupOutcome.Waiting : SymlinkSetupOutcome.Blocked, outcome);
         SymlinkLink link = await StoredAsync();
-        Assert.Equal(equivalent, link.NamingMove is not null);
+        Assert.Equal(equivalent, link.SonarrRenameCommandId is not null);
         Assert.Equal(!equivalent, link.Findings.Any(value => value.Code == "metadata-video-codec-deviation"));
     }
 
@@ -98,7 +98,7 @@ public sealed class SonarrSpecialIntegrationServiceTests
     }
 
     [Fact]
-    public async Task CompletedRenameScanWaitsForEpisodeAssociationBeforeFinishing()
+    public async Task CompletedRenameWaitsForEpisodeAssociationBeforeFinishing()
     {
         Dictionary<string, List<string>> routes = HappyRoutes();
         routes["GET /api/v3/episode/5"] = ["""{"id":5,"seriesId":12,"episodeFileId":44,"monitored":false}"""];
@@ -143,6 +143,7 @@ public sealed class SonarrSpecialIntegrationServiceTests
         if (failFirst)
         {
             SymlinkLink pending = await StoredAsync();
+            Assert.Equal(SymlinkOperationStatus.Pending, pending.OperationStatus);
             Assert.Equal(SymlinkSetupStep.Renamed, pending.SetupStep);
             Assert.Contains(pending.Findings, finding => finding.Code == "library-sync-pending");
             int commands = handler.Requests.Count(request => request.Method == "POST");
@@ -171,6 +172,7 @@ public sealed class SonarrSpecialIntegrationServiceTests
 
         Assert.Equal(SymlinkSetupOutcome.Waiting, await service.RunSetupAsync(link, CancellationToken.None));
         SymlinkLink scanQueued = await StoredAsync();
+        Assert.Equal(SymlinkOperationStatus.Pending, scanQueued.OperationStatus);
         Assert.True(scanQueued.MonitoringOriginal);
         Assert.True(scanQueued.MonitoringDisabled);
         Assert.Equal(SymlinkSetupStep.RescanRequested, scanQueued.SetupStep);
@@ -178,11 +180,12 @@ public sealed class SonarrSpecialIntegrationServiceTests
 
         Assert.Equal(SymlinkSetupOutcome.Waiting, await service.RunSetupAsync(scanQueued, CancellationToken.None));
         SymlinkLink renameQueued = await StoredAsync();
+        Assert.Equal(SymlinkOperationStatus.Pending, renameQueued.OperationStatus);
         Assert.Equal(SymlinkSetupStep.Renamed, renameQueued.SetupStep);
         Assert.Equal(EpisodeFileId, renameQueued.SonarrFileId);
         // The scan is owed nothing any more, so its id is gone and only the rename is outstanding.
         Assert.Null(renameQueued.SonarrScanCommandId);
-        Assert.NotNull(renameQueued.NamingMove?.ScanCommandId);
+        Assert.NotNull(renameQueued.SonarrRenameCommandId);
         Assert.Equal("sonarr", renameQueued.ConfirmedMetadata?.Origin);
         Assert.Equal("WFFF", renameQueued.ConfirmedMetadata?.ReleaseGroup);
 
@@ -201,9 +204,28 @@ public sealed class SonarrSpecialIntegrationServiceTests
         // Each command went out once, for this link alone: a rescan of the series without a file list and
         // a rename that names exactly the managed file.
         Assert.All(handler.Posts, body => Assert.Contains("\"seriesId\":12", body));
-        Assert.All(handler.Posts, body => Assert.DoesNotContain("files", body));
-        Assert.DoesNotContain(handler.Posts, body => body.Contains("RenameFiles", StringComparison.Ordinal));
+        Assert.Contains(handler.Posts, body => body.Contains("\"files\":[44]", StringComparison.Ordinal));
+        Assert.Single(handler.Posts, body => body.Contains("RenameFiles", StringComparison.Ordinal));
         Assert.Equal(2, handler.Posts.Count());
+    }
+
+    [Fact]
+    public async Task AFailedRenameKeepsItsCommandAndDoesNotRescanOrClaimCompletion()
+    {
+        Dictionary<string, List<string>> routes = HappyRoutes();
+        StubArrHandler handler = new(routes);
+        SonarrSpecialIntegrationService service = CreateService(handler, new FakeLinkFileSystem());
+        await service.RunSetupAsync(await SeedAsync(SymlinkSetupStep.MonitoringDisabled), CancellationToken.None);
+        await service.RunSetupAsync(await StoredAsync(), CancellationToken.None);
+        routes["GET /api/v3/command/91"] = ["""{"id":91,"status":"failed","message":"Rename failed"}"""];
+
+        Assert.Equal(SymlinkSetupOutcome.Blocked, await service.RunSetupAsync(await StoredAsync(), CancellationToken.None));
+        SymlinkLink stopped = await StoredAsync();
+        Assert.NotNull(stopped.SonarrRenameCommandId);
+        Assert.Equal(SymlinkSetupStep.Renamed, stopped.SetupStep);
+        Assert.Equal(OldLinkPath(), stopped.LinkPath);
+        Assert.Contains(stopped.Findings, finding => finding.Code == "rename-failed");
+        Assert.Single(handler.Posts, body => body.Contains("RescanSeries", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -488,26 +510,30 @@ public sealed class SonarrSpecialIntegrationServiceTests
         Assert.Contains(link.Findings, finding => finding.Code == "metadata-languages-deviation");
     }
 
-    [Fact]
-    public async Task RealRenameResourceMovesOnlyTheLinkAndResumesItsRescan()
+    [Theory]
+    [InlineData("Season 00", true)]
+    [InlineData("Season 00/Nested", false)]
+    public async Task RealRenameResourcePreservesRelativeTargetAndResumesAfterRestart(string folder, bool sonarrRename)
     {
         Dictionary<string, List<string>> routes = HappyRoutes();
-        routes["GET /api/v3/rename"] = [$$"""[{"episodeFileId":44,"existingPath":"Specials/{{OldName}}","newPath":"Season 00/{{NewName}}"}]"""];
+        routes["GET /api/v3/rename"] = [$$"""[{"episodeFileId":44,"existingPath":"Specials/{{OldName}}","newPath":"{{folder}}/{{NewName}}"}]"""];
         routes["GET /api/v3/series/12"] = [$$"""{"id":12,"path":{{Quote(Instance(SeriesFolder))}}}"""];
         routes["GET /api/v3/episode/5"] = ["""{"id":5,"seriesId":12,"episodeFileId":44,"monitored":false}"""];
-        string destination = LibManagarr($"series/{SeriesFolder}/Season 00/{NewName}");
+        string destination = LibManagarr($"series/{SeriesFolder}/{folder}/{NewName}");
         FakeLinkFileSystem files = new();
         StubArrHandler handler = new(routes);
+        handler.RenameDestination = destination;
         SonarrSpecialIntegrationService service = CreateService(handler, files);
         SymlinkLink link = await SeedAsync(SymlinkSetupStep.Renamed);
         link.SonarrFileId = 44;
         await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None);
         Assert.Equal(SymlinkSetupOutcome.Waiting, await service.RunSetupAsync(await StoredAsync(), CancellationToken.None));
-        Assert.NotNull((await StoredAsync()).NamingMove?.ScanCommandId);
+        if (sonarrRename) Assert.NotNull((await StoredAsync()).SonarrRenameCommandId);
+        else Assert.NotNull((await StoredAsync()).NamingMove?.ScanCommandId);
         Assert.False(files.EntryExists(OldLinkPath()));
         Assert.Equal(Path.GetRelativePath(Path.GetDirectoryName(destination)!, SourcePath()), files.ReadLinkTarget(destination));
-        Assert.DoesNotContain(handler.Posts, body => body.Contains("RenameFiles", StringComparison.Ordinal));
-        routes["GET /api/v3/episodefile/44"] = [EpisodeFileJson(Instance($"{SeriesFolder}/Season 00/{NewName}"), "WFFF")];
+        Assert.Equal(sonarrRename, handler.Posts.Any(body => body.Contains("RenameFiles", StringComparison.Ordinal)));
+        routes["GET /api/v3/episodefile/44"] = [EpisodeFileJson(Instance($"{SeriesFolder}/{folder}/{NewName}"), "WFFF")];
         routes["GET /api/v3/rename"] = ["[]"];
         Assert.Equal(SymlinkSetupOutcome.Completed, await CreateService(new StubArrHandler(routes), files).RunSetupAsync(await StoredAsync(), CancellationToken.None));
         SymlinkLink done = await StoredAsync();
@@ -517,8 +543,10 @@ public sealed class SonarrSpecialIntegrationServiceTests
         Assert.True(files.EntryExists(SourcePath()));
     }
 
-    private SonarrSpecialIntegrationService CreateService(StubArrHandler handler, ISymlinkFileSystem files, ISnapshotSyncService? snapshotSync = null) =>
-        new(
+    private SonarrSpecialIntegrationService CreateService(StubArrHandler handler, ISymlinkFileSystem files, ISnapshotSyncService? snapshotSync = null)
+    {
+        handler.Files = files;
+        return new(
             store,
             new FixedSettings(Settings()),
             new SonarrClient(new HttpClient(handler)),
@@ -526,6 +554,7 @@ public sealed class SonarrSpecialIntegrationServiceTests
             files,
             clock,
             NullLogger<SonarrSpecialIntegrationService>.Instance, snapshotSync: snapshotSync);
+    }
 
     private async Task<SymlinkLink> SeedAsync(SymlinkSetupStep step, SymlinkFileMetadata? expected = null)
     {
@@ -697,6 +726,8 @@ public sealed class SonarrSpecialIntegrationServiceTests
         private readonly Dictionary<string, int> reads = new(StringComparer.OrdinalIgnoreCase);
 
         public List<RecordedRequest> Requests { get; } = [];
+        public ISymlinkFileSystem? Files { get; set; }
+        public string RenameDestination { get; set; } = NewLinkPath();
 
         public IEnumerable<string> Posts =>
             Requests.Where(request => request.Method == "POST").Select(request => request.Body);
@@ -715,6 +746,13 @@ public sealed class SonarrSpecialIntegrationServiceTests
                 : await request.Content.ReadAsStringAsync(cancellationToken);
             string path = request.RequestUri!.AbsolutePath;
             Requests.Add(new RecordedRequest(request.Method.Method, path, body));
+            if (request.Method == HttpMethod.Post && body.Contains("RenameFiles", StringComparison.Ordinal))
+            {
+                // Simulate Sonarr moving the directory entry while preserving its relative target.
+                string target = Files!.ReadLinkTarget(OldLinkPath())!;
+                Files.CreateFileSymlink(RenameDestination, target);
+                Files.DeleteEntry(OldLinkPath());
+            }
 
             string key = $"{request.Method} {path}";
             if (!jsonByRoute.TryGetValue(key, out List<string>? script))
@@ -724,7 +762,8 @@ public sealed class SonarrSpecialIntegrationServiceTests
 
             if (key == $"GET /api/v3/episodefile/{EpisodeFileId}" && script.Count >= 3)
             {
-                bool renamed = Requests.Count(value => value.Method == "POST" && value.Body.Contains("RescanSeries", StringComparison.Ordinal)) > 1;
+                bool renamed = Requests.Any(value => value.Method == "POST" && value.Body.Contains("RenameFiles", StringComparison.Ordinal))
+                    || Requests.Count(value => value.Method == "POST" && value.Body.Contains("RescanSeries", StringComparison.Ordinal)) > 1;
                 if (renamed) return Response(script[^1]);
                 int beforeRename = Math.Min(reads.GetValueOrDefault(key), script.Count - 2);
                 reads[key] = beforeRename + 1;

@@ -101,12 +101,22 @@ public sealed class SnapshotSyncService(
     }
 
     /// <summary>Refreshes one series through the same persistence pipeline as a full sync.</summary>
-    public async Task<SyncInstanceResult> SyncSonarrSeriesAsync(string instanceId, int seriesId, CancellationToken cancellationToken)
+    public Task<SyncInstanceResult> SyncSonarrSeriesAsync(string instanceId, int seriesId, CancellationToken cancellationToken) =>
+        SyncSonarrSeriesCoreAsync(instanceId, seriesId, true, cancellationToken);
+
+    public Task<SyncInstanceResult> SyncSonarrSeriesAfterDeletionAsync(string instanceId, int seriesId, CancellationToken cancellationToken) =>
+        SyncSonarrSeriesCoreAsync(instanceId, seriesId, false, cancellationToken);
+
+    private async Task<SyncInstanceResult> SyncSonarrSeriesCoreAsync(string instanceId, int seriesId, bool requestMatching, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(seriesId);
+        using IDisposable? total = TemporarySymlinkDeleteTiming.Current(logger, "series-sync-total");
+        using IDisposable? waiting = TemporarySymlinkDeleteTiming.Current(logger, "snapshot-sync-lock-wait");
         await SyncLock.WaitAsync(cancellationToken);
+        waiting?.Dispose();
         try
         {
+            using IDisposable? preparation = TemporarySymlinkDeleteTiming.Current(logger, "sync-settings-and-history-read");
             AppSettings settings = await settingsService.GetAsync(cancellationToken);
             ArrInstanceSettings instance = settings.SonarrInstances.FirstOrDefault(value => value.Id == instanceId)
                 ?? throw new ApiProblemException(StatusCodes.Status404NotFound, "Sonarr instance not found", $"No Sonarr instance exists for id '{instanceId}'.");
@@ -114,11 +124,20 @@ public sealed class SnapshotSyncService(
             // Establish the baseline once; subsequent targeted syncs never read unrelated series.
             if (previous is null || (await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, cancellationToken))
                 .Any(e => e.InstanceId == instanceId && e.NeedsHistoryBackfill))
+            {
+                preparation?.Dispose();
+                using IDisposable? baseline = TemporarySymlinkDeleteTiming.Current(logger, "full-sync-baseline-fallback");
                 return await SyncSonarrAsync(instanceId, settings, cancellationToken);
+            }
+            preparation?.Dispose();
 
             DateTimeOffset observedAt = DateTimeOffset.UtcNow;
-            SonarrSeriesSnapshot series = await sonarrClient.FetchSeriesSnapshotAsync(instance, seriesId, cancellationToken);
-            IReadOnlyList<SonarrHistoryResource> resources = await sonarrClient.FetchSeriesHistoryAsync(instance, seriesId, cancellationToken);
+            SonarrSeriesSnapshot series;
+            using (TemporarySymlinkDeleteTiming.Current(logger, "fetch-series-snapshot"))
+                series = await sonarrClient.FetchSeriesSnapshotAsync(instance, seriesId, cancellationToken);
+            IReadOnlyList<SonarrHistoryResource> resources;
+            using (TemporarySymlinkDeleteTiming.Current(logger, "fetch-series-history"))
+                resources = await sonarrClient.FetchSeriesHistoryAsync(instance, seriesId, cancellationToken);
             DateTimeOffset since = previous.SeriesSyncTimes.GetValueOrDefault(seriesId,
                 previous.LastFullSyncAt ?? previous.SyncedAt);
             resources = resources.Where(history => history.SeriesId == seriesId && history.Date > since && history.Date <= observedAt).ToArray();
@@ -133,8 +152,9 @@ public sealed class SnapshotSyncService(
                 PosterUrls = new(previous.PosterUrls) { [seriesId] = series.PosterRemoteUrl }
             };
             merged.Series = merged.Series.OrderBy(value => value.Title, StringComparer.OrdinalIgnoreCase).ToList();
-            await PersistSonarrSnapshotAsync(instance, previous, merged, resources, cancellationToken, seriesId: seriesId);
-            symlinkMatching.Request();
+            using (TemporarySymlinkDeleteTiming.Current(logger, "persist-series-and-history"))
+                await PersistSonarrSnapshotAsync(instance, previous, merged, resources, cancellationToken, seriesId: seriesId);
+            if (requestMatching) symlinkMatching.Request();
             logger.LogInformation("Synchronized Sonarr series {SeriesId} in instance {InstanceId}.", seriesId, instanceId);
             return new SyncInstanceResult { Message = "Sonarr series synchronized.", SyncedAt = observedAt, ItemCount = 1 };
         }
@@ -144,6 +164,7 @@ public sealed class SnapshotSyncService(
     private async Task PersistSonarrSnapshotAsync(ArrInstanceSettings instance, SonarrInstanceSnapshot? previous,
         SonarrInstanceSnapshot snapshot, IReadOnlyList<SonarrHistoryResource> resources, CancellationToken token, bool backfill = false, int? seriesId = null)
     {
+        using IDisposable? reconcile = TemporarySymlinkDeleteTiming.Current(logger, "history-reconcile");
         Dictionary<int, SonarrSeriesSnapshot> priorSeries = (previous?.Series ?? []).ToDictionary(value => value.SeriesId);
         foreach (SonarrSeriesSnapshot series in snapshot.Series)
         {
@@ -157,6 +178,7 @@ public sealed class SnapshotSyncService(
         IReadOnlyList<LibraryChangeHistoryEntry> persisted = await historyStore.GetLibraryHistoryEventsAsync(ArrApplicationKind.Sonarr, token);
         List<LibraryChangeHistoryEntry> combined = LibraryHistoryReconciler.MergeEvents(persisted, historyEntries);
         combined.AddRange(LibraryHistoryReconciler.InferSonarrDeletions(instance, previous, snapshot, combined, seriesId));
+        combined.AddRange(LibraryHistoryReconciler.InferSonarrAdditions(instance, previous, snapshot, combined, seriesId));
         IReadOnlyList<LibraryChangeHistoryEntry> seeds = LibraryHistorySeedBuilder.BuildSonarrSeeds(instance, snapshot, combined);
         combined = LibraryHistoryReconciler.MergeEvents(combined, seeds);
         // A targeted sync contains stale observations of other series; only a full sync can
@@ -166,11 +188,22 @@ public sealed class SnapshotSyncService(
                 snapshot.Series.SelectMany(series => series.Seasons).SelectMany(season => season.Episodes)
                     .Where(episode => episode.HasFile).Sum(episode => episode.File.Size ?? 0));
         if (backfill) LibraryHistoryReconciler.CompleteBackfill(combined, instance.Id);
+        reconcile?.Dispose();
+        using IDisposable? snapshotSave = TemporarySymlinkDeleteTiming.Current(logger, "snapshot-history-save");
         await historyStore.AppendSnapshotHistoryAsync(ArrApplicationKind.Sonarr, snapshot.InstanceId, snapshot.InstanceName,
             snapshot.SyncedAt, snapshot, token);
-        await historyStore.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr,
-            LibraryHistoryReconciler.Project(combined), token, combined);
-        LibraryFilterValues filterValues = LibraryFilterValuesBuilder.Build(instance.Id, snapshot);
+        snapshotSave?.Dispose();
+        using IDisposable? historySave = TemporarySymlinkDeleteTiming.Current(logger, "history-project-and-save");
+        List<LibraryChangeHistoryEntry> projected;
+        using (TemporarySymlinkDeleteTiming.Current(logger, $"history-project inputRows={combined.Count}"))
+            projected = LibraryHistoryReconciler.Project(combined, logger);
+        using (TemporarySymlinkDeleteTiming.Current(logger, $"history-store-replace projectedRows={projected.Count} rawRows={combined.Count}"))
+            await historyStore.ReplaceLibraryHistoryAsync(ArrApplicationKind.Sonarr, projected, token, combined);
+        historySave?.Dispose();
+        LibraryFilterValues filterValues;
+        using (TemporarySymlinkDeleteTiming.Current(logger, "filter-rebuild"))
+            filterValues = LibraryFilterValuesBuilder.Build(instance.Id, snapshot);
+        using IDisposable? settingsSave = TemporarySymlinkDeleteTiming.Current(logger, "snapshot-and-filter-settings-save");
         await settingsService.UpdateAsync(current =>
         {
             if (!current.SonarrInstances.Any(value => value.Id == instance.Id)) return;
