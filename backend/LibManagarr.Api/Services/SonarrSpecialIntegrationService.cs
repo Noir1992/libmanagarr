@@ -473,8 +473,26 @@ public sealed class SonarrSpecialIntegrationService(
                 $"'{newPath}' points at '{linkText}', which is not the chosen Radarr file '{Path.GetFileName(link.SourcePath)}' anymore.");
         }
 
+        // Sonarr can turn a relative target into an absolute path containing the old
+        // folder followed by "..". That path stops resolving when it removes the empty
+        // folder, even though GetFullPath still normalizes it to the expected source.
+        // Only replace the verified owned link, atomically, with a target independent
+        // of the previous folder, then prove that the file can actually be opened.
+        string stableTarget = Path.GetRelativePath(Path.GetDirectoryName(newPath)!, link.SourcePath);
+        try
+        {
+            SymlinkPathGuard.CheckParents(files, newPath);
+            if (linkText != stableTarget)
+                files.ReplaceFileSymlink(newPath, linkText, stableTarget);
+            files.OpenForRead(newPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return Pause(link, "renamed-link-unreadable", $"The renamed link could not be verified: {exception.Message}");
+        }
+
         link.LinkPath = newPath;
-        link.LinkText = linkText;
+        link.LinkText = stableTarget;
         return null;
     }
 

@@ -11,6 +11,7 @@ namespace LibManagarr.Api.Tests.Services;
 /// plan's list: reported once, decline survives the next sync, a movie without a file only waits,
 /// unchanged data is not searched again, and a vanished pair is announced instead of dropping out.
 /// </summary>
+[Collection("Symlink gate isolation")]
 public sealed class SymlinkSuggestionServiceTests
 {
     private const string SonarrInstance = "sonarr-1";

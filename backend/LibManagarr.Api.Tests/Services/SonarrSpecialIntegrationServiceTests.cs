@@ -31,6 +31,55 @@ public sealed class SonarrSpecialIntegrationServiceTests
     private readonly InMemorySymlinkStore store = new();
     private readonly FakeTimeProvider clock = new(Start);
 
+    [Fact]
+    public async Task RenamedLinkWithRemovedFolderInAbsoluteTargetIsReplacedBeforeBecomingActive()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"libmanagarr-renamed-link-{Guid.NewGuid():N}");
+        string previousFolder = Path.Combine(root, "series", SeriesFolder, "Specials");
+        string destination = Path.Combine(root, "series", SeriesFolder, "Season 00", NewName);
+        string source = Path.Combine(root, "movies", MovieFolder, SourceFileName);
+        Directory.CreateDirectory(previousFolder);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+        try
+        {
+            await File.WriteAllBytesAsync(source, [1, 2, 3]);
+            string sonarrTarget = Path.Combine(previousFolder, Path.GetRelativePath(previousFolder, source));
+            File.CreateSymbolicLink(destination, sonarrTarget);
+            Directory.Delete(previousFolder);
+            // A deleted path component before '..' makes this target unreadable on Unix.
+            if (!OperatingSystem.IsWindows()) Assert.ThrowsAny<IOException>(() => File.ReadAllBytes(destination));
+
+            AppSettings settings = Settings();
+            settings.Symlinks.PathMappings[0].LibManagarrRoot = Path.Combine(root, "series");
+            settings.Symlinks.StorageAreas[0].SeriesRoot = Path.Combine(root, "series");
+            settings.Symlinks.StorageAreas[0].MoviesRoot = Path.Combine(root, "movies");
+            var routes = HappyRoutes();
+            routes["GET /api/v3/episodefile/44"] = [EpisodeFileJson(Instance($"{SeriesFolder}/Season 00/{NewName}"), "WFFF")];
+            var handler = new StubArrHandler(routes);
+            var service = new SonarrSpecialIntegrationService(store, new FixedSettings(settings), new SonarrClient(new HttpClient(handler)),
+                new MediaPathMappingService(new FixedSettings(settings)), new RealSymlinkFileSystem(), clock,
+                NullLogger<SonarrSpecialIntegrationService>.Instance);
+            var link = await SeedAsync(SymlinkSetupStep.Renamed);
+            link.SourcePath = source;
+            link.LinkPath = Path.Combine(previousFolder, OldName);
+            link.SonarrFileId = EpisodeFileId;
+            link.SonarrRenameCommandId = "91";
+            link.DesiredFilename = NewName;
+            await store.UpdateLinkAsync(link, link.Revision, CancellationToken.None);
+
+            Assert.Equal(SymlinkSetupOutcome.Completed, await service.RunSetupAsync(await StoredAsync(), CancellationToken.None));
+            var completed = await StoredAsync();
+            Assert.Equal(SymlinkOperationStatus.Active, completed.OperationStatus);
+            Assert.Equal(Path.GetRelativePath(Path.GetDirectoryName(destination)!, source), completed.LinkText);
+            Assert.Equal(completed.LinkText, new FileInfo(destination).LinkTarget);
+            Assert.Equal(new byte[] { 1, 2, 3 }, await File.ReadAllBytesAsync(destination));
+            Assert.False(Directory.Exists(previousFolder));
+            Assert.Equal(new byte[] { 1, 2, 3 }, await File.ReadAllBytesAsync(source));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.NotFound, "sonarr-resource-not-found", SymlinkSetupOutcome.Blocked)]
     [InlineData(HttpStatusCode.Forbidden, "sonarr-access-denied", SymlinkSetupOutcome.Blocked)]
@@ -802,6 +851,12 @@ public sealed class SonarrSpecialIntegrationServiceTests
         {
             Created.Add(linkPath);
             Links[linkPath] = targetPath;
+        }
+
+        public void ReplaceFileSymlink(string linkPath, string expectedLinkText, string newLinkText)
+        {
+            if (ReadLinkTarget(linkPath) != expectedLinkText) throw new IOException("The link changed before replacement.");
+            Links[linkPath] = newLinkText;
         }
 
         public byte[] ReadAllBytes(string path) => throw new NotSupportedException("This service does not read file content.");
