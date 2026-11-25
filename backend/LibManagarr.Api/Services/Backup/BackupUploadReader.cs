@@ -94,8 +94,9 @@ public static class BackupUploadReader
             if (total > limit)
             {
                 throw new BackupException(BackupErrorCodes.SizeLimitExceeded,
-                    $"The backup file exceeds the limit of {limit / (1024 * 1024)} MB.")
+                    "The backup file exceeds the allowed size.")
                 {
+                    LimitBytes = limit,
                     StatusCode = StatusCodes.Status413PayloadTooLarge
                 };
             }

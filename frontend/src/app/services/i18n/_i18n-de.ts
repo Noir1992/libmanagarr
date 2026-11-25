@@ -1,6 +1,12 @@
 import { TranslationKey } from './_i18n-key';
 
 export const i18nDe: Record<TranslationKey, string> = {
+  'settings.backup.errorSizeLimit': 'Das Backup überschreitet die zulässige Größe. Grenze: {size}.',
+  'settings.backup.errorRequiredSpace': 'Es ist zu wenig Speicherplatz vorhanden. Benötigt: {size}.',
+  'settings.sizeUnits': 'Einheiten für Dateigrößen',
+  'settings.sizeUnits.info': 'Gilt für Dateigrößen in der gesamten Anwendung. Dezimal verwendet Faktor 1000, binär Faktor 1024.',
+  'settings.sizeUnits.decimal': 'Dezimal (KB, MB, GB, TB)',
+  'settings.sizeUnits.binary': 'Binär (KiB, MiB, GiB, TiB)',
   'symlinks.searchMovie': 'Filme durchsuchen',
   'symlinks.searchSpecial': 'Specials durchsuchen',
   'symlinks.releaseGroup': 'Release Group',
@@ -438,7 +444,7 @@ export const i18nDe: Record<TranslationKey, string> = {
   'settings.backup.preview.instances': 'Instanzen',
   'settings.backup.preview.librarySchema': 'Datenbankversion',
   'settings.backup.preview.size': 'Umfang',
-  'settings.backup.preview.sizeValue': '{archive} MB gepackt, {expanded} MB ungepackt',
+  'settings.backup.preview.sizeValue': '{archive} gepackt, {expanded} ungepackt',
   'settings.backup.preview.version': 'Programmversion',
   'settings.backup.preview.versionDiffers': 'Diese Sicherung stammt von einer anderen Programmversion.',
   'settings.backup.previewTitle': 'Inhalt der Sicherung',

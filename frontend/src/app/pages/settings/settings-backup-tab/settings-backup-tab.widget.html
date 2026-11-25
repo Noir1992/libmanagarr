@@ -269,7 +269,9 @@
 
           <div class="preview-row">
             <dt>{{ previewSizeLabel() }}</dt>
-            <dd id="backup-preview-size">{{ sizeLabelOf(entry) }}</dd>
+            <dd id="backup-preview-size" [title]="fileSize.exact(entry.archiveBytes) + ' / ' + fileSize.exact(entry.uncompressedBytes)">
+              {{ sizeLabelOf(entry) }}
+            </dd>
           </div>
 
           <div class="preview-row">

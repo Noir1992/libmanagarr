@@ -382,7 +382,10 @@ public sealed class BackupImportService(
             written += read;
             if (alreadyExtracted + written > BackupArchiveFormat.MaxUncompressedBytes)
             {
-                throw new BackupException(BackupErrorCodes.SizeLimitExceeded, "The backup expands beyond the allowed size.");
+                throw new BackupException(BackupErrorCodes.SizeLimitExceeded, "The backup expands beyond the allowed size.")
+                {
+                    LimitBytes = BackupArchiveFormat.MaxUncompressedBytes
+                };
             }
 
             await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
@@ -464,8 +467,9 @@ public sealed class BackupImportService(
         if (drive.IsReady && drive.AvailableFreeSpace < needed)
         {
             throw new BackupException(BackupErrorCodes.InsufficientDiskSpace,
-                $"At least {needed / (1024 * 1024)} MB of free space below the config directory is needed.")
+                "There is not enough free space below the config directory.")
             {
+                RequiredBytes = needed,
                 StatusCode = StatusCodes.Status507InsufficientStorage
             };
         }

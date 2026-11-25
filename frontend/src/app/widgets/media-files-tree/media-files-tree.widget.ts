@@ -3,7 +3,7 @@ import { MatIconButton } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MediaTreeNode } from '../../interfaces/media-tree/media-tree-node';
-import { FormatBytesPipe } from '../../pipes/format-bytes.pipe';
+import { FileSizeService } from '../../services/file-size.service';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { codecFileDetailData } from '../../utils/media-detail-utils';
 import { openErrorToast, openSuccessToast } from '../../utils/feedback-toast-utils';
@@ -17,12 +17,13 @@ type DisplayTreeNode = {
 
 @Component({
   selector: 'app-media-files-tree',
-  imports: [FormatBytesPipe, MatIconButton],
+  imports: [MatIconButton],
   templateUrl: './media-files-tree.widget.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './media-files-tree.widget.scss',
 })
 export class MediaFilesTreeWidget {
+  protected readonly fileSize = inject(FileSizeService);
   private readonly i18n: AppI18nService = inject(AppI18nService);
   private readonly snackBar: MatSnackBar = inject(MatSnackBar);
   private readonly dialog: MatDialog = inject(MatDialog);

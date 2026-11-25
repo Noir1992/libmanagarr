@@ -1,6 +1,12 @@
 import { TranslationKey } from './_i18n-key';
 
 export const i18nEn: Record<TranslationKey, string> = {
+  'settings.backup.errorSizeLimit': 'The backup exceeds the allowed size. Limit: {size}.',
+  'settings.backup.errorRequiredSpace': 'There is not enough free disk space. Required: {size}.',
+  'settings.sizeUnits': 'File size units',
+  'settings.sizeUnits.info': 'Applies to file sizes throughout the app. Decimal uses a factor of 1000; binary uses 1024.',
+  'settings.sizeUnits.decimal': 'Decimal (KB, MB, GB, TB)',
+  'settings.sizeUnits.binary': 'Binary (KiB, MiB, GiB, TiB)',
   'symlinks.searchMovie': 'Search movies',
   'symlinks.searchSpecial': 'Search specials',
   'symlinks.releaseGroup': 'Release group',
@@ -438,7 +444,7 @@ export const i18nEn: Record<TranslationKey, string> = {
   'settings.backup.preview.instances': 'Instances',
   'settings.backup.preview.librarySchema': 'Database version',
   'settings.backup.preview.size': 'Size',
-  'settings.backup.preview.sizeValue': '{archive} MB packed, {expanded} MB unpacked',
+  'settings.backup.preview.sizeValue': '{archive} packed, {expanded} unpacked',
   'settings.backup.preview.version': 'Application version',
   'settings.backup.preview.versionDiffers': 'This backup comes from another application version.',
   'settings.backup.previewTitle': 'Backup contents',

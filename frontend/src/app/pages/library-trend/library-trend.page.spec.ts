@@ -28,8 +28,12 @@ describe('LibraryTrendPage', () => {
     sonarrInstancesSignal = signal([{ id: 'sonarr-1', name: 'Sonarr Main', baseUrl: 'http://sonarr', apiKey: 'a' }]);
     radarrInstancesSignal = signal([{ id: 'radarr-1', name: 'Radarr Main', baseUrl: 'http://radarr', apiKey: 'b' }]);
 
-    const appSettingsService: Pick<AppSettingsService, 'loadInstances' | 'localeId' | 'sonarrInstances' | 'radarrInstances'> = {
+    const appSettingsService: Pick<
+      AppSettingsService,
+      'loadInstances' | 'localeId' | 'sonarrInstances' | 'radarrInstances' | 'sizeUnitSystem'
+    > = {
       loadInstances: vi.fn().mockResolvedValue(undefined),
+      sizeUnitSystem: signal('Decimal'),
       localeId: vi.fn().mockReturnValue('en-US'),
       sonarrInstances: sonarrInstancesSignal,
       radarrInstances: radarrInstancesSignal,

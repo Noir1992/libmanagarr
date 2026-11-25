@@ -30,6 +30,23 @@ describe('auth-error.util', () => {
     };
   }
 
+  it('preserves only valid exact byte counts in size problems', () => {
+    const valid = toAuthRequestError(
+      problemResponse({ code: 'backup_size_limit_exceeded', limitBytes: 536870912, requiredBytes: 0 }),
+      'fallback',
+    );
+    expect(valid.limitBytes).toBe(536870912);
+    expect(valid.requiredBytes).toBe(0);
+    for (const invalid of [-1, 1.5, Number.POSITIVE_INFINITY, Number.NaN, Number.MAX_SAFE_INTEGER + 1, '1024', null]) {
+      const error = toAuthRequestError(
+        problemResponse({ code: 'backup_size_limit_exceeded', limitBytes: invalid, requiredBytes: invalid }),
+        'fallback',
+      );
+      expect(error.limitBytes).toBeNull();
+      expect(error.requiredBytes).toBeNull();
+    }
+  });
+
   it('should keep the stable problem code of a problem answer', () => {
     const error: AuthRequestError = toAuthRequestError(
       problemResponse({ detail: 'Nope.', code: 'account_locked' }, 429),

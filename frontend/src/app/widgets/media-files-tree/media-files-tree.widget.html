@@ -8,24 +8,32 @@
               {{ isTreeNodeExpanded(entry.node.key) ? 'folder_open' : 'folder' }}
             </span>
             <span class="tree-name" [title]="entry.node.label">{{ entry.node.label }}</span>
-            <small class="tree-meta">{{ entry.node.fileCount }} files &middot; {{ entry.node.totalSizeBytes | formatBytes }}</small>
+            <small class="tree-meta" [title]="fileSize.exact(entry.node.totalSizeBytes)"
+              >{{ entry.node.fileCount }} files &middot; {{ fileSize.format(entry.node.totalSizeBytes) }}</small
+            >
           </button>
         } @else if (entry.isRoot) {
           <button class="tree-toggle root-toggle" type="button" (click)="toggleTreeNode(entry.node.key)">
             <span class="tree-name" [title]="entry.node.label">{{ entry.node.label }}</span>
-            <small class="tree-meta">{{ entry.node.fileCount }} files &middot; {{ entry.node.totalSizeBytes | formatBytes }}</small>
+            <small class="tree-meta" [title]="fileSize.exact(entry.node.totalSizeBytes)"
+              >{{ entry.node.fileCount }} files &middot; {{ fileSize.format(entry.node.totalSizeBytes) }}</small
+            >
           </button>
         } @else if (entry.node.file) {
           <button class="file-row" type="button" (click)="openFileDetails(entry.node)">
             <span class="material-symbols-outlined file-icon">insert_drive_file</span>
             <span class="tree-name" [title]="entry.node.label">{{ entry.node.label }}</span>
-            <small class="tree-meta">{{ entry.node.totalSizeBytes | formatBytes }}</small>
+            <small class="tree-meta" [title]="fileSize.exact(entry.node.totalSizeBytes)">{{
+              fileSize.format(entry.node.totalSizeBytes)
+            }}</small>
           </button>
         } @else {
           <span class="file-row">
             <span class="material-symbols-outlined file-icon">insert_drive_file</span>
             <span class="tree-name" [title]="entry.node.label">{{ entry.node.label }}</span>
-            <small class="tree-meta">{{ entry.node.totalSizeBytes | formatBytes }}</small>
+            <small class="tree-meta" [title]="fileSize.exact(entry.node.totalSizeBytes)">{{
+              fileSize.format(entry.node.totalSizeBytes)
+            }}</small>
           </span>
         }
 

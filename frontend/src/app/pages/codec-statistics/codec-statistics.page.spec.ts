@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import type { MockInstance } from 'vitest';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -15,6 +16,8 @@ describe('CodecStatisticsPage', () => {
   let fixture: ComponentFixture<CodecStatisticsPage>;
   let codecStatisticsApiService: Record<'fetchCodecStatistics', MockInstance>;
   let appSettingsService: {
+    sizeUnitSystem: AppSettingsService['sizeUnitSystem'];
+    localeId: () => string;
     loadInstances: MockInstance;
     loadError: MockInstance;
     sonarrInstances: MockInstance;
@@ -41,6 +44,8 @@ describe('CodecStatisticsPage', () => {
     );
 
     appSettingsService = {
+      sizeUnitSystem: signal('Decimal'),
+      localeId: () => 'en-US',
       loadInstances: vi.fn().mockResolvedValue(undefined),
       loadError: vi.fn().mockReturnValue(null),
       sonarrInstances: vi.fn().mockReturnValue([{ id: 'sonarr-1', name: 'Sonarr 4K', baseUrl: 'http://sonarr', apiKey: 'a' }]),

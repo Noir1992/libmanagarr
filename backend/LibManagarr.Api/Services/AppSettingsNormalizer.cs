@@ -12,6 +12,7 @@ public static class AppSettingsNormalizer
             Language = settings.Language,
             TitleSorting = TitleSortingSettingsRules.Normalize(settings.TitleSorting),
             Theme = settings.Theme,
+            SizeUnitSystem = settings.SizeUnitSystem,
             SonarrInstances = NormalizeInstances(settings.SonarrInstances),
             RadarrInstances = NormalizeInstances(settings.RadarrInstances),
             Seerr = NormalizeSeerrInstance(settings.Seerr),

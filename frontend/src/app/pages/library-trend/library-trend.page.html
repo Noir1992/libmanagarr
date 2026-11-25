@@ -37,7 +37,9 @@
             <div class="card">
               <div class="card-content">
                 <div class="trend-overview-item-label">{{ totalStorageLabel() }}</div>
-                <div class="trend-overview-item-value">{{ formatBytes(stats()!.totalSizeBytes) }}</div>
+                <div class="trend-overview-item-value" [title]="fileSize.exact(stats()!.totalSizeBytes)">
+                  {{ formatBytes(stats()!.totalSizeBytes) }}
+                </div>
               </div>
             </div>
           </section>
@@ -118,7 +120,11 @@
 
                     <ng-container matColumnDef="deltaSizeBytes">
                       <th mat-header-cell *matHeaderCellDef>{{ storageLabel() }}</th>
-                      <td mat-cell *matCellDef="let entry">
+                      <td
+                        mat-cell
+                        *matCellDef="let entry"
+                        [title]="entry.isSizeDeltaKnown === false ? null : fileSize.exact(entry.deltaSizeBytes)"
+                      >
                         @if (entry.isSizeDeltaKnown === false) {
                           {{ unknownSizeLabel() }}
                         } @else if (entry.deltaSizeBytes === 0) {

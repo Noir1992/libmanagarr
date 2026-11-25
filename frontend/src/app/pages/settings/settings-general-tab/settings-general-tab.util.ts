@@ -1,8 +1,9 @@
+import { SizeUnitSystem } from '../../../interfaces/general/size-unit-system';
 import { FormControl, ValidationErrors } from '@angular/forms';
 import { AppLanguage } from '../../../interfaces/general/app-language';
 import { AppTheme } from '../../../interfaces/general/app-theme';
 
-export type GeneralField = 'language' | 'theme';
+export type GeneralField = 'language' | 'theme' | 'sizeUnitSystem';
 
 export function resolveGeneralFieldFromPath(fieldPath: string): GeneralField | null {
   if (fieldPath.endsWith('.language')) {
@@ -13,10 +14,14 @@ export function resolveGeneralFieldFromPath(fieldPath: string): GeneralField | n
     return 'theme';
   }
 
+  if (fieldPath === 'sizeUnitSystem' || fieldPath.endsWith('.sizeUnitSystem')) {
+    return 'sizeUnitSystem';
+  }
+
   return null;
 }
 
-export function setGeneralFieldValidationError(control: FormControl<AppLanguage | AppTheme>, message: string): void {
+export function setGeneralFieldValidationError(control: FormControl<AppLanguage | AppTheme | SizeUnitSystem>, message: string): void {
   const currentErrors: ValidationErrors = control.errors ?? {};
   control.setErrors({
     ...currentErrors,
@@ -24,7 +29,7 @@ export function setGeneralFieldValidationError(control: FormControl<AppLanguage 
   });
 }
 
-export function clearGeneralFieldValidationError(control: FormControl<AppLanguage | AppTheme>): void {
+export function clearGeneralFieldValidationError(control: FormControl<AppLanguage | AppTheme | SizeUnitSystem>): void {
   const errors: ValidationErrors | null = control.errors;
   if (!errors?.['server']) {
     return;
@@ -35,13 +40,16 @@ export function clearGeneralFieldValidationError(control: FormControl<AppLanguag
   control.setErrors(Object.keys(nextErrors).length > 0 ? nextErrors : null);
 }
 
-export function clearGeneralFieldValidationErrors(controls: Record<GeneralField, FormControl<AppLanguage | AppTheme>>): void {
+export function clearGeneralFieldValidationErrors(
+  controls: Record<GeneralField, FormControl<AppLanguage | AppTheme | SizeUnitSystem>>,
+): void {
   clearGeneralFieldValidationError(controls.language);
   clearGeneralFieldValidationError(controls.theme);
+  clearGeneralFieldValidationError(controls.sizeUnitSystem);
 }
 
 export function applyGeneralValidationProblemErrors(
-  controls: Record<GeneralField, FormControl<AppLanguage | AppTheme>>,
+  controls: Record<GeneralField, FormControl<AppLanguage | AppTheme | SizeUnitSystem>>,
   fieldErrors: Record<string, string[]>,
 ): Array<{ field: GeneralField; message: string }> {
   const appliedErrors: Array<{ field: GeneralField; message: string }> = [];

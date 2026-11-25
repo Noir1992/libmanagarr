@@ -18,6 +18,7 @@
           <div class="series-dialog-info-row">
             <dt class="series-dialog-info-label">{{ row.label }}</dt>
             <dd
+              [title]="row.key === 'library.details.totalSize' ? fileSize.exact(data.size) : null"
               class="series-dialog-info-value"
               [class.tone-success]="row.tone === 'success'"
               [class.tone-warning]="row.tone === 'warning'"

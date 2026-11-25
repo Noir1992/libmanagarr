@@ -1,3 +1,4 @@
+import { SizeUnitSystem } from '../../interfaces/general/size-unit-system';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
@@ -45,7 +46,7 @@ describe('Media detail dialogs', () => {
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: movie },
         { provide: MatDialogRef, useValue: { close: () => undefined } },
-        { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+        { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal('en-US') } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(MediaDetailsDialogWidget);
@@ -77,7 +78,7 @@ describe('Media detail dialogs', () => {
         'Video bitrate (Mbit/s)': '8',
         'Audio languages': 'English',
         'Subtitle languages': 'German',
-        'File size': '1 GiB',
+        'File size': '1.07 GB',
         Duration: '1:00:00',
         'Release group': 'GROUP',
         'File path': 'Movie/movie.mkv',
@@ -86,9 +87,9 @@ describe('Media detail dialogs', () => {
   });
 
   for (const [size, hasFile, expected] of [
-    [2.5 * 1024 ** 3, true, '2.5 GiB'],
-    [0, true, '0 MiB'],
-    [1024 ** 3, false, 'N/A'],
+    [2.5 * 1000 ** 3, true, '2.5 GB'],
+    [0, true, '0 B'],
+    [1000 ** 3, false, 'N/A'],
   ] as const) {
     it(`shows movie size ${expected} without detailed file metadata`, async () => {
       await TestBed.configureTestingModule({
@@ -96,7 +97,7 @@ describe('Media detail dialogs', () => {
         providers: [
           { provide: MAT_DIALOG_DATA, useValue: { ...movie, mediaDetails: null, size, hasFile } },
           { provide: MatDialogRef, useValue: { close: () => undefined } },
-          { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+          { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal('en-US') } },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(MediaDetailsDialogWidget);
@@ -109,11 +110,13 @@ describe('Media detail dialogs', () => {
   }
 
   for (const [size, locale, expected] of [
-    [112.64 * 1024 ** 2, 'en-US', '112.64 MiB'],
-    [112.64 * 1024 ** 2, 'de-DE', '112,64 MiB'],
-    [1024 ** 3 - 1, 'en-US', '1,024 MiB'],
-    [1024 ** 3, 'en-US', '1 GiB'],
-    [2.5 * 1024 ** 3, 'en-US', '2.5 GiB'],
+    [512 * 1000, 'en-US', '512 KB'],
+    [2.5 * 1000 ** 4, 'de-DE', '2,5 TB'],
+    [112.64 * 1000 ** 2, 'en-US', '112.64 MB'],
+    [112.64 * 1000 ** 2, 'de-DE', '112,64 MB'],
+    [1000 ** 3 - 1, 'en-US', '1,000 MB'],
+    [1000 ** 3, 'en-US', '1 GB'],
+    [2.5 * 1000 ** 3, 'en-US', '2.5 GB'],
     [null, 'en-US', 'N/A'],
   ] as const) {
     it(`shows episode file size ${size} as ${expected} for ${locale}`, () => {
@@ -124,7 +127,7 @@ describe('Media detail dialogs', () => {
             useValue: { ...movie, episodeNumber: 1, seasonNumber: 1, mediaDetails: { ...movie.mediaDetails, size } },
           },
           { provide: MatDialogRef, useValue: { close: () => undefined } },
-          { provide: AppSettingsService, useValue: { localeId: signal(locale) } },
+          { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal(locale) } },
         ],
       });
       const dialog = TestBed.runInInjectionContext(() => new MediaDetailsDialogWidget());
@@ -132,13 +135,37 @@ describe('Media detail dialogs', () => {
     });
   }
 
+  it('updates an open detail dialog when units change and exposes exact bytes', async () => {
+    const sizeUnitSystem = signal<SizeUnitSystem>('Decimal');
+    await TestBed.configureTestingModule({
+      imports: [MediaDetailsDialogWidget],
+      providers: [
+        { provide: MAT_DIALOG_DATA, useValue: movie },
+        { provide: MatDialogRef, useValue: { close: () => undefined } },
+        { provide: AppSettingsService, useValue: { sizeUnitSystem, localeId: () => 'de-DE' } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(MediaDetailsDialogWidget);
+    fixture.detectChanges();
+    const size = () =>
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.detail-row'))
+        .find((row) => row.querySelector('dt')?.textContent?.trim() === 'File size')!
+        .querySelector('dd')!;
+    expect(size().textContent?.trim()).toBe('1,07 GB');
+    expect(size().title).toBe('1.073.741.824 B');
+    sizeUnitSystem.set('Binary');
+    fixture.detectChanges();
+    expect(size().textContent?.trim()).toBe('1 GiB');
+    expect(size().title).toBe('1.073.741.824 B');
+  });
+
   it('renders the poster above the details when posterUrl is set', async () => {
     await TestBed.configureTestingModule({
       imports: [MediaDetailsDialogWidget],
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: { ...movie, posterUrl: 'http://localhost/api/poster/1.jpg' } },
         { provide: MatDialogRef, useValue: { close: () => undefined } },
-        { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+        { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal('en-US') } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(MediaDetailsDialogWidget);
@@ -157,7 +184,7 @@ describe('Media detail dialogs', () => {
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: movie },
         { provide: MatDialogRef, useValue: { close: () => undefined } },
-        { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+        { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal('en-US') } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(MediaDetailsDialogWidget);
@@ -181,7 +208,7 @@ describe('Media detail dialogs', () => {
           },
         },
         { provide: MatDialogRef, useValue: { close: () => undefined } },
-        { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+        { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal('en-US') } },
       ],
     });
     const dialog = TestBed.runInInjectionContext(() => new MediaDetailsDialogWidget());
@@ -259,7 +286,7 @@ describe('Media detail dialogs', () => {
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: data },
         { provide: MatDialogRef, useValue: { close: () => undefined } },
-        { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+        { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal('en-US') } },
       ],
     });
     const rows = TestBed.runInInjectionContext(() => new MediaDetailsDialogWidget())['rows']();
@@ -269,7 +296,7 @@ describe('Media detail dialogs', () => {
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: { ...data, episodeNumber: 1, seasonNumber: 1 } },
         { provide: MatDialogRef, useValue: { close: () => undefined } },
-        { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+        { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal('en-US') } },
       ],
     });
     const episodeRows = TestBed.runInInjectionContext(() => new MediaDetailsDialogWidget())['rows']();
@@ -282,7 +309,7 @@ describe('Media detail dialogs', () => {
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: movie },
         { provide: MatDialogRef, useValue: { close: () => undefined } },
-        { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+        { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal('en-US') } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(MediaDetailsDialogWidget);
@@ -301,7 +328,7 @@ describe('Media detail dialogs', () => {
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: { ...movie, status: 'announced', hasFile: false } },
         { provide: MatDialogRef, useValue: { close: () => undefined } },
-        { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+        { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal('en-US') } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(MediaDetailsDialogWidget);
@@ -320,7 +347,7 @@ describe('Media detail dialogs', () => {
       providers: [
         { provide: MAT_DIALOG_DATA, useValue: movie },
         { provide: MatDialogRef, useValue: { close: () => undefined } },
-        { provide: AppSettingsService, useValue: { localeId: signal('en-US') } },
+        { provide: AppSettingsService, useValue: { sizeUnitSystem: signal('Decimal'), localeId: signal('en-US') } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(MediaDetailsDialogWidget);

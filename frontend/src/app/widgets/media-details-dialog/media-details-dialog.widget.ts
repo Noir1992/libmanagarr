@@ -4,6 +4,7 @@ import { MatIconButton } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MediaDetailData } from '../../interfaces/general/media-detail-data';
 import { MediaGridDetailTone } from '../../interfaces/general/media-grid-item';
+import { FileSizeService } from '../../services/file-size.service';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { AppSettingsService } from '../../services/app-settings.service';
 import { TranslationKey } from '../../services/i18n/_i18n-key';
@@ -18,6 +19,7 @@ import { airStatusTone, fileStatusTone } from '../../utils/media-status-tone.uti
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MediaDetailsDialogWidget {
+  protected readonly fileSize = inject(FileSizeService);
   protected readonly i18n = inject(AppI18nService);
   private readonly settings = inject(AppSettingsService);
   private readonly dialogRef = inject(MatDialogRef<MediaDetailsDialogWidget>);
@@ -29,16 +31,13 @@ export class MediaDetailsDialogWidget {
     if (score == null || target == null) return null;
     return score >= target ? 'reached' : 'below';
   });
+  protected readonly sizeBytes = computed(() => (this.data.hasFile === false ? null : (this.data.mediaDetails?.size ?? this.data.size)));
   protected readonly rows = computed(() => {
     const d = this.data;
     const file = d.hasFile === false ? null : d.mediaDetails;
-    const size = d.hasFile === false ? null : (file?.size ?? d.size);
+    const size = this.sizeBytes();
     const na = this.i18n.t('common.na');
-    const sizeInGiB = size != null && size >= 1024 ** 3;
-    const formattedSize =
-      size == null
-        ? na
-        : `${(size / 1024 ** (sizeInGiB ? 3 : 2)).toLocaleString(this.settings.localeId(), { maximumFractionDigits: 2 })} ${sizeInGiB ? 'GiB' : 'MiB'}`;
+    const formattedSize = size == null ? na : this.fileSize.format(size, this.settings.localeId());
     const value = (v: string | number | null | undefined) => (v == null || v === '' ? na : String(v));
     const list = (v: string[] | undefined) => (v?.length ? v.join(', ') : na);
     const date = (v: string | null | undefined) => (v ? formatDate(v, 'medium', this.settings.localeId()) : na);

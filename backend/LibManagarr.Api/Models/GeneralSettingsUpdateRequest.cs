@@ -4,6 +4,8 @@ public sealed class GeneralSettingsUpdateRequest
 {
     public AppLanguage Language { get; set; }
 
+    public SizeUnitSystem? SizeUnitSystem { get; set; }
+
     public ThemeMode Theme { get; set; }
 
     public AuthProtectionSettings? AuthProtection { get; set; }

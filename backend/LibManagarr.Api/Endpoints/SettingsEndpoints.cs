@@ -46,6 +46,7 @@ public static class SettingsEndpoints
         {
             Language = settings.Language,
             Theme = settings.Theme,
+            SizeUnitSystem = settings.SizeUnitSystem,
             TitleSorting = TitleSortingSettingsRules.Normalize(settings.TitleSorting),
             AuthProtection = settings.AuthProtection
         });
@@ -114,6 +115,7 @@ public static class SettingsEndpoints
                 return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["titleSorting"] = ["Provide enabled and ignoredLeadingWords."] });
         }
         if (!hasTitleSorting) settings.TitleSorting = currentSettings.TitleSorting;
+        if (!HasProperty(request, "sizeUnitSystem")) settings.SizeUnitSystem = currentSettings.SizeUnitSystem;
         if (!HasProperty(request, "authProtection")) settings.AuthProtection = currentSettings.AuthProtection;
         settings.LibraryFilterValues = currentSettings.LibraryFilterValues;
 
@@ -180,7 +182,11 @@ public static class SettingsEndpoints
         AppSettings updatedSettings = currentSettings;
         updatedSettings.Language = settings.Language;
         updatedSettings.Theme = settings.Theme;
-        // The language and theme autosave sends only its two fields, so an absent section has to keep
+        if (settings.SizeUnitSystem is { } sizeUnitSystem)
+        {
+            updatedSettings.SizeUnitSystem = sizeUnitSystem;
+        }
+        // The display settings autosave omits sign-in protection, so an absent section has to keep
         // the stored limits; otherwise every language change would reset them to the defaults.
         if (settings.AuthProtection is not null)
         {

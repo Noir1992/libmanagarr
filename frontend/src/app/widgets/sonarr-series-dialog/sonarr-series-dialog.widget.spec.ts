@@ -6,8 +6,11 @@ import { SonarrSeriesDialogWidget } from './sonarr-series-dialog.widget';
 
 describe('SonarrSeriesDialogWidget episode table', () => {
   for (const [size, expected] of [
-    [2.5 * 1024 ** 3, '2.5 GiB'],
-    [0, '0 GiB'],
+    [2.5 * 1000 ** 3, '2.5 GB'],
+    [512 * 1000, '512 KB'],
+    [112.64 * 1000 ** 2, '112.64 MB'],
+    [2.5 * 1000 ** 4, '2.5 TB'],
+    [0, '0 B'],
     [null, 'N/A'],
   ] as const) {
     it(`shows the complete series size as ${expected}`, async () => {
