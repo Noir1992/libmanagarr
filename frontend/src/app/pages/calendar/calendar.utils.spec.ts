@@ -5,6 +5,7 @@ import {
   dayKeyFromDate,
   entryDayKey,
   entryInstant,
+  entryReleaseTypeIcon,
   entryTimeLabel,
   episodeLabel,
   filterEntriesByTypes,
@@ -26,6 +27,7 @@ function makeEntry(overrides: Partial<CalendarEntry> & { id: string }): Calendar
     mediaId: 1,
     seriesId: null,
     title: 'Title',
+    titleSlug: null,
     episodeTitle: null,
     seasonNumber: null,
     episodeNumber: null,
@@ -272,5 +274,21 @@ describe('calendar release type filter', () => {
     const filtered = filterEntriesByTypes(all, new Set<CalendarReleaseType>());
     expect(filtered).not.toBe(all);
     expect(all.length).toBe(4);
+  });
+});
+
+describe('calendar release type icon', () => {
+  it('marks cinema, digital and physical entries with their own icon', () => {
+    const cinema = makeEntry({ id: 'cin', application: 'Radarr', releaseType: 'Cinema', releaseDate: '2026-11-03' });
+    const digital = makeEntry({ id: 'dig', application: 'Radarr', releaseType: 'Digital', releaseDate: '2026-11-03' });
+    const physical = makeEntry({ id: 'phy', application: 'Radarr', releaseType: 'Physical', releaseDate: '2026-11-03' });
+
+    expect(entryReleaseTypeIcon(cinema)).toBe('confirmation_number');
+    expect(entryReleaseTypeIcon(digital)).toBe('cloud');
+    expect(entryReleaseTypeIcon(physical)).toBe('album');
+  });
+
+  it('leaves episode entries without a release type icon', () => {
+    expect(entryReleaseTypeIcon(makeEntry({ id: 'ep', releaseDate: '2026-11-03' }))).toBeNull();
   });
 });

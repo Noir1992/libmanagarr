@@ -10,6 +10,8 @@ export interface CalendarEntry {
   readonly mediaId: number;
   readonly seriesId: number | null;
   readonly title: string;
+  // Slug inside the Arr instance; null when the instance did not report one, which leaves no link target.
+  readonly titleSlug: string | null;
   readonly episodeTitle: string | null;
   readonly seasonNumber: number | null;
   readonly episodeNumber: number | null;

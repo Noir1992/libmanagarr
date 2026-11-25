@@ -19,6 +19,7 @@ import {
   addDays,
   CALENDAR_FILTER_TYPE_LABEL_KEYS,
   CALENDAR_FILTERABLE_RELEASE_TYPES,
+  CALENDAR_RELEASE_TYPE_LABEL_KEYS,
   CALENDAR_STATUS_ICON_NAMES,
   CALENDAR_STATUS_LABEL_KEYS,
   CalendarDayCell,
@@ -27,6 +28,7 @@ import {
   deriveEntryStatus,
   entryDayKey,
   entryInstant,
+  entryReleaseTypeIcon,
   entryTimeLabel,
   episodeLabel,
   filterEntriesByTypes,
@@ -65,6 +67,8 @@ interface CalendarMonthCompactRow {
   readonly status: CalendarEntryStatus;
   readonly statusLabel: string;
   readonly statusIcon: string;
+  readonly releaseTypeIcon: string | null;
+  readonly releaseTypeLabel: string | null;
   readonly isPast: boolean;
 }
 
@@ -79,6 +83,7 @@ interface CalendarAgendaRow {
   readonly statusLabel: string;
   readonly statusIcon: string;
   readonly releaseTypeText: string;
+  readonly releaseTypeIcon: string | null;
   readonly episodeText: string;
   readonly isPast: boolean;
   readonly nowLineBefore: boolean;
@@ -268,6 +273,7 @@ export class CalendarPage implements OnInit, OnDestroy {
         statusLabel: this.i18n.t(CALENDAR_STATUS_LABEL_KEYS[status]),
         statusIcon: CALENDAR_STATUS_ICON_NAMES[status],
         releaseTypeText: this.i18n.t(CALENDAR_FILTER_TYPE_LABEL_KEYS[entry.releaseType]),
+        releaseTypeIcon: entryReleaseTypeIcon(entry),
         episodeText: this.episodeText(entry),
         isPast: isEntryPast(entry, now),
         nowLineBefore: nowInRange && firstFutureIndex === index,
@@ -411,6 +417,8 @@ export class CalendarPage implements OnInit, OnDestroy {
         status,
         statusLabel: this.i18n.t(CALENDAR_STATUS_LABEL_KEYS[status]),
         statusIcon: CALENDAR_STATUS_ICON_NAMES[status],
+        releaseTypeIcon: entryReleaseTypeIcon(entry),
+        releaseTypeLabel: entry.releaseType === 'Episode' ? null : this.i18n.t(CALENDAR_RELEASE_TYPE_LABEL_KEYS[entry.releaseType]),
         isPast: isEntryPast(entry, now),
       };
     });
