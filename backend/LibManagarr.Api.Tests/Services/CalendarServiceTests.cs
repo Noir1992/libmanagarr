@@ -94,6 +94,7 @@ public sealed class CalendarServiceTests
         Assert.Null(timed.ReleaseDate);
         Assert.False(timed.HasFile);
         Assert.Equal(7, timed.SeriesId);
+        Assert.Equal("beispielserie", timed.TitleSlug);
         Assert.Equal("/api/v3/calendar", sonarrHandler.CapturedRequest!.RequestUri!.AbsolutePath);
         Assert.Contains("unmonitored=true", sonarrHandler.CapturedRequest.RequestUri.Query);
 
@@ -128,12 +129,48 @@ public sealed class CalendarServiceTests
         Assert.Equal(new DateOnly(2026, 11, 2), cinema.ReleaseDate);
         Assert.Null(cinema.ReleaseDateTimeUtc);
         Assert.Equal(CalendarReleaseType.Cinema, cinema.ReleaseType);
+        Assert.Equal("beispielfilm", cinema.TitleSlug);
 
         CalendarEntry digital = response.Entries.Single(entry => entry.Id == "radarr:radarr-1:201:digital");
         Assert.Equal(new DateOnly(2026, 11, 8), digital.ReleaseDate);
         Assert.False(digital.HasFile);
 
         Assert.DoesNotContain(response.Entries, entry => entry.ReleaseType == CalendarReleaseType.Physical);
+    }
+
+    [Fact]
+    public async Task GetCalendar_MapsEmptyTitleSlug_AsNull()
+    {
+        // Arr resources answer with an empty slug rather than with nothing; only null marks
+        // "no link possible" for the frontend.
+        const string movieJson = """
+            [
+              {
+                "id": 202,
+                "title": "Ohne Slug",
+                "titleSlug": "",
+                "hasFile": false,
+                "inCinemas": "2026-11-02T00:00:00Z",
+                "monitored": true
+              }
+            ]
+            """;
+
+        CalendarService service = CreateService(
+            sonarrInstances: [],
+            radarrInstances: [CreateInstance("radarr-2", "Radarr Zweit")],
+            sonarrHandler: new StubJsonHandler("[]"),
+            radarrHandler: new StubJsonHandler(movieJson));
+
+        CalendarResponse response = await service.GetCalendarAsync(
+            new DateOnly(2026, 11, 2),
+            new DateOnly(2026, 11, 9),
+            TimeZoneInfo.Utc,
+            refresh: false,
+            CancellationToken.None);
+
+        CalendarEntry cinema = Assert.Single(response.Entries);
+        Assert.Null(cinema.TitleSlug);
     }
 
     [Fact]

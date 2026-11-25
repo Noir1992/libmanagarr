@@ -8,6 +8,7 @@ import {
   CALENDAR_STATUS_LABEL_KEYS,
   CalendarEntryStatus,
   deriveEntryStatus,
+  entryReleaseTypeIcon,
   entryTimeLabel,
   episodeLabel,
   isEntryPast,
@@ -37,6 +38,7 @@ export class CalendarEntryCardWidget {
     const releaseType = this.entry().releaseType;
     return releaseType === 'Episode' ? null : this.i18n.t(CALENDAR_RELEASE_TYPE_LABEL_KEYS[releaseType]);
   });
+  protected readonly releaseTypeIcon: Signal<string | null> = computed((): string | null => entryReleaseTypeIcon(this.entry()));
   protected readonly typeAttr: Signal<'movie' | 'tv'> = computed((): 'movie' | 'tv' =>
     this.entry().application === 'Radarr' ? 'movie' : 'tv',
   );

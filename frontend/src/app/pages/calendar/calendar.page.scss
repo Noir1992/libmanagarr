@@ -308,6 +308,15 @@
   }
 }
 
+.calendar-month-release {
+  flex: 0 0 auto;
+  height: 14px;
+  width: 14px;
+  min-width: 14px;
+  font-size: 14px;
+  color: var(--theme-muted);
+}
+
 .calendar-month-time {
   flex: 0 0 auto;
   color: var(--theme-muted);
@@ -434,12 +443,21 @@
 }
 
 .calendar-agenda-release {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
   flex: 0 0 auto;
   color: var(--theme-muted);
   font-size: 0.72rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.calendar-agenda-release-icon {
+  font-size: 0.95rem;
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .calendar-agenda-table tr.is-day-start td {

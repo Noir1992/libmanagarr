@@ -23,6 +23,18 @@ export const CALENDAR_RELEASE_TYPE_LABEL_KEYS: Record<Exclude<CalendarReleaseTyp
   Physical: 'calendar.releaseType.physical',
 };
 
+// Release type markers for calendar entries; episode entries keep their movie/tv type icon alone.
+export const CALENDAR_RELEASE_TYPE_ICON_NAMES: Record<Exclude<CalendarReleaseType, 'Episode'>, string> = {
+  Cinema: 'confirmation_number',
+  Digital: 'cloud',
+  Physical: 'album',
+};
+
+// The marker icon of an entry, or null for episode entries, which are not movie releases.
+export function entryReleaseTypeIcon(entry: CalendarEntry): string | null {
+  return entry.releaseType === 'Episode' ? null : CALENDAR_RELEASE_TYPE_ICON_NAMES[entry.releaseType];
+}
+
 // Chip order and labels for the release type filter; the episode chip covers all Sonarr entries.
 export const CALENDAR_FILTERABLE_RELEASE_TYPES: readonly CalendarReleaseType[] = ['Episode', 'Cinema', 'Digital', 'Physical'];
 

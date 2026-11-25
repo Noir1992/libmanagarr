@@ -220,6 +220,7 @@ public sealed class CalendarService(
                 MediaId = episodeId,
                 SeriesId = seriesId,
                 Title = episode.Series?.Title ?? "Unknown series",
+                TitleSlug = NormalizeSlug(episode.Series?.TitleSlug),
                 EpisodeTitle = episode.Title,
                 SeasonNumber = episode.SeasonNumber,
                 EpisodeNumber = episode.EpisodeNumber,
@@ -287,6 +288,7 @@ public sealed class CalendarService(
             InstanceName = instance.Name,
             MediaId = movieId,
             Title = movie.Title,
+            TitleSlug = NormalizeSlug(movie.TitleSlug),
             ReleaseType = releaseType,
             ReleaseDate = day,
             HasFile = movie.HasFile ?? movie.MovieFileId.HasValue
@@ -308,6 +310,11 @@ public sealed class CalendarService(
 
         return pureDate >= startDate && pureDate < endDate;
     }
+
+    // Arr resources answer with an empty slug rather than with nothing; the frontend distinguishes
+    // "no link possible" only through null.
+    private static string? NormalizeSlug(string? titleSlug) =>
+        string.IsNullOrWhiteSpace(titleSlug) ? null : titleSlug;
 
     private sealed record CalendarInstanceTarget(ArrInstanceSettings Instance, ArrApplicationKind Kind);
 }

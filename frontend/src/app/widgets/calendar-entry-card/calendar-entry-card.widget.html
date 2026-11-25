@@ -18,7 +18,12 @@
 
   <div class="calendar-entry-card-foot">
     @if (releaseTypeLabel(); as label) {
-      <span class="calendar-entry-card-release">{{ label }}</span>
+      <span class="calendar-entry-card-release">
+        @if (releaseTypeIcon(); as icon) {
+          <mat-icon class="material-symbols-outlined calendar-entry-card-release-icon" aria-hidden="true">{{ icon }}</mat-icon>
+        }
+        {{ label }}
+      </span>
       <span aria-hidden="true" class="calendar-entry-card-separator">·</span>
     }
     <span class="calendar-entry-card-time">{{ timeText() }}</span>
