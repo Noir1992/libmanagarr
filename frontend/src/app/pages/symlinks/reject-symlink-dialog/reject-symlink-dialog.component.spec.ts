@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { SymlinkSuggestion } from '../../../interfaces/symlinks/symlink-suggestion';
 import { AppI18nService } from '../../../services/app-i18n.service';
@@ -38,7 +39,7 @@ function createSuggestion(overrides: Partial<SymlinkSuggestion> = {}): SymlinkSu
 describe('RejectSymlinkDialogComponent', () => {
   let fixture: ComponentFixture<RejectSymlinkDialogComponent>;
   let element: HTMLElement;
-  let dialogRef: jasmine.SpyObj<MatDialogRef<RejectSymlinkDialogComponent>>;
+  let dialogRef: Record<'close', MockInstance>;
 
   function actions(): HTMLButtonElement[] {
     return Array.from(element.querySelectorAll<HTMLButtonElement>('mat-dialog-actions button'));
@@ -52,7 +53,9 @@ describe('RejectSymlinkDialogComponent', () => {
   }
 
   beforeEach(async () => {
-    dialogRef = jasmine.createSpyObj<MatDialogRef<RejectSymlinkDialogComponent>>('MatDialogRef', ['close']);
+    dialogRef = {
+      close: vi.fn<MatDialogRef<RejectSymlinkDialogComponent>['close']>(),
+    };
     const data: RejectSymlinkDialogData = { suggestion: createSuggestion() };
 
     await TestBed.configureTestingModule({
@@ -109,6 +112,6 @@ describe('RejectSymlinkDialogComponent', () => {
     actions()[0].click();
 
     expect(dialogRef.close).toHaveBeenCalledTimes(1);
-    expect(dialogRef.close.calls.mostRecent().args).toEqual([]);
+    expect(dialogRef.close.mock.lastCall).toEqual([]);
   });
 });

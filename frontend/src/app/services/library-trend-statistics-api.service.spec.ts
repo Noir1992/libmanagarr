@@ -25,7 +25,7 @@ describe('LibraryTrendStatisticsApiService', () => {
     service
       .fetchLibraryTrendStatistics(['s1', 's2'], ['r1'], '2026-05-01T00:00:00.000Z', '2026-05-31T23:59:59.000Z')
       .subscribe((response) => {
-        expect(response.points).toHaveSize(1);
+        expect(response.points).toHaveLength(1);
       });
 
     const request: TestRequest = httpTestingController.expectOne(

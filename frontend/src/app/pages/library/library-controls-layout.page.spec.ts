@@ -12,13 +12,19 @@ describe('LibraryPage control layout', () => {
   let fixture: ComponentFixture<LibraryPage>;
 
   beforeEach(async () => {
-    const radarr = jasmine.createSpyObj<RadarrApiService>('Radarr', ['fetchFilterValues', 'fetchLibrary']);
-    const sonarr = jasmine.createSpyObj<SonarrApiService>('Sonarr', ['fetchFilterValues', 'fetchLibrary']);
+    const radarr = {
+      fetchFilterValues: vi.fn<RadarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<RadarrApiService['fetchLibrary']>(),
+    };
+    const sonarr = {
+      fetchFilterValues: vi.fn<SonarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<SonarrApiService['fetchLibrary']>(),
+    };
     const filterValues = of({ genres: [], tags: [], statuses: [], qualityProfiles: [], audioLanguages: [], subtitleLanguages: [] });
-    radarr.fetchFilterValues.and.returnValue(filterValues);
-    sonarr.fetchFilterValues.and.returnValue(filterValues);
-    radarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
-    sonarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
+    radarr.fetchFilterValues.mockReturnValue(filterValues);
+    sonarr.fetchFilterValues.mockReturnValue(filterValues);
+    radarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
+    sonarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
 
     TestBed.configureTestingModule({
       providers: [

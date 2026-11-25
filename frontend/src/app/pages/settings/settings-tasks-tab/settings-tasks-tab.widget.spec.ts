@@ -1,4 +1,5 @@
 import { signal } from '@angular/core';
+import type { MockInstance } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
@@ -26,7 +27,7 @@ describe('SettingsTasksTabWidget', () => {
     nextRunAt: null,
   });
   let service: Pick<ScheduledTaskService, 'tasks' | 'states' | 'loading' | 'loadError' | 'load' | 'save' | 'run'>;
-  let dialog: jasmine.SpyObj<MatDialog>;
+  let dialog: Record<'open', MockInstance>;
   const states = signal<Record<string, ScheduledTaskState>>({});
 
   beforeEach(async () => {
@@ -36,12 +37,14 @@ describe('SettingsTasksTabWidget', () => {
       states,
       loading: signal(false),
       loadError: signal(null),
-      load: jasmine.createSpy('load').and.resolveTo(),
-      save: jasmine.createSpy('save').and.resolveTo(),
-      run: jasmine.createSpy('run').and.resolveTo(),
+      load: vi.fn().mockResolvedValue(undefined),
+      save: vi.fn().mockResolvedValue(undefined),
+      run: vi.fn().mockResolvedValue(undefined),
     };
-    dialog = jasmine.createSpyObj<MatDialog>('MatDialog', ['open']);
-    dialog.open.and.returnValue({ afterClosed: () => of(true) } as never);
+    dialog = {
+      open: vi.fn<MatDialog['open']>(),
+    };
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) } as never);
     await TestBed.configureTestingModule({
       imports: [SettingsTasksTabWidget],
       providers: [
@@ -67,50 +70,50 @@ describe('SettingsTasksTabWidget', () => {
   it('renders all server tasks with a readable fallback and server capabilities', () => {
     const element = fixture.nativeElement as HTMLElement;
     const rows = element.querySelectorAll('tr.mat-mdc-row');
-    expect(rows).toHaveSize(3);
+    expect(rows).toHaveLength(3);
     expect(rows[0].textContent).toContain('Cleanup');
     expect(rows[1].textContent).toContain('Data sync');
     expect(rows[2].textContent).toContain('third Task');
-    expect(element.querySelectorAll('mat-slide-toggle')).toHaveSize(2);
-    expect(element.querySelectorAll('.task-actions > button')).toHaveSize(5);
+    expect(element.querySelectorAll('mat-slide-toggle')).toHaveLength(2);
+    expect(element.querySelectorAll('.task-actions > button')).toHaveLength(5);
     expect(service.load).toHaveBeenCalledTimes(1);
   });
 
   it('runs cleanup manually while keeping its schedule read-only', async () => {
     const row = (fixture.nativeElement as HTMLElement).querySelectorAll('tr.mat-mdc-row')[0];
     const buttons = row.querySelectorAll<HTMLButtonElement>('.task-actions > button');
-    expect(buttons).toHaveSize(1);
+    expect(buttons).toHaveLength(1);
     expect(buttons[0].textContent).toContain('play_arrow');
     expect(row.querySelector('mat-slide-toggle')).toBeNull();
     buttons[0].click();
     await fixture.whenStable();
-    expect(service.run).toHaveBeenCalledOnceWith('cleanup');
+    expect(service.run).toHaveBeenCalledExactlyOnceWith('cleanup');
     expect(service.save).not.toHaveBeenCalled();
 
     states.set({ cleanup: { running: true } });
     await fixture.whenStable();
-    expect(buttons[0].disabled).toBeTrue();
+    expect(buttons[0].disabled).toBe(true);
   });
 
   it('updates and runs the selected third task', async () => {
     const third = service.tasks()[2];
     await fixture.componentInstance['toggleTaskEnabledAsync'](third, false);
-    expect(service.save).toHaveBeenCalledOnceWith({ ...third, enabled: false });
+    expect(service.save).toHaveBeenCalledExactlyOnceWith({ ...third, enabled: false });
     await fixture.componentInstance['runTaskNowAsync'](third);
-    expect(service.run).toHaveBeenCalledOnceWith('thirdTask');
+    expect(service.run).toHaveBeenCalledExactlyOnceWith('thirdTask');
     const activeDialog = fixture.debugElement.injector.get(MatDialog);
-    spyOn(activeDialog, 'open').and.returnValue({ afterClosed: () => of(true) } as never);
+    vi.spyOn(activeDialog, 'open').mockReturnValue({ afterClosed: () => of(true) } as never);
     await fixture.componentInstance['openTaskEditorAsync'](third);
-    expect(activeDialog.open).toHaveBeenCalledWith(jasmine.any(Function), jasmine.objectContaining({ data: third }));
+    expect(activeDialog.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ data: third }));
   });
 
   it('keeps other tasks usable while a single task runs and displays its error', async () => {
     states.set({ arrDataSync: { running: true, error: 'Task conflict' } });
     await fixture.whenStable();
     const rows = (fixture.nativeElement as HTMLElement).querySelectorAll('tr.mat-mdc-row');
-    expect(rows[1].querySelectorAll('button.material-symbols-outlined')[1].hasAttribute('disabled')).toBeTrue();
-    expect(rows[1].querySelector('mat-slide-toggle button')?.hasAttribute('disabled')).toBeFalse();
-    expect(rows[2].querySelector('button')?.disabled).toBeFalse();
+    expect(rows[1].querySelectorAll('button.material-symbols-outlined')[1].hasAttribute('disabled')).toBe(true);
+    expect(rows[1].querySelector('mat-slide-toggle button')?.hasAttribute('disabled')).toBe(false);
+    expect(rows[2].querySelector('button')?.disabled).toBe(false);
     expect(rows[1].textContent).toContain('Task conflict');
   });
 });

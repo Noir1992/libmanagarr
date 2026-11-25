@@ -176,9 +176,9 @@ describe('library sort utils', () => {
       { ...entry('office'), id: 2 },
       { ...entry('OFFICE'), id: 3 },
     ];
-    const keyOf = jasmine.createSpy('keyOf').and.callFake((item: Entry) => item);
+    const keyOf = vi.fn().mockImplementation((item: Entry) => item);
     for (const direction of [LibrarySortDirection.ASCENDING, LibrarySortDirection.DESCENDING]) {
-      keyOf.calls.reset();
+      keyOf.mockClear();
       expect(
         sortLibraryEntries(input, keyOf, LibrarySortField.ALPHABETICAL, direction, { enabled: true, ignoredLeadingWords: ['The'] }).map(
           (item) => item.id,

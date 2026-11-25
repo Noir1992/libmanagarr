@@ -60,7 +60,7 @@ describe('Media detail dialogs', () => {
       .querySelectorAll('.detail-row')
       .forEach((row) => (rows[row.querySelector('dt')!.textContent!.trim()] = ddText(row.querySelector('dd')!)));
     expect(rows).toEqual(
-      jasmine.objectContaining({
+      expect.objectContaining({
         Instance: 'Radarr',
         Monitored: 'No',
         Score: '0',
@@ -190,7 +190,7 @@ describe('Media detail dialogs', () => {
     expect(rows['Resolution']).toBe('N/A');
     expect(rows['Upgrade target']).toBe('N/A');
     for (const label of ['Instance', 'Series', 'Series monitored', 'Aired', 'Profile', 'Genres', 'Tags']) {
-      expect(rows[label]).withContext(label).toBeUndefined();
+      expect(rows[label], label).toBeUndefined();
     }
     expect(rows['Season']).toBe('0');
     expect(rows['Episode']).toBe('1');
@@ -201,7 +201,7 @@ describe('Media detail dialogs', () => {
   });
 
   it('opens movie details from the card and episode details from the series dialog', async () => {
-    const open = jasmine.createSpy('open');
+    const open = vi.fn();
     const item: MediaGridItem = {
       kind: 'movie',
       id: 1,
@@ -243,14 +243,14 @@ describe('Media detail dialogs', () => {
     titleLink.dispatchEvent(linkClick);
     expect(open).not.toHaveBeenCalled();
     (card.nativeElement as HTMLElement).querySelector<HTMLElement>('.media-card')!.click();
-    expect(open).toHaveBeenCalledOnceWith(MediaDetailsDialogWidget, jasmine.objectContaining({ data: movie }));
-    open.calls.reset();
+    expect(open).toHaveBeenCalledExactlyOnceWith(MediaDetailsDialogWidget, expect.objectContaining({ data: movie }));
+    open.mockClear();
     const series = TestBed.createComponent(SonarrSeriesDialogWidget);
     series.detectChanges();
     (series.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.episode-details-button')!.click();
-    expect(open).toHaveBeenCalledOnceWith(
+    expect(open).toHaveBeenCalledExactlyOnceWith(
       MediaDetailsDialogWidget,
-      jasmine.objectContaining({ data: jasmine.objectContaining({ title: 'Episode', episodeNumber: 1 }) }),
+      expect.objectContaining({ data: expect.objectContaining({ title: 'Episode', episodeNumber: 1 }) }),
     );
   });
   it('shows Added for a missing movie but keeps it out of episode details', () => {

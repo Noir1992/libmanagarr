@@ -25,7 +25,7 @@ describe('CodecStatisticsApiService', () => {
     service
       .fetchCodecStatistics(['s1', 's2'], ['r1'], { videoCodecs: ['HEVC'], excludedFilters: ['video-codec-filter'] })
       .subscribe((response) => {
-        expect(response.videoCodecs).toHaveSize(1);
+        expect(response.videoCodecs).toHaveLength(1);
       });
 
     const request: TestRequest = httpTestingController.expectOne('/api/statistics/codecs');

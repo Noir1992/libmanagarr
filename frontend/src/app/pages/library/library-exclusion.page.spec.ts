@@ -1,4 +1,5 @@
 import { MediaTitlesService } from '../../services/media-titles.service';
+import type { MockInstance } from 'vitest';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
@@ -11,11 +12,14 @@ import { LibraryPage } from './library.page';
 
 describe('LibraryPage exclusion requests', () => {
   let page: LibraryPage;
-  let radarr: jasmine.SpyObj<RadarrApiService>;
+  let radarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
 
   beforeEach(() => {
-    radarr = jasmine.createSpyObj<RadarrApiService>('Radarr', ['fetchFilterValues', 'fetchLibrary']);
-    radarr.fetchFilterValues.and.returnValue(
+    radarr = {
+      fetchFilterValues: vi.fn<RadarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<RadarrApiService['fetchLibrary']>(),
+    };
+    radarr.fetchFilterValues.mockReturnValue(
       of({
         statuses: [],
         genres: [],
@@ -25,7 +29,7 @@ describe('LibraryPage exclusion requests', () => {
         subtitleLanguages: ['German'],
       }),
     );
-    radarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
+    radarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
     TestBed.configureTestingModule({
       providers: [
         { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
@@ -61,14 +65,14 @@ describe('LibraryPage exclusion requests', () => {
     subtitle.exclude = true;
     await page['loadFilterValues']();
     page['loadData']();
-    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(
-      jasmine.objectContaining({
+    expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
         audioLanguages: ['Japanese'],
         subtitleLanguages: ['German'],
         excludedFilters: ['subtitle-language-filter'],
       }),
     );
-    expect(multiselect('subtitle-language-filter').exclude).toBeTrue();
+    expect(multiselect('subtitle-language-filter').exclude).toBe(true);
   });
 
   it('uses the remaining instances for filter options and sends the raw excluded selection to the library', async () => {
@@ -77,9 +81,9 @@ describe('LibraryPage exclusion requests', () => {
     instances.exclude = true;
     await page['loadFilterValues']();
     page['loadData']();
-    expect(radarr.fetchFilterValues).toHaveBeenCalledOnceWith(['second']);
-    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(
-      jasmine.objectContaining({
+    expect(radarr.fetchFilterValues).toHaveBeenCalledExactlyOnceWith(['second']);
+    expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
         radarrInstanceFilter: ['first'],
         excludedFilters: ['radarr-instance-filter'],
       }),
@@ -94,7 +98,7 @@ describe('LibraryPage exclusion requests', () => {
     page['loadData']();
     expect(radarr.fetchFilterValues).not.toHaveBeenCalled();
     expect(radarr.fetchLibrary).not.toHaveBeenCalled();
-    expect(page['loading']()).toBeFalse();
+    expect(page['loading']()).toBe(false);
   });
 
   it('treats an empty exclusion as including every configured instance', async () => {
@@ -103,9 +107,9 @@ describe('LibraryPage exclusion requests', () => {
     instances.exclude = true;
     await page['loadFilterValues']();
     page['loadData']();
-    expect(radarr.fetchFilterValues).toHaveBeenCalledOnceWith(['__all__']);
-    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(
-      jasmine.objectContaining({
+    expect(radarr.fetchFilterValues).toHaveBeenCalledExactlyOnceWith(['__all__']);
+    expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
         radarrInstanceFilter: ['__all__'],
         excludedFilters: [],
       }),

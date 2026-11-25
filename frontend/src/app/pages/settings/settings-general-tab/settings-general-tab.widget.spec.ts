@@ -55,7 +55,7 @@ describe('SettingsGeneralTabWidget', () => {
       ({
         'settings.language.self': 'English',
       })[key] ?? key,
-    setPreviewLanguage: jasmine.createSpy('setPreviewLanguage'),
+    setPreviewLanguage: vi.fn(),
   } as Pick<AppI18nService, 't' | 'tForLanguage'>;
 
   beforeEach(async () => {
@@ -82,13 +82,13 @@ describe('SettingsGeneralTabWidget', () => {
       | 'theme'
       | 'titleSorting'
     > = {
-      loadLoggingSettings: jasmine.createSpy('loadLoggingSettings').and.resolveTo(),
-      saveGeneral: jasmine.createSpy('saveGeneral').and.callFake(async (value: { language: AppLanguage; theme: AppTheme }) => {
+      loadLoggingSettings: vi.fn().mockResolvedValue(undefined),
+      saveGeneral: vi.fn().mockImplementation(async (value: { language: AppLanguage; theme: AppTheme }) => {
         languageSignal.set(value.language);
         themeSignal.set(value.theme);
       }),
-      saveLoggingSettings: jasmine.createSpy('saveLoggingSettings').and.resolveTo(),
-      saveAuthProtection: jasmine.createSpy('saveAuthProtection').and.callFake(async (value: AuthProtectionSettings) => {
+      saveLoggingSettings: vi.fn().mockResolvedValue(undefined),
+      saveAuthProtection: vi.fn().mockImplementation(async (value: AuthProtectionSettings) => {
         authProtectionSignal.set(value);
       }),
       logging: loggingSignal,
@@ -98,7 +98,7 @@ describe('SettingsGeneralTabWidget', () => {
       titleSorting: signal({ enabled: false, ignoredLeadingWords: [] }),
     };
     const dialogStub: Pick<MatDialog, 'open'> = {
-      open: jasmine.createSpy('open').and.returnValue({
+      open: vi.fn().mockReturnValue({
         afterClosed: () => of(true),
       }),
     };
@@ -126,7 +126,7 @@ describe('SettingsGeneralTabWidget', () => {
   });
 
   it('autosaves general changes through the backend service', async () => {
-    const settingsService: jasmine.SpyObj<AppSettingsService> = TestBed.inject(AppSettingsService) as jasmine.SpyObj<AppSettingsService>;
+    const settingsService = vi.mocked(TestBed.inject(AppSettingsService));
 
     fixture.componentInstance['settingsForm'].controls.language.setValue('de');
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -136,8 +136,8 @@ describe('SettingsGeneralTabWidget', () => {
   });
 
   it('shows a server validation error below the language select', async () => {
-    const settingsService: jasmine.SpyObj<AppSettingsService> = TestBed.inject(AppSettingsService) as jasmine.SpyObj<AppSettingsService>;
-    settingsService.saveGeneral.and.rejectWith(
+    const settingsService = vi.mocked(TestBed.inject(AppSettingsService));
+    settingsService.saveGeneral.mockRejectedValue(
       new ValidationProblemError('Validation failed', {
         'settings.language': ['Language is already used.'],
       }),
@@ -162,14 +162,14 @@ describe('SettingsGeneralTabWidget', () => {
     } = globalThis as typeof globalThis & {
       confirm: (message?: string) => boolean;
     };
-    spyOn(confirmTarget, 'confirm').and.returnValue(true);
+    vi.spyOn(confirmTarget, 'confirm').mockReturnValue(true);
 
     fixture.componentInstance['settingsForm'].controls.language.setValue('de');
     fixture.componentInstance['settingsForm'].controls.language.markAsDirty();
 
-    expect(fixture.componentInstance.canDeactivate()).toBeTrue();
+    expect(fixture.componentInstance.canDeactivate()).toBe(true);
     expect(fixture.componentInstance['settingsForm'].controls.language.getRawValue()).toBe('en');
-    expect(fixture.componentInstance['settingsForm'].dirty).toBeFalse();
+    expect(fixture.componentInstance['settingsForm'].dirty).toBe(false);
   });
 
   it('protects and discards unsaved title rules on navigation', () => {
@@ -177,24 +177,24 @@ describe('SettingsGeneralTabWidget', () => {
       .componentInstance as TitleSortingSettingsCardWidget;
     card['form'].controls.ignoredLeadingWords.setValue('A');
     card['form'].controls.ignoredLeadingWords.markAsDirty();
-    const confirm = spyOn(globalThis, 'confirm').and.returnValue(false);
-    expect(fixture.componentInstance.canDeactivate()).toBeFalse();
-    expect(confirm.calls.mostRecent().args[0]).toContain('settings.titleSorting.title');
+    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    expect(fixture.componentInstance.canDeactivate()).toBe(false);
+    expect(confirm.mock.lastCall![0]).toContain('settings.titleSorting.title');
     expect(card['form'].controls.ignoredLeadingWords.value).toBe('A');
-    confirm.and.returnValue(true);
-    expect(fixture.componentInstance.canDeactivate()).toBeTrue();
+    confirm.mockReturnValue(true);
+    expect(fixture.componentInstance.canDeactivate()).toBe(true);
     expect(card['form'].controls.ignoredLeadingWords.value).toBe('');
-    expect(card.hasUnsavedChanges()).toBeFalse();
+    expect(card.hasUnsavedChanges()).toBe(false);
   });
 
   it('blocks navigation while title rules are saving without prompting', () => {
     const card = fixture.debugElement.query(By.directive(TitleSortingSettingsCardWidget))
       .componentInstance as TitleSortingSettingsCardWidget;
     card['saving'].set(true);
-    const confirm = spyOn(globalThis, 'confirm');
-    expect(fixture.componentInstance.canDeactivate()).toBeFalse();
+    const confirm = vi.spyOn(globalThis, 'confirm');
+    expect(fixture.componentInstance.canDeactivate()).toBe(false);
     expect(confirm).not.toHaveBeenCalled();
     card['saving'].set(false);
-    expect(fixture.componentInstance.canDeactivate()).toBeTrue();
+    expect(fixture.componentInstance.canDeactivate()).toBe(true);
   });
 });

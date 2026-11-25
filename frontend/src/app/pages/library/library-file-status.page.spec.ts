@@ -1,4 +1,5 @@
 import { MediaTitlesService } from '../../services/media-titles.service';
+import type { MockInstance } from 'vitest';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
@@ -13,16 +14,22 @@ import { LibraryPage } from './library.page';
 
 describe('LibraryPage file status', () => {
   let page: LibraryPage;
-  let radarr: jasmine.SpyObj<RadarrApiService>;
-  let sonarr: jasmine.SpyObj<SonarrApiService>;
+  let radarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
+  let sonarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
   const sonarrInstances = signal([{ id: 's', name: 'Sonarr', baseUrl: '', apiKey: '' }]);
   const empty: LibraryFilterValues = { genres: [], tags: [], statuses: [], qualityProfiles: [], audioLanguages: [], subtitleLanguages: [] };
 
   beforeEach(() => {
     sonarrInstances.set([{ id: 's', name: 'Sonarr', baseUrl: '', apiKey: '' }]);
-    radarr = jasmine.createSpyObj<RadarrApiService>('Radarr', ['fetchFilterValues', 'fetchLibrary']);
-    sonarr = jasmine.createSpyObj<SonarrApiService>('Sonarr', ['fetchFilterValues', 'fetchLibrary']);
-    radarr.fetchFilterValues.and.returnValue(
+    radarr = {
+      fetchFilterValues: vi.fn<RadarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<RadarrApiService['fetchLibrary']>(),
+    };
+    sonarr = {
+      fetchFilterValues: vi.fn<SonarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<SonarrApiService['fetchLibrary']>(),
+    };
+    radarr.fetchFilterValues.mockReturnValue(
       of({
         ...empty,
         counts: {
@@ -32,7 +39,7 @@ describe('LibraryPage file status', () => {
         },
       }),
     );
-    sonarr.fetchFilterValues.and.returnValue(
+    sonarr.fetchFilterValues.mockReturnValue(
       of({
         ...empty,
         counts: {
@@ -42,8 +49,8 @@ describe('LibraryPage file status', () => {
         },
       }),
     );
-    radarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
-    sonarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
+    radarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
+    sonarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
     TestBed.configureTestingModule({
       providers: [
         { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
@@ -108,23 +115,23 @@ describe('LibraryPage file status', () => {
       'movie',
     ];
     page['loadData']();
-    const expected = jasmine.objectContaining({
+    const expected = expect.objectContaining({
       fileStatusFilter: 'missing',
       monitoredFilter: 'monitored',
       episodeMonitoredFilter: 'monitored',
       airedFilter: 'aired',
       types: ['regular', 'movie'],
     });
-    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
-    expect(sonarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
+    expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
+    expect(sonarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
   });
 
   it('omits Sonarr-only controls and request values when there are no Sonarr instances', () => {
     sonarrInstances.set([]);
-    expect(page['filterOptions']().some((option) => option.id === 'monitored-filter')).toBeFalse();
+    expect(page['filterOptions']().some((option) => option.id === 'monitored-filter')).toBe(false);
     page['loadData']();
     expect(radarr.fetchLibrary).toHaveBeenCalledWith(
-      jasmine.objectContaining({ monitoredFilter: undefined, episodeMonitoredFilter: 'all', types: ['__all__'] }),
+      expect.objectContaining({ monitoredFilter: undefined, episodeMonitoredFilter: 'all', types: ['__all__'] }),
     );
     expect(sonarr.fetchLibrary).not.toHaveBeenCalled();
   });
@@ -176,9 +183,9 @@ describe('LibraryPage file status', () => {
       ],
     });
     const movie = page['gridItems']()[0];
-    expect(movie.detailRows).toContain({ label: 'Library status', value: 'Missing', tone: 'danger' });
+    expect(movie.detailRows).toContainEqual({ label: 'Library status', value: 'Missing', tone: 'danger' });
     expect(movie.movieData?.customFormatScore).toBeNull();
-    expect(page['gridItems']()[1].detailRows).toContain({ label: 'Library status', value: 'Missing', tone: 'danger' });
+    expect(page['gridItems']()[1].detailRows).toContainEqual({ label: 'Library status', value: 'Missing', tone: 'danger' });
     expect(movie.detailRows.map((row) => row.label)).toEqual(['Instance', 'Aired status', 'Library status', 'Monitored']);
     expect(page['gridItems']()[1].detailRows.map((row) => row.label)).toEqual([
       'Instance',
@@ -187,7 +194,7 @@ describe('LibraryPage file status', () => {
       'Series monitored',
     ]);
     expect(page['gridItems']()[1].seriesData?.seasons[0].episodes[0].details).toEqual(
-      jasmine.objectContaining({
+      expect.objectContaining({
         instanceName: 'Sonarr',
         seriesTitle: 'Series',
         seasonNumber: 1,
@@ -198,7 +205,7 @@ describe('LibraryPage file status', () => {
       }),
     );
     expect(page['gridItems']()[1].seriesData?.seasons[0].episodes[0]).toEqual(
-      jasmine.objectContaining({ hasFile: false, monitored: true, customFormatScore: null }),
+      expect.objectContaining({ hasFile: false, monitored: true, customFormatScore: null }),
     );
     expect(page['sonarrEpisodeColumns']().map((column) => column.key)).toContain('hasFile');
   });
@@ -253,12 +260,12 @@ describe('LibraryPage file status', () => {
       ],
     });
     const cards = page['gridItems']();
-    expect(cards.find((item) => item.title === 'Series')?.detailRows).toContain({
+    expect(cards.find((item) => item.title === 'Series')?.detailRows).toContainEqual({
       label: 'Library status',
       value: 'Missing',
       tone: 'danger',
     });
-    expect(cards.find((item) => item.title === 'Only Specials Missing')?.detailRows).toContain({
+    expect(cards.find((item) => item.title === 'Only Specials Missing')?.detailRows).toContainEqual({
       label: 'Library status',
       value: 'Missing',
       tone: 'danger',
@@ -307,7 +314,7 @@ describe('LibraryPage file status', () => {
         ],
       });
 
-      expect(page['gridItems']()[0].detailRows).toContain({
+      expect(page['gridItems']()[0].detailRows).toContainEqual({
         label: 'Library status',
         value: scenario.value,
         tone: scenario.tone,
@@ -352,7 +359,7 @@ describe('LibraryPage file status', () => {
       ],
     });
 
-    expect(page['gridItems']()[0].detailRows).toContain({ label: 'Library status', value: 'Partially available', tone: 'warning' });
+    expect(page['gridItems']()[0].detailRows).toContainEqual({ label: 'Library status', value: 'Partially available', tone: 'warning' });
     expect(page['gridItems']()[0].seriesData?.libraryStatus).toBe('partial');
   });
 
@@ -399,7 +406,7 @@ describe('LibraryPage file status', () => {
       ],
     });
 
-    expect(page['gridItems']()[0].detailRows).toContain({ label: 'Library status', value: 'Partially available', tone: 'warning' });
+    expect(page['gridItems']()[0].detailRows).toContainEqual({ label: 'Library status', value: 'Partially available', tone: 'warning' });
   });
 
   it('uses the backend library status even when the visible episodes are all in the future', () => {
@@ -439,6 +446,6 @@ describe('LibraryPage file status', () => {
       ],
     });
 
-    expect(page['gridItems']()[0].detailRows).toContain({ label: 'Library status', value: 'Missing', tone: 'danger' });
+    expect(page['gridItems']()[0].detailRows).toContainEqual({ label: 'Library status', value: 'Missing', tone: 'danger' });
   });
 });

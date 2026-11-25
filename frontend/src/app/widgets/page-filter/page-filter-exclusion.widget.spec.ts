@@ -25,7 +25,7 @@ describe('PageFilterWidget exclusion editor', () => {
       ],
       selectedValues: ['Japanese'],
       supportsExclusion: true,
-      onChanged: jasmine.createSpy('audioChanged'),
+      onChanged: vi.fn(),
     };
     subtitle = {
       id: 'subtitle-language-filter',
@@ -34,7 +34,7 @@ describe('PageFilterWidget exclusion editor', () => {
       options: [{ value: 'German', label: 'German' }],
       selectedValues: ['German'],
       supportsExclusion: true,
-      onChanged: jasmine.createSpy('subtitleChanged'),
+      onChanged: vi.fn(),
     };
     fixture = TestBed.createComponent(PageFilterWidget);
     fixture.componentRef.setInput('filters', [audio, subtitle]);
@@ -58,14 +58,14 @@ describe('PageFilterWidget exclusion editor', () => {
     cards[1].querySelectorAll<HTMLButtonElement>('.filter-mode button')[1].click();
     await fixture.whenStable();
 
-    expect(subtitle.exclude).toBeTrue();
-    expect(subtitle.onChanged).toHaveBeenCalledOnceWith(['German']);
+    expect(subtitle.exclude).toBe(true);
+    expect(subtitle.onChanged).toHaveBeenCalledExactlyOnceWith(['German']);
     expect(audio.exclude).toBeUndefined();
     expect(audio.onChanged).not.toHaveBeenCalled();
     expect(root.querySelector('.filter-bubble-excluded')!.textContent).toContain('Nicht German');
     expect(cards[1].querySelectorAll('.filter-mode button')[1].getAttribute('aria-pressed')).toBe('true');
     const stored = JSON.parse(localStorage.getItem(storageKey)!);
-    expect(stored['subtitle-language-filter:exclude']).toBeTrue();
+    expect(stored['subtitle-language-filter:exclude']).toBe(true);
     expect(stored['audio-language-filter']).toEqual(['Japanese']);
   });
 
@@ -73,16 +73,16 @@ describe('PageFilterWidget exclusion editor', () => {
     const subtitleBubble = root.querySelectorAll('.filter-bubble')[1];
     subtitleBubble.querySelector<HTMLButtonElement>('.filter-bubble-mode')!.click();
     await fixture.whenStable();
-    expect(subtitle.exclude).toBeTrue();
+    expect(subtitle.exclude).toBe(true);
     subtitleBubble.querySelector<HTMLButtonElement>('.filter-bubble-remove')!.click();
     await fixture.whenStable();
 
-    expect(subtitle.exclude).toBeFalse();
+    expect(subtitle.exclude).toBe(false);
     expect(subtitle.selectedValues).toEqual([]);
     expect(subtitle.onChanged).toHaveBeenCalledWith([]);
-    expect(root.querySelectorAll('.filter-bubble')).toHaveSize(1);
+    expect(root.querySelectorAll('.filter-bubble')).toHaveLength(1);
     expect(root.querySelector('.filter-bubble')!.textContent).toContain('Japanese');
-    expect(JSON.parse(localStorage.getItem(storageKey)!)['subtitle-language-filter:exclude']).toBeFalse();
+    expect(JSON.parse(localStorage.getItem(storageKey)!)['subtitle-language-filter:exclude']).toBe(false);
   });
 
   it('searches filter names without clearing selections and keeps the search across closing', async () => {
@@ -91,10 +91,10 @@ describe('PageFilterWidget exclusion editor', () => {
     search.value = 'untertitel';
     search.dispatchEvent(new Event('input'));
     await fixture.whenStable();
-    expect(root.querySelectorAll('.filter-card')).toHaveSize(1);
+    expect(root.querySelectorAll('.filter-card')).toHaveLength(1);
     expect(root.querySelector('.filter-card')!.textContent).toContain('Untertitelsprachen');
     expect(audio.selectedValues).toEqual(['Japanese']);
-    expect(root.querySelectorAll('.filter-bubble')).toHaveSize(2);
+    expect(root.querySelectorAll('.filter-bubble')).toHaveLength(2);
     await openEditor();
     expect(root.querySelector('.filter-editor')).toBeNull();
     await openEditor();
@@ -116,9 +116,9 @@ describe('PageFilterWidget exclusion editor', () => {
     await restored.whenStable();
 
     expect(audio.selectedValues).toEqual(['German']);
-    expect(audio.exclude).toBeTrue();
+    expect(audio.exclude).toBe(true);
     expect(subtitle.exclude).toBeUndefined();
-    expect((restored.nativeElement as HTMLElement).querySelectorAll('.filter-bubble-excluded')).toHaveSize(1);
+    expect((restored.nativeElement as HTMLElement).querySelectorAll('.filter-bubble-excluded')).toHaveLength(1);
   });
 
   it('keeps All neutral when setting a mode before selecting a value', async () => {
@@ -127,8 +127,8 @@ describe('PageFilterWidget exclusion editor', () => {
     await openEditor();
     root.querySelectorAll('.filter-card')[0].querySelectorAll<HTMLButtonElement>('.filter-mode button')[1].click();
     await fixture.whenStable();
-    expect(audio.exclude).toBeTrue();
-    expect(root.querySelectorAll('.filter-bubble')).toHaveSize(1);
+    expect(audio.exclude).toBe(true);
+    expect(root.querySelectorAll('.filter-bubble')).toHaveLength(1);
     fixture.componentInstance['onMultiSelectChanged'](audio, ['German']);
     await fixture.whenStable();
     expect(root.querySelector('.filter-bubble-excluded')!.textContent).toContain('Nicht German');
@@ -158,7 +158,7 @@ describe('PageFilterWidget excluded All bubble', () => {
       supportsExclusion: true,
       exclude: true,
       excludeAllRestricts: true,
-      onChanged: jasmine.createSpy('instancesChanged'),
+      onChanged: vi.fn(),
     };
     genres = {
       id: 'genre-filter',
@@ -168,7 +168,7 @@ describe('PageFilterWidget excluded All bubble', () => {
       selectedValues: [DEFAULT_FILTER_ALL],
       supportsExclusion: true,
       exclude: true,
-      onChanged: jasmine.createSpy('genresChanged'),
+      onChanged: vi.fn(),
     };
     fixture = TestBed.createComponent(PageFilterWidget);
     fixture.componentRef.setInput('filters', [instances, genres]);
@@ -181,26 +181,26 @@ describe('PageFilterWidget excluded All bubble', () => {
 
   it('shows a Nicht Alle bubble while every instance is excluded and ignores the flag-less genres filter', async () => {
     const bubbles = root.querySelectorAll('.filter-bubble');
-    expect(bubbles).toHaveSize(1);
+    expect(bubbles).toHaveLength(1);
     expect(bubbles[0].textContent).toContain('Radarr-Instanzen: Nicht Alle');
     expect(fixture.componentInstance['activeFilterCount']()).toBe(1);
-    expect(genres.exclude).toBeTrue();
+    expect(genres.exclude).toBe(true);
   });
 
   it('hides the bubble again when the mode flips back to include', async () => {
     root.querySelector<HTMLButtonElement>('.filter-bubble-mode')!.click();
     await fixture.whenStable();
-    expect(instances.exclude).toBeFalse();
-    expect(instances.onChanged).toHaveBeenCalledOnceWith([DEFAULT_FILTER_ALL]);
-    expect(root.querySelectorAll('.filter-bubble')).toHaveSize(0);
+    expect(instances.exclude).toBe(false);
+    expect(instances.onChanged).toHaveBeenCalledExactlyOnceWith([DEFAULT_FILTER_ALL]);
+    expect(root.querySelectorAll('.filter-bubble')).toHaveLength(0);
   });
 
   it('resets mode and selection when the bubble is removed', async () => {
     root.querySelector<HTMLButtonElement>('.filter-bubble-remove')!.click();
     await fixture.whenStable();
-    expect(instances.exclude).toBeFalse();
+    expect(instances.exclude).toBe(false);
     expect(instances.selectedValues).toEqual([]);
-    expect(instances.onChanged).toHaveBeenCalledOnceWith([]);
-    expect(root.querySelectorAll('.filter-bubble')).toHaveSize(0);
+    expect(instances.onChanged).toHaveBeenCalledExactlyOnceWith([]);
+    expect(root.querySelectorAll('.filter-bubble')).toHaveLength(0);
   });
 });

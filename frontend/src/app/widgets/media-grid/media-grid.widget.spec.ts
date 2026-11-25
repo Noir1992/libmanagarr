@@ -65,14 +65,14 @@ describe('MediaGridWidget', () => {
     ];
     fixture.detectChanges();
     const cards = fixture.nativeElement.querySelectorAll('app-media-card');
-    expect(cards).toHaveSize(3);
+    expect(cards).toHaveLength(3);
   });
 
   it('renders no cards when items is empty', () => {
     host.items = [];
     fixture.detectChanges();
     const cards = fixture.nativeElement.querySelectorAll('app-media-card');
-    expect(cards).toHaveSize(0);
+    expect(cards).toHaveLength(0);
   });
 
   it('uses grid layout', () => {
@@ -113,7 +113,7 @@ describe('MediaGridWidget (windowed rendering)', () => {
     const wrapper: HTMLElement | null = fixture.nativeElement.querySelector('.media-grid-window');
     const cards: NodeListOf<Element> = fixture.nativeElement.querySelectorAll('app-media-card');
 
-    expect(wrapper?.classList.contains('is-windowed')).toBeTrue();
+    expect(wrapper?.classList.contains('is-windowed')).toBe(true);
     expect(wrapper?.style.height).not.toBe('');
     expect(cards.length).toBeGreaterThan(0);
     expect(cards.length).toBeLessThan(64);

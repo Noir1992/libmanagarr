@@ -1,4 +1,5 @@
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
+import type { MockInstance } from 'vitest';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { BackupExportRequest } from '../interfaces/backup/backup-export-request';
@@ -9,9 +10,11 @@ import { BackupDownload, BackupService } from './backup.service';
 describe('BackupService', () => {
   let service: BackupService;
   let httpController: HttpTestingController;
-  const i18nSpy: jasmine.SpyObj<AppI18nService> = jasmine.createSpyObj<AppI18nService>('AppI18nService', ['t']);
+  const i18nSpy: Record<'t', MockInstance> = {
+    t: vi.fn<AppI18nService['t']>(),
+  };
 
-  i18nSpy.t.and.callFake((key: string): string => key);
+  i18nSpy.t.mockImplementation((key: string): string => key);
 
   const request: BackupExportRequest = {
     backupPassword: 'a-very-long-backup-passphrase',

@@ -1,4 +1,5 @@
 import { MediaTitlesService } from '../../services/media-titles.service';
+import type { MockInstance } from 'vitest';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
@@ -10,12 +11,18 @@ import { LibraryPage } from './library.page';
 
 describe('LibraryPage title search', () => {
   let page: LibraryPage;
-  let sonarr: jasmine.SpyObj<SonarrApiService>;
-  let radarr: jasmine.SpyObj<RadarrApiService>;
+  let sonarr: Record<'fetchLibrary' | 'fetchFilterValues', MockInstance>;
+  let radarr: Record<'fetchLibrary' | 'fetchFilterValues', MockInstance>;
 
   beforeEach(async () => {
-    sonarr = jasmine.createSpyObj<SonarrApiService>('SonarrApiService', ['fetchLibrary', 'fetchFilterValues']);
-    radarr = jasmine.createSpyObj<RadarrApiService>('RadarrApiService', ['fetchLibrary', 'fetchFilterValues']);
+    sonarr = {
+      fetchLibrary: vi.fn<SonarrApiService['fetchLibrary']>(),
+      fetchFilterValues: vi.fn<SonarrApiService['fetchFilterValues']>(),
+    };
+    radarr = {
+      fetchLibrary: vi.fn<RadarrApiService['fetchLibrary']>(),
+      fetchFilterValues: vi.fn<RadarrApiService['fetchFilterValues']>(),
+    };
     const filterValues = {
       genres: [],
       tags: [],
@@ -24,9 +31,9 @@ describe('LibraryPage title search', () => {
       audioLanguages: [],
       subtitleLanguages: [],
     };
-    sonarr.fetchFilterValues.and.returnValue(of(filterValues));
-    radarr.fetchFilterValues.and.returnValue(of(filterValues));
-    sonarr.fetchLibrary.and.returnValue(
+    sonarr.fetchFilterValues.mockReturnValue(of(filterValues));
+    radarr.fetchFilterValues.mockReturnValue(of(filterValues));
+    sonarr.fetchLibrary.mockReturnValue(
       of({
         syncedAt: null,
         instances: [
@@ -63,7 +70,7 @@ describe('LibraryPage title search', () => {
         ],
       }),
     );
-    radarr.fetchLibrary.and.returnValue(
+    radarr.fetchLibrary.mockReturnValue(
       of({
         syncedAt: null,
         instances: [
@@ -117,7 +124,7 @@ describe('LibraryPage title search', () => {
             radarrInstances: signal([{ id: 'radarr-1', name: 'Radarr', baseUrl: 'http://radarr', apiKey: 'test' }]),
             loadError: signal(null),
             titleSorting: signal({ enabled: false, ignoredLeadingWords: [] }),
-            loadInstances: jasmine.createSpy().and.resolveTo(),
+            loadInstances: vi.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -135,14 +142,14 @@ describe('LibraryPage title search', () => {
     ]);
     page['titleSearch'].set('english alias');
     expect(page['visibleRadarrTables']()[0].movies[0].title).toBe('Deutscher Titel');
-    expect(page['gridItems']().some((item) => item.title === 'Deutscher Titel')).toBeTrue();
+    expect(page['gridItems']().some((item) => item.title === 'Deutscher Titel')).toBe(true);
   });
 
   it('shows all loaded entries when no search is set', () => {
     expect(page['visibleItemCount']()).toBe(4);
-    expect(page['gridItems']()).toHaveSize(4);
-    expect(page['noDataAvailable']()).toBeFalse();
-    expect(page['isFiltered']()).toBeFalse();
+    expect(page['gridItems']()).toHaveLength(4);
+    expect(page['noDataAvailable']()).toBe(false);
+    expect(page['isFiltered']()).toBe(false);
   });
 
   it('keeps only movies and series whose title contains the query, case-insensitively', () => {
@@ -156,12 +163,12 @@ describe('LibraryPage title search', () => {
         .map((item) => item.title)
         .sort(),
     ).toEqual(['Star Dust', 'Star Gate']);
-    expect(page['isFiltered']()).toBeTrue();
+    expect(page['isFiltered']()).toBe(true);
   });
 
   it('filters client-side without reloading the library from the backend', () => {
-    sonarr.fetchLibrary.calls.reset();
-    radarr.fetchLibrary.calls.reset();
+    sonarr.fetchLibrary.mockClear();
+    radarr.fetchLibrary.mockClear();
 
     page['titleSearch'].set('star');
 
@@ -173,19 +180,19 @@ describe('LibraryPage title search', () => {
     page['titleSearch'].set('nothing matches');
 
     expect(page['visibleItemCount']()).toBe(0);
-    expect(page['gridItems']()).toHaveSize(0);
-    expect(page['noDataAvailable']()).toBeTrue();
+    expect(page['gridItems']()).toHaveLength(0);
+    expect(page['noDataAvailable']()).toBe(true);
   });
 
   it('is filtered when a search or an active filter is present', () => {
     page['titleSearch'].set('star');
-    expect(page['isFiltered']()).toBeTrue();
+    expect(page['isFiltered']()).toBe(true);
 
     page['titleSearch'].set('   ');
-    expect(page['isFiltered']()).toBeFalse();
+    expect(page['isFiltered']()).toBe(false);
     expect(page['visibleItemCount']()).toBe(4);
 
     page['activeFilterCount'].set(1);
-    expect(page['isFiltered']()).toBeTrue();
+    expect(page['isFiltered']()).toBe(true);
   });
 });

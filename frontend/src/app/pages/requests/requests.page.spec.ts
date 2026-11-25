@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import type { MockInstance } from 'vitest';
 import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
@@ -70,15 +71,15 @@ describe('RequestsPage', () => {
     loading: WritableSignal<boolean>;
     loadError: WritableSignal<string | null>;
     notConfigured: WritableSignal<boolean>;
-    approveAsync: jasmine.Spy<(requestId: number) => Promise<void>>;
-    loadEditOptionsAsync: jasmine.Spy<(requestId: number) => Promise<SeerrRequestEditOptions>>;
-    describeActionError: jasmine.Spy<(error: unknown) => string>;
+    approveAsync: MockInstance<(requestId: number) => Promise<void>>;
+    loadEditOptionsAsync: MockInstance<(requestId: number) => Promise<SeerrRequestEditOptions>>;
+    describeActionError: MockInstance<(error: unknown) => string>;
   };
-  let dialog: jasmine.SpyObj<MatDialog>;
-  let snackBar: jasmine.SpyObj<MatSnackBar>;
+  let dialog: Record<'open', MockInstance>;
+  let snackBar: Record<'openFromComponent', MockInstance>;
 
   const toastData = (): { type: string; message: string } => {
-    const config: { data: { type: string; message: string } } = snackBar.openFromComponent.calls.mostRecent().args[1] as {
+    const config: { data: { type: string; message: string } } = snackBar.openFromComponent.mock.lastCall![1] as {
       data: { type: string; message: string };
     };
     return config.data;
@@ -108,26 +109,30 @@ describe('RequestsPage', () => {
       loading: signal<boolean>(false),
       loadError: signal<string | null>(null),
       notConfigured: signal<boolean>(false),
-      loadAsync: jasmine.createSpy('loadAsync').and.resolveTo(),
-      setStatusFilterAsync: jasmine.createSpy('setStatusFilterAsync').and.resolveTo(),
-      setPageAsync: jasmine.createSpy('setPageAsync').and.resolveTo(),
-      approveAsync: jasmine.createSpy('approveAsync').and.resolveTo(),
-      declineAsync: jasmine.createSpy('declineAsync').and.resolveTo(),
-      deleteAsync: jasmine.createSpy('deleteAsync').and.resolveTo(),
-      updateAsync: jasmine.createSpy('updateAsync').and.resolveTo(),
-      loadEditOptionsAsync: jasmine.createSpy('loadEditOptionsAsync').and.resolveTo({
+      loadAsync: vi.fn().mockResolvedValue(undefined),
+      setStatusFilterAsync: vi.fn().mockResolvedValue(undefined),
+      setPageAsync: vi.fn().mockResolvedValue(undefined),
+      approveAsync: vi.fn().mockResolvedValue(undefined),
+      declineAsync: vi.fn().mockResolvedValue(undefined),
+      deleteAsync: vi.fn().mockResolvedValue(undefined),
+      updateAsync: vi.fn().mockResolvedValue(undefined),
+      loadEditOptionsAsync: vi.fn().mockResolvedValue({
         qualityProfiles: [],
         rootFolders: [],
         seasons: [],
         profileId: null,
         rootFolder: null,
       } satisfies SeerrRequestEditOptions),
-      describeActionError: jasmine.createSpy('describeActionError').and.returnValue('The request could not be updated.'),
+      describeActionError: vi.fn().mockReturnValue('The request could not be updated.'),
     };
 
-    dialog = jasmine.createSpyObj<MatDialog>('MatDialog', ['open']);
-    dialog.open.and.returnValue({ afterClosed: () => of(undefined) } as never);
-    snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['openFromComponent']);
+    dialog = {
+      open: vi.fn<MatDialog['open']>(),
+    };
+    dialog.open.mockReturnValue({ afterClosed: () => of(undefined) } as never);
+    snackBar = {
+      openFromComponent: vi.fn<MatSnackBar['openFromComponent']>(),
+    };
 
     await TestBed.configureTestingModule({
       imports: [RequestsPage],
@@ -164,7 +169,7 @@ describe('RequestsPage', () => {
     fixture.detectChanges();
 
     const rows: NodeListOf<Element> = (fixture.nativeElement as HTMLElement).querySelectorAll('.requests-list-item');
-    expect(rows).toHaveSize(2);
+    expect(rows).toHaveLength(2);
 
     const firstRow: Element = rows[0];
     expect(firstRow.querySelector('.requests-item-title')?.textContent?.trim()).toBe('Sample Movie');
@@ -257,20 +262,20 @@ describe('RequestsPage', () => {
 
     const noDataSection: Element | null = (fixture.nativeElement as HTMLElement).querySelector('app-no-data-section');
     expect(noDataSection).not.toBeNull();
-    expect(fixture.componentInstance['isFiltered']()).toBeTrue();
+    expect(fixture.componentInstance['isFiltered']()).toBe(true);
   });
 
   it('applies a status filter when a chip is clicked', () => {
     fixture.detectChanges();
 
     const chips: NodeListOf<HTMLButtonElement> = (fixture.nativeElement as HTMLElement).querySelectorAll('.requests-filter-chip');
-    expect(chips).toHaveSize(6);
+    expect(chips).toHaveLength(6);
 
     chips[1].click();
     fixture.detectChanges();
 
     expect(stub.setStatusFilterAsync).toHaveBeenCalledWith('pending');
-    expect(chips[0].classList.contains('is-active')).toBeTrue();
+    expect(chips[0].classList.contains('is-active')).toBe(true);
   });
 
   it('does not reload when the active chip is clicked again', () => {
@@ -281,7 +286,7 @@ describe('RequestsPage', () => {
     chips[2].click();
 
     expect(stub.setStatusFilterAsync).not.toHaveBeenCalled();
-    expect(chips[2].classList.contains('is-active')).toBeTrue();
+    expect(chips[2].classList.contains('is-active')).toBe(true);
   });
 
   it('pages forward and backward through the results', () => {
@@ -294,8 +299,8 @@ describe('RequestsPage', () => {
     const previousButton: HTMLButtonElement = element.querySelector('.requests-pagination-button:not(:last-child)')!;
     const nextButton: HTMLButtonElement = element.querySelectorAll('.requests-pagination-button')[1] as HTMLButtonElement;
 
-    expect(previousButton.disabled).toBeFalse();
-    expect(nextButton.disabled).toBeFalse();
+    expect(previousButton.disabled).toBe(false);
+    expect(nextButton.disabled).toBe(false);
     expect(element.querySelector('.requests-pagination-info')?.textContent?.trim()).toBe('Page 2 of 3');
 
     nextButton.click();
@@ -313,8 +318,8 @@ describe('RequestsPage', () => {
 
     const element: HTMLElement = fixture.nativeElement as HTMLElement;
     const buttons: NodeListOf<HTMLButtonElement> = element.querySelectorAll('.requests-pagination-button');
-    expect(buttons[0].disabled).toBeTrue();
-    expect(buttons[1].disabled).toBeTrue();
+    expect(buttons[0].disabled).toBe(true);
+    expect(buttons[1].disabled).toBe(true);
     expect(element.querySelector('.requests-pagination-info')?.textContent?.trim()).toBe('Page 1 of 1');
   });
 
@@ -344,7 +349,7 @@ describe('RequestsPage', () => {
     expect(rows[2].querySelector('.requests-action-edit')).toBeNull();
     expect(rows[2].querySelector('.requests-action-delete')).not.toBeNull();
 
-    expect(rows[3].querySelectorAll('.requests-action-button')).toHaveSize(1);
+    expect(rows[3].querySelectorAll('.requests-action-button')).toHaveLength(1);
   });
 
   it('mirrors the inline actions in the overflow menu', async () => {
@@ -354,7 +359,7 @@ describe('RequestsPage', () => {
     await openOverflowMenu(0);
 
     const texts: string[] = overflowItemTexts();
-    expect(texts).toHaveSize(4);
+    expect(texts).toHaveLength(4);
     expect(texts[0]).toContain('Approve');
     expect(texts[1]).toContain('Decline');
     expect(texts[2]).toContain('Edit');
@@ -368,7 +373,7 @@ describe('RequestsPage', () => {
     await openOverflowMenu(0);
 
     const texts: string[] = overflowItemTexts();
-    expect(texts).toHaveSize(1);
+    expect(texts).toHaveLength(1);
     expect(texts[0]).toContain('Delete');
   });
 
@@ -380,7 +385,7 @@ describe('RequestsPage', () => {
     const items: NodeListOf<HTMLElement> = document.querySelectorAll('.mat-mdc-menu-panel .mat-mdc-menu-item');
     items[0].click();
 
-    expect(stub.approveAsync).toHaveBeenCalledOnceWith(1);
+    expect(stub.approveAsync).toHaveBeenCalledExactlyOnceWith(1);
   });
 
   it('approves the request, reloads and shows a success toast', async () => {
@@ -390,15 +395,15 @@ describe('RequestsPage', () => {
 
     await fixture.componentInstance['approveAsync'](request);
 
-    expect(stub.approveAsync).toHaveBeenCalledOnceWith(1);
+    expect(stub.approveAsync).toHaveBeenCalledExactlyOnceWith(1);
     expect(stub.loadAsync).toHaveBeenCalledTimes(2);
     expect(toastData()).toEqual({ type: 'success', message: 'Request approved.' });
   });
 
   it('reports the described problem and skips the reload when the approval fails', async () => {
     const request: SeerrRequest = createRequest();
-    stub.approveAsync.and.rejectWith(new HttpErrorResponse({ status: 404, error: { detail: 'Request not found.' } }));
-    stub.describeActionError.and.returnValue('Request not found.');
+    stub.approveAsync.mockRejectedValue(new HttpErrorResponse({ status: 404, error: { detail: 'Request not found.' } }));
+    stub.describeActionError.mockReturnValue('Request not found.');
     stub.requests.set([request]);
     fixture.detectChanges();
 
@@ -410,12 +415,12 @@ describe('RequestsPage', () => {
 
   it('declines with the reason from the dialog', async () => {
     const request: SeerrRequest = createRequest();
-    dialog.open.and.returnValue({ afterClosed: () => of('not now') } as never);
+    dialog.open.mockReturnValue({ afterClosed: () => of('not now') } as never);
 
     await fixture.componentInstance['declineWithDialogAsync'](request);
 
-    expect(dialog.open).toHaveBeenCalledWith(RequestDeclineDialogWidget, jasmine.objectContaining({ data: { title: 'Sample Movie' } }));
-    expect(stub.declineAsync).toHaveBeenCalledOnceWith(1, 'not now');
+    expect(dialog.open).toHaveBeenCalledWith(RequestDeclineDialogWidget, expect.objectContaining({ data: { title: 'Sample Movie' } }));
+    expect(stub.declineAsync).toHaveBeenCalledExactlyOnceWith(1, 'not now');
     expect(toastData()).toEqual({ type: 'success', message: 'Request declined.' });
   });
 
@@ -428,17 +433,17 @@ describe('RequestsPage', () => {
 
   it('deletes after the confirmation dialog resolves with true', async () => {
     const request: SeerrRequest = createRequest();
-    dialog.open.and.returnValue({ afterClosed: () => of(true) } as never);
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) } as never);
 
     await fixture.componentInstance['deleteWithDialogAsync'](request);
 
-    expect(dialog.open).toHaveBeenCalledWith(RequestDeleteDialogWidget, jasmine.objectContaining({ data: { title: 'Sample Movie' } }));
-    expect(stub.deleteAsync).toHaveBeenCalledOnceWith(1);
+    expect(dialog.open).toHaveBeenCalledWith(RequestDeleteDialogWidget, expect.objectContaining({ data: { title: 'Sample Movie' } }));
+    expect(stub.deleteAsync).toHaveBeenCalledExactlyOnceWith(1);
     expect(toastData()).toEqual({ type: 'success', message: 'Request deleted.' });
   });
 
   it('keeps the request when the delete dialog is cancelled', async () => {
-    dialog.open.and.returnValue({ afterClosed: () => of(false) } as never);
+    dialog.open.mockReturnValue({ afterClosed: () => of(false) } as never);
 
     await fixture.componentInstance['deleteWithDialogAsync'](createRequest());
 
@@ -448,24 +453,24 @@ describe('RequestsPage', () => {
   it('saves the freshly loaded edits and approves the request right away', async () => {
     const request: SeerrRequest = createRequest();
     const update: SeerrRequestUpdate = { profileId: 16, rootFolder: '/media/videos/movies' };
-    stub.loadEditOptionsAsync.and.resolveTo(movieOptions);
-    dialog.open.and.returnValue({ afterClosed: () => of(update) } as never);
+    stub.loadEditOptionsAsync.mockResolvedValue(movieOptions);
+    dialog.open.mockReturnValue({ afterClosed: () => of(update) } as never);
 
     await fixture.componentInstance['editWithDialogAsync'](request);
 
-    expect(stub.loadEditOptionsAsync).toHaveBeenCalledOnceWith(1);
+    expect(stub.loadEditOptionsAsync).toHaveBeenCalledExactlyOnceWith(1);
     expect(dialog.open).toHaveBeenCalledWith(
       RequestEditDialogWidget,
-      jasmine.objectContaining({ data: { title: 'Sample Movie', options: movieOptions } }),
+      expect.objectContaining({ data: { title: 'Sample Movie', options: movieOptions } }),
     );
-    expect(stub.updateAsync).toHaveBeenCalledOnceWith(1, update);
-    expect(stub.approveAsync).toHaveBeenCalledOnceWith(1);
+    expect(stub.updateAsync).toHaveBeenCalledExactlyOnceWith(1, update);
+    expect(stub.approveAsync).toHaveBeenCalledExactlyOnceWith(1);
     expect(toastData()).toEqual({ type: 'success', message: 'Request approved.' });
   });
 
   it('shows a toast and skips the dialog when the edit options cannot be loaded', async () => {
-    stub.loadEditOptionsAsync.and.rejectWith(new HttpErrorResponse({ status: 502, error: { title: 'Seerr is not reachable.' } }));
-    stub.describeActionError.and.returnValue('Seerr is not reachable.');
+    stub.loadEditOptionsAsync.mockRejectedValue(new HttpErrorResponse({ status: 502, error: { title: 'Seerr is not reachable.' } }));
+    stub.describeActionError.mockReturnValue('Seerr is not reachable.');
 
     await fixture.componentInstance['editWithDialogAsync'](createRequest());
 
@@ -477,7 +482,7 @@ describe('RequestsPage', () => {
   it('ignores further actions while one action runs', async () => {
     const request: SeerrRequest = createRequest();
     let release: () => void = (): void => undefined;
-    stub.approveAsync.and.callFake(
+    stub.approveAsync.mockImplementation(
       () =>
         new Promise<void>((resolve: () => void): void => {
           release = resolve;

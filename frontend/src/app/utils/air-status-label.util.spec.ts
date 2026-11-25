@@ -26,7 +26,7 @@ describe('airStatusLabel', () => {
     };
 
     for (const [status, label] of Object.entries(expected)) {
-      expect(airStatusLabel(status, i18n)).withContext(status).toBe(label);
+      expect(airStatusLabel(status, i18n), status).toBe(label);
     }
   });
 

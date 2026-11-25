@@ -1,4 +1,5 @@
 import { HttpClient, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
+import type { MockInstance } from 'vitest';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { TwoFactorStateBackend } from '../interfaces/auth/two-factor-state-backend';
@@ -10,9 +11,11 @@ describe('AuthService', () => {
   let service: AuthService;
   let httpController: HttpTestingController;
   let http: HttpClient;
-  const i18nSpy: jasmine.SpyObj<AppI18nService> = jasmine.createSpyObj<AppI18nService>('AppI18nService', ['t']);
+  const i18nSpy: Record<'t', MockInstance> = {
+    t: vi.fn<AppI18nService['t']>(),
+  };
 
-  i18nSpy.t.and.callFake((key: string): string => key);
+  i18nSpy.t.mockImplementation((key: string): string => key);
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -84,7 +87,7 @@ describe('AuthService', () => {
 
     request.flush({ requiresTwoFactor: false });
 
-    expect(await login).toBeFalse();
+    expect(await login).toBe(false);
     expect(service.state()).toBe('authenticated');
     expect(request.request.body).toEqual({ username: 'admin', password: 'secret123456', remember: true });
   });
@@ -94,7 +97,7 @@ describe('AuthService', () => {
 
     httpController.expectOne('/api/auth/login').flush({ requiresTwoFactor: true });
 
-    expect(await login).toBeTrue();
+    expect(await login).toBe(true);
     expect(service.state()).not.toBe('authenticated');
   });
 
@@ -136,9 +139,9 @@ describe('AuthService', () => {
   it('should handle a session expiry exactly once', async () => {
     await probeState(false, false);
 
-    expect(service.handleSessionExpired()).toBeTrue();
+    expect(service.handleSessionExpired()).toBe(true);
     expect(service.state()).toBe('anonymous');
-    expect(service.handleSessionExpired()).toBeFalse();
+    expect(service.handleSessionExpired()).toBe(false);
   });
 
   it('should cache the antiforgery token until it is invalidated', async () => {
@@ -162,7 +165,7 @@ describe('AuthService', () => {
 
     httpController.expectOne('/api/auth/two-factor/state').flush({ pending: true, expiresAt: '2026-10-19T12:00:00Z' });
 
-    await expectAsync(query).toBeResolvedTo({ pending: true, expiresAt: '2026-10-19T12:00:00Z' });
+    await expect(query).resolves.toEqual({ pending: true, expiresAt: '2026-10-19T12:00:00Z' });
   });
 
   it('should clear the cached antiforgery token when the session ends', async () => {
@@ -197,7 +200,7 @@ describe('AuthService', () => {
     ['es-ES', 'en'],
   ]) {
     it(`includes ${language} in setup for browser language ${browserLanguage}`, async () => {
-      spyOnProperty(globalThis.navigator, 'language', 'get').and.returnValue(browserLanguage);
+      vi.spyOn(globalThis.navigator, 'language', 'get').mockReturnValue(browserLanguage);
       const setup = service.setupAsync('admin', 'test-password-value', 'test-password-value');
       const request = httpController.expectOne('/api/auth/setup');
       expect(request.request.body).toEqual({

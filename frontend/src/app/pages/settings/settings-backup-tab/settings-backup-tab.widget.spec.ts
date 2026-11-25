@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { BackupApplyResult } from '../../../interfaces/backup/backup-apply-result';
 import { BackupExportRequest } from '../../../interfaces/backup/backup-export-request';
 import { BackupImportPreview } from '../../../interfaces/backup/backup-import-preview';
@@ -14,9 +15,18 @@ import { SettingsBackupTabWidget } from './settings-backup-tab.widget';
 
 describe('SettingsBackupTabWidget', () => {
   let fixture: ComponentFixture<SettingsBackupTabWidget>;
-  let backup: jasmine.SpyObj<BackupService>;
-  let account: jasmine.SpyObj<AccountService>;
-  let download: jasmine.SpyObj<BackupDownload>;
+  let backup: Record<
+    | 'exportAsync'
+    | 'validateImportAsync'
+    | 'applyImportAsync'
+    | 'discardImportAsync'
+    | 'getStatusAsync'
+    | 'translateError'
+    | 'reloadApplication',
+    MockInstance
+  >;
+  let account: Record<'getAccountAsync', MockInstance>;
+  let download: BackupDownload;
 
   const longPassword: string = 'a-very-long-backup-passphrase';
 
@@ -79,7 +89,7 @@ describe('SettingsBackupTabWidget', () => {
     );
 
     if (button === undefined) {
-      fail(`no button labelled ${labelKey}`);
+      throw new Error(`no button labelled ${labelKey}`);
     }
 
     return button as HTMLButtonElement;
@@ -181,9 +191,9 @@ describe('SettingsBackupTabWidget', () => {
 
   async function create(options: { twoFactorEnabled?: boolean; accountFails?: boolean } = {}): Promise<void> {
     if (options.accountFails ?? false) {
-      account.getAccountAsync.and.rejectWith(new Error('offline'));
+      account.getAccountAsync.mockRejectedValue(new Error('offline'));
     } else {
-      account.getAccountAsync.and.resolveTo({
+      account.getAccountAsync.mockResolvedValue({
         username: 'admin',
         twoFactorEnabled: options.twoFactorEnabled ?? false,
         recoveryCodesRemaining: 8,
@@ -206,28 +216,31 @@ describe('SettingsBackupTabWidget', () => {
   }
 
   beforeEach(async () => {
-    download = jasmine.createSpyObj<BackupDownload>('BackupDownload', ['save']);
-    backup = jasmine.createSpyObj<BackupService>('BackupService', [
-      'exportAsync',
-      'validateImportAsync',
-      'applyImportAsync',
-      'discardImportAsync',
-      'getStatusAsync',
-      'translateError',
-      'reloadApplication',
-    ]);
-    backup.exportAsync.and.resolveTo(download);
-    backup.validateImportAsync.and.resolveTo(checkedArchive);
-    backup.applyImportAsync.and.resolveTo({
+    download = new BackupDownload(new Blob(['archive']), 'libmanagarr-backup.tar.gz');
+    vi.spyOn(download, 'save').mockImplementation(() => undefined);
+    backup = {
+      exportAsync: vi.fn<BackupService['exportAsync']>(),
+      validateImportAsync: vi.fn<BackupService['validateImportAsync']>(),
+      applyImportAsync: vi.fn<BackupService['applyImportAsync']>(),
+      discardImportAsync: vi.fn<BackupService['discardImportAsync']>(),
+      getStatusAsync: vi.fn<BackupService['getStatusAsync']>(),
+      translateError: vi.fn<BackupService['translateError']>(),
+      reloadApplication: vi.fn<BackupService['reloadApplication']>(),
+    };
+    backup.exportAsync.mockResolvedValue(download);
+    backup.validateImportAsync.mockResolvedValue(checkedArchive);
+    backup.applyImportAsync.mockResolvedValue({
       operationId: 'op-1',
       appliedAt: '2026-11-03T10:00:00.000Z',
       restartRequired: true,
     } satisfies BackupApplyResult);
-    backup.discardImportAsync.and.resolveTo();
-    backup.getStatusAsync.and.resolveTo(statusOf('Idle'));
-    backup.translateError.and.returnValue('translated failure');
+    backup.discardImportAsync.mockResolvedValue(undefined);
+    backup.getStatusAsync.mockResolvedValue(statusOf('Idle'));
+    backup.translateError.mockReturnValue('translated failure');
 
-    account = jasmine.createSpyObj<AccountService>('AccountService', ['getAccountAsync']);
+    account = {
+      getAccountAsync: vi.fn<AccountService['getAccountAsync']>(),
+    };
 
     await TestBed.configureTestingModule({
       imports: [SettingsBackupTabWidget],
@@ -263,18 +276,18 @@ describe('SettingsBackupTabWidget', () => {
     expect(element().querySelector('#export-backup-password-confirm')).toBeTruthy();
     expect(element().querySelector('#export-current-password')).toBeTruthy();
     expect(element().querySelector('#export-code')).toBeNull();
-    expect(buttonOf('settings.backup.export').disabled).toBeTrue();
+    expect(buttonOf('settings.backup.export').disabled).toBe(true);
   });
 
   it('hands the typed archive password and identity proof to the export and marks it delivered', async () => {
     await create();
     await fillExportFields();
 
-    expect(buttonOf('settings.backup.export').disabled).toBeFalse();
+    expect(buttonOf('settings.backup.export').disabled).toBe(false);
 
     await clickButton('settings.backup.export');
 
-    expect(backup.exportAsync).toHaveBeenCalledOnceWith({
+    expect(backup.exportAsync).toHaveBeenCalledExactlyOnceWith({
       backupPassword: longPassword,
       currentPassword: 'account-secret',
       code: undefined,
@@ -311,17 +324,17 @@ describe('SettingsBackupTabWidget', () => {
 
   it('holds a refused account proof at its own input and lets the attempt be made again', async () => {
     await create();
-    backup.exportAsync.and.rejectWith(new AuthRequestError('refused', 400, 'backup_identity_verification_failed', {}));
+    backup.exportAsync.mockRejectedValue(new AuthRequestError('refused', 400, 'backup_identity_verification_failed', {}));
     await fillExportFields();
 
     await clickButton('settings.backup.export');
 
     expect(fieldErrorText('export-current-password')).toContain('translated failure');
-    expect(hasErrorFrame('export-current-password')).toBeTrue();
-    expect(hasErrorFrame('export-backup-password')).toBeFalse();
+    expect(hasErrorFrame('export-current-password')).toBe(true);
+    expect(hasErrorFrame('export-backup-password')).toBe(false);
     expect(iconStateOf('settings.backup.export')).toBe('error');
     expect(element().querySelector('.feedback.error')).toBeNull();
-    expect(buttonOf('settings.backup.export').disabled).toBeFalse();
+    expect(buttonOf('settings.backup.export').disabled).toBe(false);
 
     await clickButton('settings.backup.export');
 
@@ -331,7 +344,7 @@ describe('SettingsBackupTabWidget', () => {
   /** The button stops pointing at a refusal once its moment has passed; the field keeps reasoning about it. */
   it('takes the refusal mark off the button while the reason under the field stays readable', async () => {
     await create();
-    backup.exportAsync.and.rejectWith(new AuthRequestError('refused', 400, 'backup_identity_verification_failed', {}));
+    backup.exportAsync.mockRejectedValue(new AuthRequestError('refused', 400, 'backup_identity_verification_failed', {}));
     await fillExportFields();
 
     await clickButton('settings.backup.export');
@@ -346,49 +359,49 @@ describe('SettingsBackupTabWidget', () => {
 
   it('holds a too weak archive password at the field that asked for it', async () => {
     await create();
-    backup.exportAsync.and.rejectWith(new AuthRequestError('weak', 400, 'backup_weak_password', {}));
+    backup.exportAsync.mockRejectedValue(new AuthRequestError('weak', 400, 'backup_weak_password', {}));
     await fillExportFields();
 
     await clickButton('settings.backup.export');
 
     expect(fieldErrorText('export-backup-password')).toContain('translated failure');
     expect(fieldErrorText('export-current-password')).toBe('<no field error shown>');
-    expect(hasErrorFrame('export-backup-password')).toBeTrue();
-    expect(hasErrorFrame('export-current-password')).toBeFalse();
+    expect(hasErrorFrame('export-backup-password')).toBe(true);
+    expect(hasErrorFrame('export-current-password')).toBe(false);
   });
 
   it('offers no retry button for an action the backend refused, because retrying repeats the mistake', async () => {
     await create();
-    backup.exportAsync.and.rejectWith(new AuthRequestError('refused', 400, 'backup_identity_verification_failed', {}));
+    backup.exportAsync.mockRejectedValue(new AuthRequestError('refused', 400, 'backup_identity_verification_failed', {}));
     await fillExportFields();
 
     await clickButton('settings.backup.export');
 
-    expect(hasButton('auth.errorRetry')).toBeFalse();
+    expect(hasButton('auth.errorRetry')).toBe(false);
   });
 
   it('locks the export card while its call runs and lets it go again afterwards', async () => {
     await create();
     const pending: { promise: Promise<BackupDownload>; resolve: (download: BackupDownload) => void } = pendingCall<BackupDownload>();
-    backup.exportAsync.and.returnValue(pending.promise);
+    backup.exportAsync.mockReturnValue(pending.promise);
     await fillExportFields();
 
     buttonOf('settings.backup.export').click();
     fixture.detectChanges();
 
-    expect(buttonOf('settings.backup.export').disabled).toBeTrue();
-    expect(spinsOn('settings.backup.export')).toBeTrue();
+    expect(buttonOf('settings.backup.export').disabled).toBe(true);
+    expect(spinsOn('settings.backup.export')).toBe(true);
     expect(backup.exportAsync).toHaveBeenCalledTimes(1);
 
     pending.resolve(download);
     await settleAsync();
 
-    expect(spinsOn('settings.backup.export')).toBeFalse();
+    expect(spinsOn('settings.backup.export')).toBe(false);
 
     // A finished export empties its fields on purpose, so the released lock shows itself on the next attempt.
     await fillExportFields();
 
-    expect(buttonOf('settings.backup.export').disabled).toBeFalse();
+    expect(buttonOf('settings.backup.export').disabled).toBe(false);
 
     await clickButton('settings.backup.export');
 
@@ -397,14 +410,14 @@ describe('SettingsBackupTabWidget', () => {
 
   it('drops the previous reason the moment a new attempt starts', async () => {
     await create();
-    backup.exportAsync.and.rejectWith(new AuthRequestError('refused', 400, 'backup_invalid_password', {}));
+    backup.exportAsync.mockRejectedValue(new AuthRequestError('refused', 400, 'backup_invalid_password', {}));
     await fillExportFields();
     await clickButton('settings.backup.export');
 
     expect(element().querySelector('.feedback.error')).toBeTruthy();
 
     const pending: { promise: Promise<BackupDownload>; resolve: (download: BackupDownload) => void } = pendingCall<BackupDownload>();
-    backup.exportAsync.and.returnValue(pending.promise);
+    backup.exportAsync.mockReturnValue(pending.promise);
 
     buttonOf('settings.backup.export').click();
     fixture.detectChanges();
@@ -424,8 +437,8 @@ describe('SettingsBackupTabWidget', () => {
     touch('export-backup-password-confirm');
 
     expect(element().querySelector('.field-error')?.textContent).toContain('settings.backup.passwordMismatch');
-    expect(hasErrorFrame('export-backup-password-confirm')).toBeTrue();
-    expect(buttonOf('settings.backup.export').disabled).toBeTrue();
+    expect(hasErrorFrame('export-backup-password-confirm')).toBe(true);
+    expect(buttonOf('settings.backup.export').disabled).toBe(true);
     expect(backup.exportAsync).not.toHaveBeenCalled();
   });
 
@@ -460,7 +473,7 @@ describe('SettingsBackupTabWidget', () => {
 
     await clickButton('settings.backup.export');
 
-    expect(backup.exportAsync).toHaveBeenCalledOnceWith({
+    expect(backup.exportAsync).toHaveBeenCalledExactlyOnceWith({
       backupPassword: longPassword,
       currentPassword: 'account-secret',
       code: 'recovery-code',
@@ -495,7 +508,7 @@ describe('SettingsBackupTabWidget', () => {
     await create();
 
     expect(element().querySelector('#import-backup-password')).toBeNull();
-    expect(hasButton('settings.backup.validate')).toBeFalse();
+    expect(hasButton('settings.backup.validate')).toBe(false);
   });
 
   it('asks the import card for the password inside the archive and shows what is inside', async () => {
@@ -504,15 +517,15 @@ describe('SettingsBackupTabWidget', () => {
     await pickArchive(file);
 
     expect(element().textContent).toContain('libmanagarr-2026-11-02.lmbak');
-    expect(buttonOf('settings.backup.validate').disabled).toBeTrue();
+    expect(buttonOf('settings.backup.validate').disabled).toBe(true);
 
     setValue('import-backup-password', 'archive-passphrase');
 
-    expect(buttonOf('settings.backup.validate').disabled).toBeFalse();
+    expect(buttonOf('settings.backup.validate').disabled).toBe(false);
 
     await clickButton('settings.backup.validate');
 
-    expect(backup.validateImportAsync).toHaveBeenCalledOnceWith(file, 'archive-passphrase');
+    expect(backup.validateImportAsync).toHaveBeenCalledExactlyOnceWith(file, 'archive-passphrase');
     expect(textOf('backup-preview-version')).toBe('1.4.0');
     expect(textOf('backup-preview-current-version')).toBe('1.4.0');
     expect(textOf('backup-preview-current-library-schema')).toBe('7');
@@ -536,7 +549,7 @@ describe('SettingsBackupTabWidget', () => {
   it('keeps a corrupt archive in the import card with its password still typed', async () => {
     await create();
     await pickArchive(new File(['archive'], 'libmanagarr.lmbak'));
-    backup.validateImportAsync.and.rejectWith(new AuthRequestError('corrupt', 400, 'backup_corrupt_archive', {}));
+    backup.validateImportAsync.mockRejectedValue(new AuthRequestError('corrupt', 400, 'backup_corrupt_archive', {}));
 
     setValue('import-backup-password', 'archive-passphrase');
 
@@ -550,14 +563,14 @@ describe('SettingsBackupTabWidget', () => {
   it('holds a wrong archive password at the field that was asked for it', async () => {
     await create();
     await pickArchive(new File(['archive'], 'libmanagarr.lmbak'));
-    backup.validateImportAsync.and.rejectWith(new AuthRequestError('wrong', 400, 'backup_invalid_password', {}));
+    backup.validateImportAsync.mockRejectedValue(new AuthRequestError('wrong', 400, 'backup_invalid_password', {}));
 
     setValue('import-backup-password', 'archive-passphrase');
 
     await clickButton('settings.backup.validate');
 
     expect(fieldErrorText('import-backup-password')).toContain('translated failure');
-    expect(hasErrorFrame('import-backup-password')).toBeTrue();
+    expect(hasErrorFrame('import-backup-password')).toBe(true);
     expect(element().querySelector('.feedback.error')).toBeNull();
     expect(valueOf('import-backup-password')).toBe('archive-passphrase');
   });
@@ -578,15 +591,15 @@ describe('SettingsBackupTabWidget', () => {
 
     expect(element().querySelector('#apply-current-password')).toBeTruthy();
     expect(element().querySelector('.backup-summary')?.textContent).toContain('settings.backup.applySummary');
-    expect(buttonOf('settings.backup.apply').disabled).toBeTrue();
+    expect(buttonOf('settings.backup.apply').disabled).toBe(true);
 
     setValue('apply-current-password', 'account-secret');
 
-    expect(buttonOf('settings.backup.apply').disabled).toBeFalse();
+    expect(buttonOf('settings.backup.apply').disabled).toBe(false);
 
     await clickButton('settings.backup.apply');
 
-    expect(backup.applyImportAsync).toHaveBeenCalledOnceWith(checkedArchive.importId, proof);
+    expect(backup.applyImportAsync).toHaveBeenCalledExactlyOnceWith(checkedArchive.importId, proof);
     expect(element().querySelector('#backup-preview-version')).toBeNull();
     expect(element().querySelector('.backup-notice')?.textContent).toContain('settings.backup.waiting');
   });
@@ -595,14 +608,14 @@ describe('SettingsBackupTabWidget', () => {
     await create();
     fixture.componentInstance['preview'].set(checkedArchive);
     fixture.detectChanges();
-    backup.applyImportAsync.and.rejectWith(new AuthRequestError('refused', 400, 'backup_identity_verification_failed', {}));
+    backup.applyImportAsync.mockRejectedValue(new AuthRequestError('refused', 400, 'backup_identity_verification_failed', {}));
 
     setValue('apply-current-password', 'wrong-secret');
 
     await clickButton('settings.backup.apply');
 
     expect(fieldErrorText('apply-current-password')).toContain('translated failure');
-    expect(hasErrorFrame('apply-current-password')).toBeTrue();
+    expect(hasErrorFrame('apply-current-password')).toBe(true);
     expect(element().querySelector('.feedback.error')).toBeNull();
     expect(element().querySelector('#backup-preview-version')).toBeTruthy();
   });
@@ -611,7 +624,7 @@ describe('SettingsBackupTabWidget', () => {
     await create();
     fixture.componentInstance['preview'].set(checkedArchive);
     fixture.detectChanges();
-    backup.applyImportAsync.and.rejectWith(new AuthRequestError('gone', 404, 'backup_import_expired', {}));
+    backup.applyImportAsync.mockRejectedValue(new AuthRequestError('gone', 404, 'backup_import_expired', {}));
 
     setValue('apply-current-password', 'account-secret');
 
@@ -630,13 +643,13 @@ describe('SettingsBackupTabWidget', () => {
 
     await clickButton('settings.backup.discard');
 
-    expect(backup.discardImportAsync).toHaveBeenCalledOnceWith(checkedArchive.importId);
+    expect(backup.discardImportAsync).toHaveBeenCalledExactlyOnceWith(checkedArchive.importId);
     expect(element().querySelector('#backup-preview-version')).toBeNull();
     expect((element().querySelector('.file-input') as HTMLInputElement).value).toBe('');
   });
 
   it('shows automatic restart progress while a restore waits for the next host', async () => {
-    backup.getStatusAsync.and.resolveTo(statusOf('RestartPending'));
+    backup.getStatusAsync.mockResolvedValue(statusOf('RestartPending'));
     await create();
 
     expect(element().querySelector('.backup-notice')?.textContent).toContain('settings.backup.waiting');
@@ -659,31 +672,31 @@ describe('SettingsBackupTabWidget', () => {
 
     expect(element().textContent).toContain('settings.backup.waiting');
     expect(element().textContent).not.toContain('settings.backup.restartDelayed');
-    expect(buttonOf('settings.backup.export').disabled).toBeTrue();
-    expect(fixture.componentInstance.canDeactivate()).toBeFalse();
+    expect(buttonOf('settings.backup.export').disabled).toBe(true);
+    expect(fixture.componentInstance.canDeactivate()).toBe(false);
 
-    backup.getStatusAsync.and.rejectWith(new Error('offline during restart'));
+    backup.getStatusAsync.mockRejectedValue(new Error('offline during restart'));
     await pollOnce();
     expect(backup.reloadApplication).not.toHaveBeenCalled();
-    expect(hasButton('auth.errorRetry')).toBeFalse();
+    expect(hasButton('auth.errorRetry')).toBe(false);
 
-    backup.getStatusAsync.and.resolveTo(statusOf('Restored', 'an-older-operation'));
+    backup.getStatusAsync.mockResolvedValue(statusOf('Restored', 'an-older-operation'));
     await pollOnce();
     expect(backup.reloadApplication).not.toHaveBeenCalled();
     expect(element().textContent).toContain('settings.backup.waiting');
 
-    backup.getStatusAsync.and.resolveTo(statusOf('Restored', 'op-1'));
+    backup.getStatusAsync.mockResolvedValue(statusOf('Restored', 'op-1'));
     await pollOnce();
     expect(backup.reloadApplication).toHaveBeenCalledTimes(1);
     expect(element().textContent).toContain('settings.backup.restored');
     expect(fixture.componentInstance['restartPollTimer']).toBeUndefined();
-    expect(fixture.componentInstance.canDeactivate()).toBeTrue();
+    expect(fixture.componentInstance.canDeactivate()).toBe(true);
   });
 
   it('reports a rollback and refreshes the application after the matching restart', async () => {
     await create();
     fixture.componentInstance['beginRestartMonitoring']('op-1');
-    backup.getStatusAsync.and.resolveTo(statusOf('RestoreRolledBack', 'op-1'));
+    backup.getStatusAsync.mockResolvedValue(statusOf('RestoreRolledBack', 'op-1'));
 
     await pollOnce();
 
@@ -697,18 +710,18 @@ describe('SettingsBackupTabWidget', () => {
     await create();
     fixture.componentInstance['beginRestartMonitoring']('op-1');
     fixture.componentInstance['restartDeadline'] = Date.now() - 1;
-    backup.getStatusAsync.and.rejectWith(new Error('still offline'));
+    backup.getStatusAsync.mockRejectedValue(new Error('still offline'));
 
     await pollOnce();
 
     expect(element().textContent).toContain('settings.backup.restartDelayed');
-    expect(hasButton('auth.errorRetry')).toBeTrue();
-    expect(buttonOf('settings.backup.export').disabled).toBeTrue();
+    expect(hasButton('auth.errorRetry')).toBe(true);
+    expect(buttonOf('settings.backup.export').disabled).toBe(true);
     expect(backup.applyImportAsync).not.toHaveBeenCalled();
 
     await clickButton('auth.errorRetry');
     expect(element().textContent).toContain('settings.backup.waiting');
-    backup.getStatusAsync.and.resolveTo(statusOf('Restored', 'op-1'));
+    backup.getStatusAsync.mockResolvedValue(statusOf('Restored', 'op-1'));
     await pollOnce();
     expect(backup.reloadApplication).toHaveBeenCalledTimes(1);
     expect(backup.applyImportAsync).not.toHaveBeenCalled();
@@ -719,7 +732,7 @@ describe('SettingsBackupTabWidget', () => {
     fixture.componentInstance['beginRestartMonitoring']('op-1');
     fixture.componentInstance['stopRestartPolling']();
     const pending = pendingCall<BackupStatus>();
-    backup.getStatusAsync.and.returnValue(pending.promise);
+    backup.getStatusAsync.mockReturnValue(pending.promise);
     const polling: Promise<void> = fixture.componentInstance['pollRestartAsync']();
 
     fixture.destroy();
@@ -731,31 +744,31 @@ describe('SettingsBackupTabWidget', () => {
   });
 
   it('reports a finished restore without asking to rotate recovery codes', async () => {
-    backup.getStatusAsync.and.resolveTo(statusOf('Restored'));
+    backup.getStatusAsync.mockResolvedValue(statusOf('Restored'));
     await create();
 
     const notice: HTMLElement = element().querySelector('.backup-notice') as HTMLElement;
     expect(notice.textContent).toContain('settings.backup.restored');
-    expect(notice.classList.contains('backup-warning')).toBeFalse();
+    expect(notice.classList.contains('backup-warning')).toBe(false);
     expect(element().querySelector('.backup-hint')).toBeNull();
   });
 
   it('marks a rolled back restore as a failure', async () => {
-    backup.getStatusAsync.and.resolveTo(statusOf('RestoreRolledBack'));
+    backup.getStatusAsync.mockResolvedValue(statusOf('RestoreRolledBack'));
     await create();
 
     const notice: HTMLElement = element().querySelector('.backup-notice') as HTMLElement;
     expect(notice.textContent).toContain('settings.backup.restoreRolledBack');
-    expect(notice.classList.contains('backup-warning')).toBeTrue();
+    expect(notice.classList.contains('backup-warning')).toBe(true);
   });
 
   it('offers retry for a failed load and reloads account and status when used', async () => {
     await create({ accountFails: true });
 
     expect(element().textContent).toContain('translated failure');
-    expect(hasButton('auth.errorRetry')).toBeTrue();
+    expect(hasButton('auth.errorRetry')).toBe(true);
 
-    account.getAccountAsync.and.resolveTo({
+    account.getAccountAsync.mockResolvedValue({
       username: 'admin',
       twoFactorEnabled: false,
       recoveryCodesRemaining: 8,
@@ -769,13 +782,13 @@ describe('SettingsBackupTabWidget', () => {
 
   it('asks the page to keep the tab until the checked archive is dropped', async () => {
     await create();
-    spyOn(globalThis, 'confirm').and.returnValue(false);
+    vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
 
-    expect(fixture.componentInstance.canDeactivate()).toBeTrue();
+    expect(fixture.componentInstance.canDeactivate()).toBe(true);
 
     fixture.componentInstance['preview'].set(checkedArchive);
 
-    expect(fixture.componentInstance.canDeactivate()).toBeFalse();
+    expect(fixture.componentInstance.canDeactivate()).toBe(false);
     expect(backup.discardImportAsync).not.toHaveBeenCalled();
   });
 });

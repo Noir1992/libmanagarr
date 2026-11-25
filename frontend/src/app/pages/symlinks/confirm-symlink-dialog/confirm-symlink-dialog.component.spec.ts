@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { ExistingLinkConfirmation, SymlinkFinding, SymlinkLink, SymlinkLinkPlan } from '../../../interfaces/symlinks/symlink-link';
 import { SymlinkSuggestion } from '../../../interfaces/symlinks/symlink-suggestion';
@@ -83,11 +84,11 @@ function createFinding(code: string, detail: string): SymlinkFinding {
 describe('ConfirmSymlinkDialogComponent', () => {
   let fixture: ComponentFixture<ConfirmSymlinkDialogComponent>;
   let element: HTMLElement;
-  let previewLink: jasmine.Spy<(request: unknown) => Promise<SymlinkLinkPlan>>;
-  let confirmSuggestion: jasmine.Spy<
+  let previewLink: MockInstance<(request: unknown) => Promise<SymlinkLinkPlan>>;
+  let confirmSuggestion: MockInstance<
     (id: string, configRevision: number, sourceVersion?: string | null, existingLink?: ExistingLinkConfirmation) => Promise<SymlinkLink>
   >;
-  let dialogRef: jasmine.SpyObj<MatDialogRef<ConfirmSymlinkDialogComponent>>;
+  let dialogRef: Record<'close', MockInstance>;
 
   const data: ConfirmSymlinkDialogData = { suggestion: createSuggestion(), configRevision: 7 };
 
@@ -111,9 +112,11 @@ describe('ConfirmSymlinkDialogComponent', () => {
   }
 
   beforeEach(async () => {
-    previewLink = jasmine.createSpy('previewLink').and.resolveTo({ runnable: true, draft: createDraft(), blockers: [], warnings: [] });
-    confirmSuggestion = jasmine.createSpy('confirmSuggestion').and.resolveTo(createDraft({ id: 'link-1' }));
-    dialogRef = jasmine.createSpyObj<MatDialogRef<ConfirmSymlinkDialogComponent>>('MatDialogRef', ['close']);
+    previewLink = vi.fn().mockResolvedValue({ runnable: true, draft: createDraft(), blockers: [], warnings: [] });
+    confirmSuggestion = vi.fn().mockResolvedValue(createDraft({ id: 'link-1' }));
+    dialogRef = {
+      close: vi.fn<MatDialogRef<ConfirmSymlinkDialogComponent>['close']>(),
+    };
 
     await TestBed.configureTestingModule({
       providers: [
@@ -153,7 +156,7 @@ describe('ConfirmSymlinkDialogComponent', () => {
   });
 
   it('shows the source and destination instance names from the current preview', async () => {
-    previewLink.and.resolveTo({
+    previewLink.mockResolvedValue({
       runnable: true,
       draft: createDraft({ radarrInstanceName: 'Movies on NAS', sonarrInstanceName: 'Test Sonarr' }),
       blockers: [],
@@ -171,7 +174,7 @@ describe('ConfirmSymlinkDialogComponent', () => {
   });
 
   it('leaves the last word to the blocker that stands in the way', async () => {
-    previewLink.and.resolveTo({
+    previewLink.mockResolvedValue({
       runnable: false,
       draft: createDraft(),
       blockers: [createFinding('TargetOccupied', 'Another file already sits at that path.')],
@@ -185,7 +188,7 @@ describe('ConfirmSymlinkDialogComponent', () => {
     expect(text).toContain('SourceWithoutKnownSize');
     expect(text).toContain('The size of the file is not known.');
     expect(element.querySelector('.plan-refused')?.textContent).toContain('cannot be created while something stands in the way');
-    expect(actionButtons()[1].disabled).toBeTrue();
+    expect(actionButtons()[1].disabled).toBe(true);
   });
 
   it('confirms with the configuration the preview was drawn from', async () => {
@@ -195,12 +198,12 @@ describe('ConfirmSymlinkDialogComponent', () => {
     await settle();
 
     expect(confirmSuggestion).toHaveBeenCalledWith('suggestion-1', 7, null);
-    expect(dialogRef.close).toHaveBeenCalledWith(jasmine.objectContaining({ id: 'link-1' }));
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ id: 'link-1' }));
   });
 
   it('keeps the label and shows the spinner on the button while the write runs', async () => {
     let finishWrite: ((link: SymlinkLink) => void) | undefined;
-    confirmSuggestion.and.returnValue(new Promise<SymlinkLink>((resolve) => (finishWrite = resolve)));
+    confirmSuggestion.mockReturnValue(new Promise<SymlinkLink>((resolve) => (finishWrite = resolve)));
     await open();
 
     actionButtons()[1].click();
@@ -208,18 +211,18 @@ describe('ConfirmSymlinkDialogComponent', () => {
 
     // The label names the action that is running; only the icon beside it reports the progress.
     const button = actionButtons()[1];
-    expect(button.disabled).toBeTrue();
+    expect(button.disabled).toBe(true);
     expect(button.textContent).toContain('Create it now');
     expect(button.textContent).not.toContain('Loading data...');
     expect(button.querySelector('mat-icon.spinning')).not.toBeNull();
 
     finishWrite?.(createDraft({ id: 'link-1' }));
     await settle();
-    expect(dialogRef.close).toHaveBeenCalledWith(jasmine.objectContaining({ id: 'link-1' }));
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ id: 'link-1' }));
   });
 
   it('shows the existing link and its metadata and explicitly confirms adoption', async () => {
-    previewLink.and.resolveTo({
+    previewLink.mockResolvedValue({
       runnable: true,
       adoptsExisting: true,
       draft: createDraft({
@@ -245,7 +248,7 @@ describe('ConfirmSymlinkDialogComponent', () => {
     expect(content).toContain('WEBDL-1080p');
     expect(Array.from(element.querySelectorAll('.plan-grid dt'), (label) => label.textContent?.trim())).not.toContain('Desired filename');
     expect(actionButtons()[1].textContent).toContain('Adopt this link');
-    expect(actionButtons()[1].disabled).toBeFalse();
+    expect(actionButtons()[1].disabled).toBe(false);
     actionButtons()[1].click();
     await settle();
     expect(confirmSuggestion).toHaveBeenCalledWith('suggestion-1', 7, 'source-v1', {
@@ -256,7 +259,7 @@ describe('ConfirmSymlinkDialogComponent', () => {
   });
 
   it('shows both targets and explicitly confirms repairing a broken link', async () => {
-    previewLink.and.resolveTo({
+    previewLink.mockResolvedValue({
       runnable: false,
       canRepairExisting: true,
       repairLinkText: '../../../movies/correct.mkv',
@@ -268,7 +271,7 @@ describe('ConfirmSymlinkDialogComponent', () => {
     expect(element.querySelector('.dialog-title')?.textContent).toContain('Repair and adopt symlink');
     expect(element.querySelector('.dialog-content')?.textContent).toContain('/wrong/movie.mkv');
     expect(element.querySelector('.dialog-content')?.textContent).toContain('../../../movies/correct.mkv');
-    expect(actionButtons()[1].disabled).toBeFalse();
+    expect(actionButtons()[1].disabled).toBe(false);
     expect(actionButtons()[1].textContent).toContain('Repair and adopt');
     actionButtons()[1].click();
     await settle();
@@ -282,7 +285,7 @@ describe('ConfirmSymlinkDialogComponent', () => {
 
   it('keeps the window open and says so when the write was refused', async () => {
     await open();
-    confirmSuggestion.and.rejectWith(new Error('The path configuration moved.'));
+    confirmSuggestion.mockRejectedValue(new Error('The path configuration moved.'));
 
     actionButtons()[1].click();
     await fixture.whenStable();
@@ -293,7 +296,7 @@ describe('ConfirmSymlinkDialogComponent', () => {
   });
 
   it('reports a preview that never arrived instead of an empty window', async () => {
-    previewLink.and.rejectWith(new Error('The movie is not in the snapshot.'));
+    previewLink.mockRejectedValue(new Error('The movie is not in the snapshot.'));
     await open();
 
     expect(element.querySelector('.feedback.error')?.textContent).toContain('The movie is not in the snapshot.');

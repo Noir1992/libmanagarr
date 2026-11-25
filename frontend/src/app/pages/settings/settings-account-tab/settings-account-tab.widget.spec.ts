@@ -1,4 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
+import type { MockInstance } from 'vitest';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Signal, WritableSignal } from '@angular/core';
 import { Router } from '@angular/router';
@@ -37,16 +38,21 @@ const ENABLED_ACCOUNT: AccountBackend = { username: 'admin', twoFactorEnabled: t
 
 describe('SettingsAccountTabWidget', () => {
   let httpController: HttpTestingController;
-  let router: jasmine.SpyObj<Router>;
+  let router: Record<'navigateByUrl', MockInstance>;
 
-  const i18nSpy: jasmine.SpyObj<AppI18nService> = jasmine.createSpyObj<AppI18nService>('AppI18nService', ['t', 'tCount']);
+  const i18nSpy: Record<'t' | 'tCount', MockInstance> = {
+    t: vi.fn<AppI18nService['t']>(),
+    tCount: vi.fn<AppI18nService['tCount']>(),
+  };
 
-  i18nSpy.t.and.callFake((key: string): string => key);
-  i18nSpy.tCount.and.callFake((count: number, one: string, plural: string): string => (count === 1 ? one : plural));
+  i18nSpy.t.mockImplementation((key: string): string => key);
+  i18nSpy.tCount.mockImplementation((count: number, one: string, plural: string): string => (count === 1 ? one : plural));
 
   beforeEach(() => {
-    router = jasmine.createSpyObj<Router>('Router', ['navigateByUrl']);
-    router.navigateByUrl.and.resolveTo(true);
+    router = {
+      navigateByUrl: vi.fn<Router['navigateByUrl']>(),
+    };
+    router.navigateByUrl.mockResolvedValue(true);
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -108,21 +114,21 @@ describe('SettingsAccountTabWidget', () => {
     confirmPassword.setValue('short');
     fixture.detectChanges();
 
-    expect(newPassword.hasError('minlength')).toBeTrue();
+    expect(newPassword.hasError('minlength')).toBe(true);
     expect(fixture.nativeElement.querySelector('.field-error')?.textContent ?? null).toContain('auth.passwordLength');
 
     confirmPassword.setValue('a-different-long-enough-password');
     fixture.detectChanges();
 
-    expect(probe.passwordForm.hasError('passwordMismatch')).toBeTrue();
+    expect(probe.passwordForm.hasError('passwordMismatch')).toBe(true);
 
     probe.passwordForm.controls['currentPassword'].setValue('existing-password');
     newPassword.setValue('a-sufficiently-long-password');
     confirmPassword.setValue('a-sufficiently-long-password');
     fixture.detectChanges();
 
-    expect(probe.passwordForm.hasError('passwordMismatch')).toBeFalse();
-    expect(probe.passwordForm.valid).toBeTrue();
+    expect(probe.passwordForm.hasError('passwordMismatch')).toBe(false);
+    expect(probe.passwordForm.valid).toBe(true);
   });
 
   it('should reveal and hide the change-password fields through their own toggles', async () => {
@@ -185,7 +191,7 @@ describe('SettingsAccountTabWidget', () => {
     const usernameInput: HTMLInputElement = fixture.nativeElement.querySelector('#account-username');
 
     expect(usernameInput.value).toBe('admin');
-    expect(probeOf(fixture).account()?.twoFactorEnabled).toBeFalse();
+    expect(probeOf(fixture).account()?.twoFactorEnabled).toBe(false);
   });
 
   it('should change the password and ask for a fresh login', async () => {
@@ -213,7 +219,7 @@ describe('SettingsAccountTabWidget', () => {
     await change;
     await fixture.whenStable();
 
-    expect(page.passwordChanged()).toBeTrue();
+    expect(page.passwordChanged()).toBe(true);
     expect(router.navigateByUrl).toHaveBeenCalledWith('/login', { replaceUrl: true });
     expect(TestBed.inject(AuthService).state()).toBe('anonymous');
   });
@@ -240,7 +246,7 @@ describe('SettingsAccountTabWidget', () => {
     await fixture.whenStable();
 
     expect(page.passwordFieldErrors().newPassword).toBe('auth.passwordLength');
-    expect(page.passwordChanged()).toBeFalse();
+    expect(page.passwordChanged()).toBe(false);
   });
 
   it('should start the two-factor setup and switch to the scan step', async () => {
@@ -281,13 +287,13 @@ describe('SettingsAccountTabWidget', () => {
 
     expect(page.issuedRecoveryCodes()?.length).toBe(1);
     expect(page.enableStep()).toBe('idle');
-    expect(page.account()?.twoFactorEnabled).toBeTrue();
+    expect(page.account()?.twoFactorEnabled).toBe(true);
   });
 
   it('should disable two factor authentication after the confirmation', async () => {
     const fixture = await createWidget(ENABLED_ACCOUNT);
     const page: AccountTabProbe = probeOf(fixture);
-    const confirmSpy: jasmine.Spy = spyOn(globalThis, 'confirm').and.returnValue(true);
+    const confirmSpy: MockInstance = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
 
     page.disableForm.patchValue({ currentPassword: 'old-password' });
 
@@ -300,20 +306,20 @@ describe('SettingsAccountTabWidget', () => {
     await flushAccountReload(DISABLED_ACCOUNT);
     await disable;
 
-    expect(page.account()?.twoFactorEnabled).toBeFalse();
+    expect(page.account()?.twoFactorEnabled).toBe(false);
   });
 
   it('should not call the api when the disable confirmation is declined', async () => {
     const fixture = await createWidget(ENABLED_ACCOUNT);
     const page: AccountTabProbe = probeOf(fixture);
 
-    spyOn(globalThis, 'confirm').and.returnValue(false);
+    vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     page.disableForm.patchValue({ currentPassword: 'old-password' });
 
     await page.disableTwoFactorAsync();
 
     httpController.expectNone('/api/account/two-factor/disable');
-    expect(page.account()?.twoFactorEnabled).toBeTrue();
+    expect(page.account()?.twoFactorEnabled).toBe(true);
   });
 
   it('should rotate the recovery codes and show them once again', async () => {
@@ -336,13 +342,13 @@ describe('SettingsAccountTabWidget', () => {
     const fixture = await createWidget(ENABLED_ACCOUNT);
     const codes = probeOf(fixture).issuedRecoveryCodes as WritableSignal<string[] | null>;
     codes.set(['save-this-code']);
-    const confirm = spyOn(globalThis, 'confirm').and.returnValue(false);
+    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
 
-    expect(fixture.componentInstance.canDeactivate()).toBeFalse();
+    expect(fixture.componentInstance.canDeactivate()).toBe(false);
     expect(confirm).toHaveBeenCalledWith('settings.account.recoveryCodesWarning');
     expect(codes()).toEqual(['save-this-code']);
-    confirm.and.returnValue(true);
-    expect(fixture.componentInstance.canDeactivate()).toBeTrue();
+    confirm.mockReturnValue(true);
+    expect(fixture.componentInstance.canDeactivate()).toBe(true);
     expect(codes()).toBeNull();
   });
 });

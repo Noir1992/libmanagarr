@@ -1,4 +1,5 @@
 import { signal, WritableSignal } from '@angular/core';
+import type { MockInstance } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppI18nService } from '../../../services/app-i18n.service';
@@ -7,7 +8,7 @@ import { SettingsArrInstancesTabWidget } from './settings-arr-instances-tab.widg
 
 describe('SettingsInstancesTabWidget', () => {
   let fixture: ComponentFixture<SettingsArrInstancesTabWidget>;
-  let snackBarOpenFromComponentSpy: jasmine.Spy;
+  let snackBarOpenFromComponentSpy: MockInstance;
   let sonarrInstancesSignal: WritableSignal<
     {
       id: string;
@@ -88,15 +89,15 @@ describe('SettingsInstancesTabWidget', () => {
     radarrInstancesSignal = signal([...radarrInstances]);
     seerrInstanceSignal = signal(null);
     settingsServiceStub = {
-      loadInstances: jasmine.createSpy('loadInstances').and.resolveTo(),
-      loadSeerrInstance: jasmine.createSpy('loadSeerrInstance').and.resolveTo(),
-      deleteSonarrInstance: jasmine.createSpy('deleteSonarrInstance').and.callFake(async (index: number) => {
+      loadInstances: vi.fn().mockResolvedValue(undefined),
+      loadSeerrInstance: vi.fn().mockResolvedValue(undefined),
+      deleteSonarrInstance: vi.fn().mockImplementation(async (index: number) => {
         sonarrInstancesSignal.update((current) => current.filter((_, currentIndex) => currentIndex !== index));
       }),
-      deleteRadarrInstance: jasmine.createSpy('deleteRadarrInstance').and.callFake(async (index: number) => {
+      deleteRadarrInstance: vi.fn().mockImplementation(async (index: number) => {
         radarrInstancesSignal.update((current) => current.filter((_, currentIndex) => currentIndex !== index));
       }),
-      deleteSeerrInstance: jasmine.createSpy('deleteSeerrInstance').and.callFake(async () => {
+      deleteSeerrInstance: vi.fn().mockImplementation(async () => {
         seerrInstanceSignal.set(null);
       }),
       sonarrInstances: sonarrInstancesSignal,
@@ -118,7 +119,7 @@ describe('SettingsInstancesTabWidget', () => {
     await fixture.whenStable();
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
-    snackBarOpenFromComponentSpy = spyOn(fixture.debugElement.injector.get(MatSnackBar), 'openFromComponent');
+    snackBarOpenFromComponentSpy = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'openFromComponent');
   });
 
   it('renders both instance sections', () => {
@@ -141,7 +142,7 @@ describe('SettingsInstancesTabWidget', () => {
     const compiled: HTMLElement = emptyFixture.nativeElement as HTMLElement;
     const emptyStates: NodeListOf<HTMLElement> = compiled.querySelectorAll('.instance-empty-state');
 
-    expect(emptyStates).toHaveSize(2);
+    expect(emptyStates).toHaveLength(2);
     expect(emptyStates[0]?.textContent).toContain('No instance configured');
     expect(emptyStates[1]?.textContent).toContain('No instance configured');
     expect(compiled.querySelector('app-settings-arr-instance-card')).toBeNull();
@@ -154,7 +155,7 @@ describe('SettingsInstancesTabWidget', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(fixture.componentInstance['sonarrInstancesForm']).toHaveSize(initialLength + 1);
+    expect(fixture.componentInstance['sonarrInstancesForm']).toHaveLength(initialLength + 1);
   });
 
   it('removes a Radarr instance through the backend service', async () => {
@@ -164,7 +165,7 @@ describe('SettingsInstancesTabWidget', () => {
 
     expect(settingsServiceStub.deleteRadarrInstance).toHaveBeenCalledTimes(1);
     expect(snackBarOpenFromComponentSpy).toHaveBeenCalled();
-    expect(fixture.componentInstance['radarrInstancesForm']).toHaveSize(0);
+    expect(fixture.componentInstance['radarrInstancesForm']).toHaveLength(0);
   });
 
   it('removes a new Sonarr instance locally without calling the backend', async () => {
@@ -175,7 +176,7 @@ describe('SettingsInstancesTabWidget', () => {
     fixture.detectChanges();
 
     expect(settingsServiceStub.deleteSonarrInstance).not.toHaveBeenCalled();
-    expect(fixture.componentInstance['sonarrInstancesForm']).toHaveSize(1);
+    expect(fixture.componentInstance['sonarrInstancesForm']).toHaveLength(1);
   });
 
   it('discards pending instance edits when navigation is confirmed', () => {
@@ -184,21 +185,21 @@ describe('SettingsInstancesTabWidget', () => {
     } = globalThis as typeof globalThis & {
       confirm: (message?: string) => boolean;
     };
-    spyOn(confirmTarget, 'confirm').and.returnValue(true);
+    vi.spyOn(confirmTarget, 'confirm').mockReturnValue(true);
 
     fixture.componentInstance['sonarrInstancesForm'].at(0).controls.name.setValue('Changed');
     fixture.componentInstance['sonarrInstancesForm'].at(0).controls.name.markAsDirty();
 
-    expect(fixture.componentInstance.canDeactivate()).toBeTrue();
+    expect(fixture.componentInstance.canDeactivate()).toBe(true);
     expect(fixture.componentInstance['sonarrInstancesForm'].at(0).controls.name.getRawValue()).toBe('Instance');
-    expect(fixture.componentInstance['sonarrInstancesForm'].dirty).toBeFalse();
+    expect(fixture.componentInstance['sonarrInstancesForm'].dirty).toBe(false);
   });
 
   it('renders the Seerr section with its own configuration card', () => {
     const compiled: HTMLElement = fixture.nativeElement as HTMLElement;
 
     expect(compiled.textContent).toContain('Seerr');
-    expect(compiled.querySelectorAll('app-settings-seerr-card')).toHaveSize(1);
+    expect(compiled.querySelectorAll('app-settings-seerr-card')).toHaveLength(1);
   });
 
   it('removes the Seerr configuration through the backend service', async () => {

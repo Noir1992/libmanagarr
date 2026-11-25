@@ -54,7 +54,7 @@ describe('ReleasesPage', () => {
 
     const entries: NodeListOf<Element> = (fixture.nativeElement as HTMLElement).querySelectorAll('.release-entry');
 
-    expect(entries).toHaveSize(2);
+    expect(entries).toHaveLength(2);
     expect(entries[0].querySelector('.release-entry-version')?.textContent).toContain('1.4.0');
     expect(entries[0].querySelector('.release-entry-link')?.getAttribute('href')).toContain('/releases/tag/v1.4.0');
     expect(entries[0].querySelector('.release-entry-date')?.textContent).toMatch(/\d{1,2}:\d{2}/);

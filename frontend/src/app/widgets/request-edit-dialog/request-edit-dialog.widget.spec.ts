@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { FormControl } from '@angular/forms';
 import { MatSelect } from '@angular/material/select';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
@@ -35,8 +36,10 @@ const tvOptions: SeerrRequestEditOptions = {
 function createDialog(
   title: string | null,
   options: SeerrRequestEditOptions,
-): { fixture: ComponentFixture<RequestEditDialogWidget>; dialogRefSpy: jasmine.SpyObj<MatDialogRef<RequestEditDialogWidget>> } {
-  const dialogRefSpy = jasmine.createSpyObj<MatDialogRef<RequestEditDialogWidget>>('MatDialogRef', ['close']);
+): { fixture: ComponentFixture<RequestEditDialogWidget>; dialogRefSpy: Record<'close', MockInstance> } {
+  const dialogRefSpy = {
+    close: vi.fn<MatDialogRef<RequestEditDialogWidget>['close']>(),
+  };
 
   TestBed.configureTestingModule({
     imports: [RequestEditDialogWidget],
@@ -67,7 +70,7 @@ describe('RequestEditDialogWidget', () => {
     expect(element.querySelector('.request-dialog-media-title')?.textContent?.trim()).toBe('Sample Movie');
     // Mat-select only mounts its options while open, so the closed dialog shows the two controls.
     const selects: NodeListOf<Element> = element.querySelectorAll('mat-select');
-    expect(selects).toHaveSize(2);
+    expect(selects).toHaveLength(2);
     expect(selects[0].getAttribute('id')).toBe('request-edit-profile');
     expect(selects[1].getAttribute('id')).toBe('request-edit-root-folder');
     expect(Array.from(element.querySelectorAll('.field label').values()).map((label) => label.textContent?.trim())).toEqual([
@@ -102,7 +105,7 @@ describe('RequestEditDialogWidget', () => {
     expect(form.rootFolder).toBe('/media/videos/movies');
 
     const saveButton: HTMLButtonElement = (fixture.nativeElement as HTMLElement).querySelector('.request-dialog-save')!;
-    expect(saveButton.disabled).toBeFalse();
+    expect(saveButton.disabled).toBe(false);
     expect(saveButton.textContent?.trim()).toBe('Save & approve');
   });
 
@@ -125,7 +128,7 @@ describe('RequestEditDialogWidget', () => {
     ).toEqual(['Seasons', 'Season', 'Episodes', 'Status']);
 
     const rows: NodeListOf<HTMLTableRowElement> = element.querySelectorAll('.request-seasons tbody tr');
-    expect(rows).toHaveSize(4);
+    expect(rows).toHaveLength(4);
     expect(Array.from(rows.values()).map((row) => row.cells[1].textContent?.trim())).toEqual([
       'Specials',
       'Season 1',
@@ -147,9 +150,9 @@ describe('RequestEditDialogWidget', () => {
 
     const element: HTMLElement = fixture.nativeElement as HTMLElement;
     const toggles: HTMLButtonElement[] = toggleButtonsOf(element);
-    expect(toggles).toHaveSize(4);
+    expect(toggles).toHaveLength(4);
     expect(toggles.map((toggle) => toggle.hasAttribute('disabled'))).toEqual([false, false, false, true]);
-    expect(Array.from(element.querySelectorAll('.request-season-locked').values())).toHaveSize(1);
+    expect(Array.from(element.querySelectorAll('.request-season-locked').values())).toHaveLength(1);
     expect(
       Array.from(element.querySelectorAll<HTMLTableRowElement>('.request-seasons tbody tr').values())
         .filter((row) => row.classList.contains('request-season-locked'))
@@ -173,7 +176,7 @@ describe('RequestEditDialogWidget', () => {
     expect(
       heading.compareDocumentPosition(element.querySelector('#request-edit-profile')!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(element.querySelector('.request-advanced')?.contains(element.querySelector('#request-edit-root-folder')!)).toBeTrue();
+    expect(element.querySelector('.request-advanced')?.contains(element.querySelector('#request-edit-root-folder')!)).toBe(true);
   });
 
   it('skips the advanced heading when there is nothing above the server settings', () => {
@@ -182,7 +185,7 @@ describe('RequestEditDialogWidget', () => {
 
     const element: HTMLElement = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('.request-advanced-heading')).toBeNull();
-    expect(element.querySelector('.request-advanced')?.contains(element.querySelector('#request-edit-profile')!)).toBeTrue();
+    expect(element.querySelector('.request-advanced')?.contains(element.querySelector('#request-edit-profile')!)).toBe(true);
   });
 
   it('closes with profile and root folder only when a movie request is saved', () => {
@@ -194,7 +197,7 @@ describe('RequestEditDialogWidget', () => {
     fixture.detectChanges();
     (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.request-dialog-save')!.click();
 
-    expect(dialogRefSpy.close).toHaveBeenCalledOnceWith({
+    expect(dialogRefSpy.close).toHaveBeenCalledExactlyOnceWith({
       profileId: 16,
       rootFolder: '/media/videos/movies (anime)',
     });
@@ -211,7 +214,7 @@ describe('RequestEditDialogWidget', () => {
     expect(dialogRefSpy.close).not.toHaveBeenCalled();
     fixture.componentInstance['save']();
 
-    expect(dialogRefSpy.close).toHaveBeenCalledOnceWith({
+    expect(dialogRefSpy.close).toHaveBeenCalledExactlyOnceWith({
       profileId: 18,
       rootFolder: '/media/videos/series',
       seasons: [1, 2],
@@ -226,14 +229,14 @@ describe('RequestEditDialogWidget', () => {
     fixture.detectChanges();
 
     const saveButton: HTMLButtonElement = (fixture.nativeElement as HTMLElement).querySelector('.request-dialog-save')!;
-    expect(saveButton.disabled).toBeTrue();
+    expect(saveButton.disabled).toBe(true);
 
     fixture.componentInstance['save']();
     expect(dialogRefSpy.close).not.toHaveBeenCalled();
 
     toggleButtonsOf(fixture.nativeElement as HTMLElement)[0].click();
     fixture.detectChanges();
-    expect(saveButton.disabled).toBeFalse();
+    expect(saveButton.disabled).toBe(false);
   });
 
   it('keeps save disabled when nothing can be selected at all', () => {
@@ -247,7 +250,7 @@ describe('RequestEditDialogWidget', () => {
     fixture.detectChanges();
 
     const saveButton: HTMLButtonElement = (fixture.nativeElement as HTMLElement).querySelector('.request-dialog-save')!;
-    expect(saveButton.disabled).toBeTrue();
+    expect(saveButton.disabled).toBe(true);
 
     fixture.componentInstance['save']();
     expect(dialogRefSpy.close).not.toHaveBeenCalled();
@@ -258,6 +261,6 @@ describe('RequestEditDialogWidget', () => {
     fixture.detectChanges();
 
     (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.request-dialog-cancel')!.click();
-    expect(dialogRefSpy.close).toHaveBeenCalledOnceWith();
+    expect(dialogRefSpy.close).toHaveBeenCalledExactlyOnceWith();
   });
 });

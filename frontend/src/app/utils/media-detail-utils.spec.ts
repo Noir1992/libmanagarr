@@ -38,10 +38,10 @@ describe('media detail helpers', () => {
       url: series.url,
       upgradeUntilCustomFormatScore: 100,
     });
-    expect(details.monitored).toBeTrue();
+    expect(details.monitored).toBe(true);
     expect(details.qualityProfileName).toBeUndefined();
     expect(details.status).toBeUndefined();
-    expect(episode).not.toEqual(jasmine.objectContaining({ seriesTitle: 'Series' }));
+    expect(episode).not.toEqual(expect.objectContaining({ seriesTitle: 'Series' }));
   });
 
   it('maps codec statistics files onto dialog data and falls back to an empty url when unknown', () => {
@@ -80,7 +80,7 @@ describe('media detail helpers', () => {
     const movieDetails = codecFileDetailData(movieFile, null);
 
     expect(episodeDetails).toEqual(
-      jasmine.objectContaining({
+      expect.objectContaining({
         title: 'Series - S02E03 - Episode',
         url: 'http://sonarr/series/series-1',
         instanceName: 'Sonarr Main',
@@ -99,7 +99,7 @@ describe('media detail helpers', () => {
     expect(episodeDetails.status).toBeUndefined();
     expect(episodeDetails.posterUrl).toBeNull();
     expect(movieDetails).toEqual(
-      jasmine.objectContaining({
+      expect.objectContaining({
         title: 'Movie',
         url: '',
         posterUrl: 'https://poster.example/movie.jpg',
@@ -123,7 +123,7 @@ describe('media detail helpers', () => {
       let activated: boolean | undefined;
       row.addEventListener('click', (event) => (activated = isDetailRowActivation(event)));
       child.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(activated).toBeFalse();
+      expect(activated).toBe(false);
     });
   }
 
@@ -134,7 +134,7 @@ describe('media detail helpers', () => {
     let activated: boolean | undefined;
     row.addEventListener('click', (event) => (activated = isDetailRowActivation(event)));
     content.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(activated).toBeTrue();
+    expect(activated).toBe(true);
   });
 
   it('handles keyboard activation on the row and preserves keyboard events from controls', () => {
@@ -148,8 +148,8 @@ describe('media detail helpers', () => {
     row.dispatchEvent(rowEvent);
     button.dispatchEvent(buttonEvent);
     expect(activations).toEqual([true, false]);
-    expect(rowEvent.defaultPrevented).toBeTrue();
-    expect(buttonEvent.defaultPrevented).toBeFalse();
+    expect(rowEvent.defaultPrevented).toBe(true);
+    expect(buttonEvent.defaultPrevented).toBe(false);
   });
 
   it('moves the specials season to the end while keeping the relative order of the other seasons', () => {

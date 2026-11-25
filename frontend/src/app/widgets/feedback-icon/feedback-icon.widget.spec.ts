@@ -28,7 +28,7 @@ describe('FeedbackIconWidget', () => {
 
     const icon: HTMLElement | null = fixture.nativeElement.querySelector('mat-icon');
     expect(icon?.textContent?.trim()).toBe('check');
-    expect(icon?.classList.contains('success')).toBeTrue();
+    expect(icon?.classList.contains('success')).toBe(true);
   });
 
   it('should render an error icon with title', () => {

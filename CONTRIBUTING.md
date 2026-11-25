@@ -38,7 +38,7 @@ they did not execute their link assertions.
 
 ```bash
 dotnet test backend/LibManagarr.Backend.sln   # backend unit tests
-cd frontend && npm run test:ci                # frontend unit tests (Karma, headless Chrome)
+cd frontend && npm run test:ci                # frontend unit tests (Vitest, headless Chromium)
 ```
 
 End-to-end tests live in `tests/e2e`.

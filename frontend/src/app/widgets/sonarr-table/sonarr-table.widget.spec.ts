@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy } from '@angular/core';
+import type { MockInstance } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MediaDetailsDialogWidget } from '../media-details-dialog/media-details-dialog.widget';
@@ -137,10 +138,10 @@ class SonarrTableHostComponent {
 
 describe('SonarrTableWidget', () => {
   let fixture: ComponentFixture<SonarrTableHostComponent>;
-  let open: jasmine.Spy;
+  let open: MockInstance;
 
   beforeEach(async () => {
-    open = jasmine.createSpy('open');
+    open = vi.fn();
     await TestBed.configureTestingModule({
       imports: [SonarrTableHostComponent],
       providers: [{ provide: MatDialog, useValue: { open } }],
@@ -170,10 +171,10 @@ describe('SonarrTableWidget', () => {
     await fixture.whenStable();
     const row = element.querySelector<HTMLElement>('.episode-detail-row')!;
     row.click();
-    expect(open).toHaveBeenCalledOnceWith(
+    expect(open).toHaveBeenCalledExactlyOnceWith(
       MediaDetailsDialogWidget,
-      jasmine.objectContaining({
-        data: jasmine.objectContaining({
+      expect.objectContaining({
+        data: expect.objectContaining({
           title: 'Doors & Corners',
           instanceName: 'Sonarr',
           seriesTitle: 'The Expanse',

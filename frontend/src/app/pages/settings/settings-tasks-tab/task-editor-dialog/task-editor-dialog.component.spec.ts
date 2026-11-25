@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { AppI18nService } from '../../../../services/app-i18n.service';
 import { ScheduledTaskService } from '../../../../services/scheduled-task.service';
@@ -6,13 +7,17 @@ import { TaskEditorDialogComponent } from './task-editor-dialog.component';
 
 describe('TaskEditorDialogComponent', () => {
   let fixture: ComponentFixture<TaskEditorDialogComponent>;
-  let dialogRefSpy: jasmine.SpyObj<MatDialogRef<TaskEditorDialogComponent>>;
-  let settingsServiceSpy: jasmine.SpyObj<ScheduledTaskService>;
+  let dialogRefSpy: Record<'close', MockInstance>;
+  let settingsServiceSpy: Record<'save', MockInstance>;
 
   beforeEach(async () => {
-    dialogRefSpy = jasmine.createSpyObj<MatDialogRef<TaskEditorDialogComponent>>('MatDialogRef', ['close']);
-    settingsServiceSpy = jasmine.createSpyObj<ScheduledTaskService>('ScheduledTaskService', ['save']);
-    settingsServiceSpy.save.and.resolveTo();
+    dialogRefSpy = {
+      close: vi.fn<MatDialogRef<TaskEditorDialogComponent>['close']>(),
+    };
+    settingsServiceSpy = {
+      save: vi.fn<ScheduledTaskService['save']>(),
+    };
+    settingsServiceSpy.save.mockResolvedValue(undefined);
 
     await TestBed.configureTestingModule({
       imports: [TaskEditorDialogComponent],
@@ -72,8 +77,8 @@ describe('TaskEditorDialogComponent', () => {
 
     await fixture.componentInstance['save']();
 
-    expect(settingsServiceSpy.save).toHaveBeenCalledOnceWith(
-      jasmine.objectContaining({ taskKey: 'thirdTask', revision: 3, intervalValue: 3 }),
+    expect(settingsServiceSpy.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ taskKey: 'thirdTask', revision: 3, intervalValue: 3 }),
     );
     expect(dialogRefSpy.close).toHaveBeenCalledWith(true);
   });

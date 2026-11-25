@@ -1,13 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { RequestDeclineDialogWidget } from './request-decline-dialog.widget';
 
 describe('RequestDeclineDialogWidget', () => {
   let fixture: ComponentFixture<RequestDeclineDialogWidget>;
-  let dialogRefSpy: jasmine.SpyObj<MatDialogRef<RequestDeclineDialogWidget>>;
+  let dialogRefSpy: Record<'close', MockInstance>;
 
   beforeEach(async () => {
-    dialogRefSpy = jasmine.createSpyObj<MatDialogRef<RequestDeclineDialogWidget>>('MatDialogRef', ['close']);
+    dialogRefSpy = {
+      close: vi.fn<MatDialogRef<RequestDeclineDialogWidget>['close']>(),
+    };
 
     await TestBed.configureTestingModule({
       imports: [RequestDeclineDialogWidget],
@@ -39,7 +42,7 @@ describe('RequestDeclineDialogWidget', () => {
     // The popup shares the standard dialog structure, so it has no own header bar and no close icon.
     expect(element.querySelector('mat-dialog-content .field')).not.toBeNull();
     expect(element.querySelector('mat-dialog-actions .request-dialog-confirm')).not.toBeNull();
-    expect(element.querySelectorAll('mat-dialog-actions button')).toHaveSize(2);
+    expect(element.querySelectorAll('mat-dialog-actions button')).toHaveLength(2);
     expect(element.querySelector('mat-icon-button')).toBeNull();
   });
 
@@ -49,7 +52,7 @@ describe('RequestDeclineDialogWidget', () => {
     fixture.componentInstance['form'].controls.reason.setValue('  not now  ');
     (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.request-dialog-confirm')!.click();
 
-    expect(dialogRefSpy.close).toHaveBeenCalledOnceWith('not now');
+    expect(dialogRefSpy.close).toHaveBeenCalledExactlyOnceWith('not now');
   });
 
   it('closes with an empty reason when the user confirms without one', () => {
@@ -57,7 +60,7 @@ describe('RequestDeclineDialogWidget', () => {
 
     (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.request-dialog-confirm')!.click();
 
-    expect(dialogRefSpy.close).toHaveBeenCalledOnceWith('');
+    expect(dialogRefSpy.close).toHaveBeenCalledExactlyOnceWith('');
   });
 
   it('closes without a result when the user cancels', () => {
@@ -65,6 +68,6 @@ describe('RequestDeclineDialogWidget', () => {
 
     (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.request-dialog-cancel')!.click();
 
-    expect(dialogRefSpy.close).toHaveBeenCalledOnceWith();
+    expect(dialogRefSpy.close).toHaveBeenCalledExactlyOnceWith();
   });
 });

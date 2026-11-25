@@ -44,6 +44,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npx prettier --check .
+      # The specs run in headless Chromium, so the browser binary has to exist before the first run.
+      - run: npx playwright install --with-deps chromium
       - run: npm run test:ci
 
   e2e:

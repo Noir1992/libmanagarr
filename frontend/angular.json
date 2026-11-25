@@ -74,7 +74,9 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "runner": "karma",
+            "runner": "vitest",
+            "runnerConfig": "vitest-base.config.ts",
+            "browsers": ["ChromiumHeadless"],
             "tsConfig": "tsconfig.spec.json"
           }
         },

@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { MatDialog } from '@angular/material/dialog';
 import { MediaFilesTreeWidget } from './media-files-tree.widget';
 import { MediaTreeNode } from '../../interfaces/media-tree/media-tree-node';
@@ -6,10 +7,10 @@ import { MediaDetailsDialogWidget } from '../media-details-dialog/media-details-
 
 describe('MediaFilesTreeWidget', () => {
   let fixture: ComponentFixture<MediaFilesTreeWidget>;
-  let open: jasmine.Spy;
+  let open: MockInstance;
 
   beforeEach(async () => {
-    open = jasmine.createSpy('open');
+    open = vi.fn();
     await TestBed.configureTestingModule({
       imports: [MediaFilesTreeWidget],
       providers: [{ provide: MatDialog, useValue: { open } }],
@@ -30,18 +31,18 @@ describe('MediaFilesTreeWidget', () => {
   });
 
   it('should open the media details dialog with mapped data when a file row is clicked', () => {
-    const interactionSpy: jasmine.Spy = jasmine.createSpy('interaction');
+    const interactionSpy: MockInstance = vi.fn();
     fixture.componentInstance.interaction.subscribe(interactionSpy);
     sonarrRootToggle(fixture).click();
     fixture.detectChanges();
     (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('button.file-row')!.click();
 
-    expect(open).toHaveBeenCalledOnceWith(
+    expect(open).toHaveBeenCalledExactlyOnceWith(
       MediaDetailsDialogWidget,
-      jasmine.objectContaining({
+      expect.objectContaining({
         width: '700px',
         maxWidth: '95vw',
-        data: jasmine.objectContaining({
+        data: expect.objectContaining({
           title: 'Series - S01E01 - Episode',
           url: 'http://localhost:8989/series/series-1',
           instanceName: 'Sonarr A',
@@ -49,7 +50,7 @@ describe('MediaFilesTreeWidget', () => {
           episodeNumber: 1,
           hasFile: true,
           customFormatScore: 800,
-          mediaDetails: jasmine.objectContaining({ videoCodec: 'HEVC', resolution: '1080p' }),
+          mediaDetails: expect.objectContaining({ videoCodec: 'HEVC', resolution: '1080p' }),
         }),
       }),
     );

@@ -1,4 +1,5 @@
 import { signal, WritableSignal } from '@angular/core';
+import type { Mock, MockInstance } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ARR_APPLICATION_KINDS } from '../../../../interfaces/general/arr-application-kind';
@@ -11,8 +12,8 @@ import { SettingsSeerrCardWidget } from './settings-seerr-card.widget';
 describe('SettingsSeerrCardWidget', () => {
   let fixture: ComponentFixture<SettingsSeerrCardWidget>;
   let seerrInstanceSignal: WritableSignal<SeerrInstanceSettings | null>;
-  let testConnectionSpy: jasmine.Spy;
-  let saveSeerrInstanceSpy: jasmine.Spy;
+  let testConnectionSpy: Mock<AppSettingsService['testConnection']>;
+  let saveSeerrInstanceSpy: Mock<AppSettingsService['saveSeerrInstance']>;
   let appSettingsServiceStub: Pick<AppSettingsService, 'testConnection' | 'saveSeerrInstance' | 'seerrInstance'>;
 
   const configuredInstance: SeerrInstanceSettings = {
@@ -35,8 +36,8 @@ describe('SettingsSeerrCardWidget', () => {
 
   beforeEach(async () => {
     seerrInstanceSignal = signal<SeerrInstanceSettings | null>(null);
-    testConnectionSpy = jasmine.createSpy('testConnection').and.resolveTo({ message: '', testedAt: null, isSuccess: true });
-    saveSeerrInstanceSpy = jasmine.createSpy('saveSeerrInstance').and.callFake(async (instance: SeerrInstanceSettings) => {
+    testConnectionSpy = vi.fn().mockResolvedValue({ message: '', testedAt: null, isSuccess: true });
+    saveSeerrInstanceSpy = vi.fn<AppSettingsService['saveSeerrInstance']>().mockImplementation(async (instance: SeerrInstanceSettings) => {
       seerrInstanceSignal.set({ ...instance });
     });
     appSettingsServiceStub = {
@@ -93,7 +94,7 @@ describe('SettingsSeerrCardWidget', () => {
   it('shows the remove button when configured and emits removeInstance on click', () => {
     fixture.componentRef.setInput('isConfigured', true);
     fixture.detectChanges();
-    const removeSpy: jasmine.Spy = spyOn(fixture.componentInstance.removeInstance, 'emit');
+    const removeSpy: MockInstance = vi.spyOn(fixture.componentInstance.removeInstance, 'emit');
 
     (fixture.nativeElement.querySelector('.danger-button') as HTMLButtonElement).click();
 
@@ -109,14 +110,14 @@ describe('SettingsSeerrCardWidget', () => {
 
     await fixture.componentInstance['testConnectionAsync']();
 
-    expect(testConnectionSpy).toHaveBeenCalledOnceWith(ARR_APPLICATION_KINDS.SEERR, {
+    expect(testConnectionSpy).toHaveBeenCalledExactlyOnceWith(ARR_APPLICATION_KINDS.SEERR, {
       id: 'seerr-1',
       baseUrl: 'http://localhost:5055',
       apiKey: 'secret',
     });
-    expect(saveSeerrInstanceSpy).toHaveBeenCalledOnceWith(configuredInstance);
-    expect(group.controls.testSucceeded.getRawValue()).toBeTrue();
-    expect(group.dirty).toBeFalse();
+    expect(saveSeerrInstanceSpy).toHaveBeenCalledExactlyOnceWith(configuredInstance);
+    expect(group.controls.testSucceeded.getRawValue()).toBe(true);
+    expect(group.dirty).toBe(false);
   });
 
   it('does not save the instance when the connection test fails', async () => {
@@ -124,14 +125,14 @@ describe('SettingsSeerrCardWidget', () => {
     fixture.componentRef.setInput('instanceGroup', group);
     fixture.componentRef.setInput('isConfigured', true);
     fixture.detectChanges();
-    testConnectionSpy.and.callFake(async (): Promise<never> => {
+    testConnectionSpy.mockImplementation(async (): Promise<never> => {
       throw new Error('Connection failed');
     });
 
     await fixture.componentInstance['testConnectionAsync']();
 
     expect(saveSeerrInstanceSpy).not.toHaveBeenCalled();
-    expect(group.controls.testSucceeded.getRawValue()).toBeFalse();
+    expect(group.controls.testSucceeded.getRawValue()).toBe(false);
     expect(group.controls.testMessage.getRawValue()).toBe('Connection failed');
   });
 
@@ -140,7 +141,7 @@ describe('SettingsSeerrCardWidget', () => {
     fixture.componentRef.setInput('instanceGroup', group);
     fixture.componentRef.setInput('isConfigured', true);
     fixture.detectChanges();
-    testConnectionSpy.and.callFake(async (): Promise<never> => {
+    testConnectionSpy.mockImplementation(async (): Promise<never> => {
       throw new ValidationProblemError('invalid', { 'seerr.baseUrl': ['The baseUrl must be a valid absolute URL.'] });
     });
 
@@ -156,7 +157,7 @@ describe('SettingsSeerrCardWidget', () => {
     await fixture.componentInstance['testConnectionAsync']();
 
     expect(testConnectionSpy).not.toHaveBeenCalled();
-    expect(group.controls.testSucceeded.getRawValue()).toBeFalse();
+    expect(group.controls.testSucceeded.getRawValue()).toBe(false);
     expect(fixture.componentInstance['connectionFeedbackState']()).toBe('error');
   });
 });

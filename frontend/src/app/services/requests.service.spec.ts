@@ -47,17 +47,17 @@ describe('RequestsService', () => {
     expect(request.request.params.get('limit')).toBe('20');
     expect(request.request.params.get('sortField')).toBe('createdAt');
     expect(request.request.params.get('sortOrder')).toBe('desc');
-    expect(request.request.params.has('status')).toBeFalse();
+    expect(request.request.params.has('status')).toBe(false);
 
     request.flush(pagedResponse);
     await promise;
 
-    expect(service.requests()).toHaveSize(1);
+    expect(service.requests()).toHaveLength(1);
     expect(service.total()).toBe(12);
     expect(service.page()).toBe(2);
     expect(service.limit()).toBe(10);
-    expect(service.loading()).toBeFalse();
-    expect(service.notConfigured()).toBeFalse();
+    expect(service.loading()).toBe(false);
+    expect(service.notConfigured()).toBe(false);
     expect(service.loadError()).toBeNull();
   });
 
@@ -89,7 +89,7 @@ describe('RequestsService', () => {
     );
     await promise;
 
-    expect(service.notConfigured()).toBeTrue();
+    expect(service.notConfigured()).toBe(true);
     expect(service.loadError()).toBeNull();
     expect(service.requests()).toEqual([]);
   });
@@ -101,7 +101,7 @@ describe('RequestsService', () => {
     request.flush('', { status: 503, statusText: 'Service Unavailable' });
     await promise;
 
-    expect(service.notConfigured()).toBeTrue();
+    expect(service.notConfigured()).toBe(true);
     expect(service.loadError()).toBeNull();
   });
 
@@ -112,7 +112,7 @@ describe('RequestsService', () => {
     request.flush({ title: 'Seerr is not reachable.' }, { status: 502, statusText: 'Bad Gateway' });
     await promise;
 
-    expect(service.notConfigured()).toBeFalse();
+    expect(service.notConfigured()).toBe(false);
     expect(service.loadError()).toBe('Seerr is not reachable.');
     expect(service.requests()).toEqual([]);
   });
@@ -124,7 +124,7 @@ describe('RequestsService', () => {
     request.flush('', { status: 500, statusText: 'Server Error' });
     await promise;
 
-    expect(service.notConfigured()).toBeFalse();
+    expect(service.notConfigured()).toBe(false);
     expect(service.loadError()).toBe('Requests could not be loaded.');
   });
 
@@ -142,7 +142,7 @@ describe('RequestsService', () => {
     expect(request.request.method).toBe('POST');
     request.flush(null, { status: 204, statusText: 'No Content' });
 
-    await expectAsync(promise).toBeResolved();
+    await expect(promise).resolves.toBeUndefined();
   });
 
   it('declines with the trimmed reason and omits the body without one', async () => {
@@ -167,7 +167,7 @@ describe('RequestsService', () => {
     expect(request.request.method).toBe('DELETE');
     request.flush(null, { status: 204, statusText: 'No Content' });
 
-    await expectAsync(promise).toBeResolved();
+    await expect(promise).resolves.toBeUndefined();
   });
 
   it('updates with only the edited fields', async () => {
@@ -178,7 +178,7 @@ describe('RequestsService', () => {
     expect(request.request.body).toEqual({ profileId: 16 });
     request.flush(null, { status: 204, statusText: 'No Content' });
 
-    await expectAsync(promise).toBeResolved();
+    await expect(promise).resolves.toBeUndefined();
   });
 
   it('loads the edit options for one request', async () => {
@@ -195,7 +195,7 @@ describe('RequestsService', () => {
     expect(request.request.method).toBe('GET');
     request.flush(options);
 
-    await expectAsync(promise).toBeResolvedTo(options);
+    await expect(promise).resolves.toEqual(options);
   });
 
   it('rejects write operations so callers can describe the problem', async () => {
@@ -204,7 +204,7 @@ describe('RequestsService', () => {
     const request = httpMock.expectOne('/api/requests/999999999/approve');
     request.flush({ detail: 'Request not found.' }, { status: 404, statusText: 'Not Found' });
 
-    await expectAsync(promise).toBeRejected();
+    await expect(promise).rejects.toThrow();
   });
 
   it('describes action errors from the problem detail, the title or the localized fallback', () => {

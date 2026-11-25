@@ -112,9 +112,9 @@ describe('calendar day helpers', () => {
     expect(cells[0].dayKey).toBe('2026-10-26');
     expect(cells[cells.length - 1].dayKey).toBe('2026-12-06');
     expect(cells.filter((cell) => cell.inMonth).length).toBe(30);
-    expect(cells[0].inMonth).toBeFalse();
-    expect(cells.find((cell) => cell.dayKey === '2026-11-15')?.inMonth).toBeTrue();
-    expect(cells.find((cell) => cell.dayKey === '2026-12-01')?.inMonth).toBeFalse();
+    expect(cells[0].inMonth).toBe(false);
+    expect(cells.find((cell) => cell.dayKey === '2026-11-15')?.inMonth).toBe(true);
+    expect(cells.find((cell) => cell.dayKey === '2026-12-01')?.inMonth).toBe(false);
   });
 });
 
@@ -155,16 +155,16 @@ describe('calendar past detection', () => {
     const past = makeEntry({ id: 'a', releaseDateTimeUtc: localInstant(2026, 10, 3, 11, 59) });
     const exact = makeEntry({ id: 'b', releaseDateTimeUtc: now.toISOString() });
     const future = makeEntry({ id: 'c', releaseDateTimeUtc: localInstant(2026, 10, 3, 12, 1) });
-    expect(isEntryPast(past, now)).toBeTrue();
-    expect(isEntryPast(exact, now)).toBeFalse();
-    expect(isEntryPast(future, now)).toBeFalse();
+    expect(isEntryPast(past, now)).toBe(true);
+    expect(isEntryPast(exact, now)).toBe(false);
+    expect(isEntryPast(future, now)).toBe(false);
   });
 
   it('flips date-only entries only after the whole local day has ended', () => {
     const entry = makeEntry({ id: 'a', releaseDate: '2026-11-03' });
-    expect(isEntryPast(entry, new Date(2026, 10, 3, 0, 0))).toBeFalse();
-    expect(isEntryPast(entry, new Date(2026, 10, 3, 23, 59, 59))).toBeFalse();
-    expect(isEntryPast(entry, new Date(2026, 10, 4, 0, 0))).toBeTrue();
+    expect(isEntryPast(entry, new Date(2026, 10, 3, 0, 0))).toBe(false);
+    expect(isEntryPast(entry, new Date(2026, 10, 3, 23, 59, 59))).toBe(false);
+    expect(isEntryPast(entry, new Date(2026, 10, 4, 0, 0))).toBe(true);
   });
 });
 
