@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { signal, WritableSignal } from '@angular/core';
 import { FilterOptionType } from '../../enums/filter-option-type';
 import { LibraryChangeHistoryEntry } from '../../interfaces/library-trend/library-change-history-entry';
@@ -13,23 +14,23 @@ import { LibraryTrendPage } from './library-trend.page';
 
 describe('LibraryTrendPage', () => {
   let fixture: ComponentFixture<LibraryTrendPage>;
-  let apiService: jasmine.SpyObj<LibraryTrendStatisticsApiService>;
+  let apiService: Record<'fetchLibraryTrendStatistics', MockInstance>;
   let statisticsResponse: LibraryTrendStatisticsResponse;
   let sonarrInstancesSignal: WritableSignal<{ id: string; name: string; baseUrl: string; apiKey: string }[]>;
   let radarrInstancesSignal: WritableSignal<{ id: string; name: string; baseUrl: string; apiKey: string }[]>;
 
   beforeEach(async () => {
     globalThis.localStorage.clear();
-    apiService = jasmine.createSpyObj<LibraryTrendStatisticsApiService>('LibraryTrendStatisticsApiService', [
-      'fetchLibraryTrendStatistics',
-    ]);
+    apiService = {
+      fetchLibraryTrendStatistics: vi.fn<LibraryTrendStatisticsApiService['fetchLibraryTrendStatistics']>(),
+    };
 
     sonarrInstancesSignal = signal([{ id: 'sonarr-1', name: 'Sonarr Main', baseUrl: 'http://sonarr', apiKey: 'a' }]);
     radarrInstancesSignal = signal([{ id: 'radarr-1', name: 'Radarr Main', baseUrl: 'http://radarr', apiKey: 'b' }]);
 
     const appSettingsService: Pick<AppSettingsService, 'loadInstances' | 'localeId' | 'sonarrInstances' | 'radarrInstances'> = {
-      loadInstances: jasmine.createSpy('loadInstances').and.resolveTo(undefined),
-      localeId: jasmine.createSpy('localeId').and.returnValue('en-US'),
+      loadInstances: vi.fn().mockResolvedValue(undefined),
+      localeId: vi.fn().mockReturnValue('en-US'),
       sonarrInstances: sonarrInstancesSignal,
       radarrInstances: radarrInstancesSignal,
     };
@@ -109,7 +110,7 @@ describe('LibraryTrendPage', () => {
         },
       ],
     };
-    apiService.fetchLibraryTrendStatistics.and.returnValue(of(statisticsResponse));
+    apiService.fetchLibraryTrendStatistics.mockReturnValue(of(statisticsResponse));
 
     await TestBed.configureTestingModule({
       imports: [LibraryTrendPage],
@@ -130,26 +131,26 @@ describe('LibraryTrendPage', () => {
     fixture.detectChanges();
 
     expect(apiService.fetchLibraryTrendStatistics).toHaveBeenCalled();
-    const call: jasmine.CallInfo<typeof apiService.fetchLibraryTrendStatistics> = apiService.fetchLibraryTrendStatistics.calls.mostRecent();
-    expect(call.args[0]).toEqual(['sonarr-1']);
-    expect(call.args[1]).toEqual(['radarr-1']);
+    const call = apiService.fetchLibraryTrendStatistics.mock.lastCall!;
+    expect(call[0]).toEqual(['sonarr-1']);
+    expect(call[1]).toEqual(['radarr-1']);
     const selectedStartDate: Date = fixture.componentInstance['selectedStartDate']();
     const selectedEndDate: Date = fixture.componentInstance['selectedEndDate']();
     const dayDiff: number = Math.round((selectedEndDate.getTime() - selectedStartDate.getTime()) / (24 * 60 * 60 * 1000));
     expect(dayDiff).toBeGreaterThanOrEqual(28);
     expect(dayDiff).toBeLessThanOrEqual(32);
-    expect(call.args[2]).toBe(selectedStartDate.toISOString());
-    expect(call.args[3]).toBe(selectedEndDate.toISOString());
+    expect(call[2]).toBe(selectedStartDate.toISOString());
+    expect(call[3]).toBe(selectedEndDate.toISOString());
 
     const compiled: HTMLElement = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Library Trend');
     const overviewCards: NodeListOf<Element> = compiled.querySelectorAll('.trend-overview-grid .card');
-    expect(overviewCards).toHaveSize(2);
+    expect(overviewCards).toHaveLength(2);
     expect(overviewCards[0].textContent).toContain('Total media files');
     expect(overviewCards[0].textContent).toContain('42');
     expect(overviewCards[1].textContent).toContain('Total storage');
     expect(overviewCards[1].textContent).toContain('1.4 KB');
-    expect(compiled.querySelectorAll('svg')).toHaveSize(2);
+    expect(compiled.querySelectorAll('svg')).toHaveLength(2);
     expect(fixture.componentInstance['historyEntries']().length).toBeGreaterThan(0);
   });
 
@@ -171,14 +172,14 @@ describe('LibraryTrendPage', () => {
     const end = new Date('2026-05-01T00:00:00Z');
     page['updateSelectedDateRange']({ startDate: start, endDate: end });
     await fixture.whenStable();
-    expect(apiService.fetchLibraryTrendStatistics.calls.mostRecent().args).toEqual([
+    expect(apiService.fetchLibraryTrendStatistics.mock.lastCall).toEqual([
       ['sonarr-1'],
       ['radarr-2'],
       start.toISOString(),
       end.toISOString(),
     ]);
     const restored = page['filterOptions']().find((filter) => filter.id === 'radarr-instance-filter')!;
-    expect(restored.exclude).toBeTrue();
+    expect(restored.exclude).toBe(true);
     expect(restored.type === FilterOptionType.MULTISELECT && restored.selectedValues).toEqual(['radarr-1']);
   });
 
@@ -187,9 +188,9 @@ describe('LibraryTrendPage', () => {
     fixture.detectChanges();
     await TestBed.inject(AppSettingsService).loadInstances();
     await fixture.whenStable();
-    const call = apiService.fetchLibraryTrendStatistics.calls.mostRecent();
-    expect(call.args[0]).toEqual([]);
-    expect(call.args[1]).toEqual(['radarr-1']);
+    const call = apiService.fetchLibraryTrendStatistics.mock.lastCall!;
+    expect(call[0]).toEqual([]);
+    expect(call[1]).toEqual(['radarr-1']);
     expect(fixture.componentInstance['filterOptions']().map((filter) => filter.id)).toEqual(['radarr-instance-filter', 'date-range']);
   });
 
@@ -203,8 +204,8 @@ describe('LibraryTrendPage', () => {
     const storageModel: ReturnType<LibraryTrendPage['storageChartModel']> = fixture.componentInstance['storageChartModel']();
     expect(mediaModel).not.toBeNull();
     expect(storageModel).not.toBeNull();
-    expect(mediaModel?.points).toHaveSize(2);
-    expect(storageModel?.points).toHaveSize(2);
+    expect(mediaModel?.points).toHaveLength(2);
+    expect(storageModel?.points).toHaveLength(2);
     expect(mediaModel?.points[0].tooltipLines[1]).toContain('10');
     expect(storageModel?.points[1].tooltipLines[1]).toContain('1.4 KB');
     expect(fixture.nativeElement.querySelector('cdk-virtual-scroll-viewport')).toBeTruthy();
@@ -227,7 +228,7 @@ describe('LibraryTrendPage', () => {
   }
 
   async function loadPageWithHistory(history: LibraryChangeHistoryEntry[]): Promise<LibraryTrendPage> {
-    apiService.fetchLibraryTrendStatistics.and.returnValue(of({ ...statisticsResponse, history }));
+    apiService.fetchLibraryTrendStatistics.mockReturnValue(of({ ...statisticsResponse, history }));
     fixture.detectChanges();
     await TestBed.inject(AppSettingsService).loadInstances();
     await fixture.whenStable();
@@ -235,7 +236,7 @@ describe('LibraryTrendPage', () => {
     const page: LibraryTrendPage = fixture.componentInstance;
     const viewport = page['historyViewport']();
     if (viewport) {
-      // Give the virtual table a real viewport even in Karma's test iframe.
+      // Give the virtual table a real viewport even in the headless test browser.
       viewport.getElementRef().nativeElement.style.height = '240px';
       viewport.checkViewportSize();
       viewport.scrollToIndex(0);
@@ -324,17 +325,17 @@ describe('LibraryTrendPage', () => {
 
     const viewport = page['historyViewport']();
     expect(viewport).toBeTruthy();
-    const scrollToSpy: jasmine.Spy = spyOn(viewport!, 'scrollTo');
+    const scrollToSpy: MockInstance = vi.spyOn(viewport!, 'scrollTo');
 
     page['onChartPointSelected']('2026-05-02T12:00:00.000Z');
 
     const highlighted: ReadonlySet<LibraryChangeHistoryEntry> = page['highlightedHistoryEntries']();
-    expect(highlighted.has(entries[1])).toBeTrue();
-    expect(highlighted.has(entries[2])).toBeTrue();
-    expect(highlighted.has(entries[0])).toBeFalse();
-    expect(highlighted.has(entries[3])).toBeFalse();
+    expect(highlighted.has(entries[1])).toBe(true);
+    expect(highlighted.has(entries[2])).toBe(true);
+    expect(highlighted.has(entries[0])).toBe(false);
+    expect(highlighted.has(entries[3])).toBe(false);
     expect(scrollToSpy).toHaveBeenCalledTimes(1);
-    const options: ScrollToOptions = scrollToSpy.calls.mostRecent().args[0];
+    const options: ScrollToOptions = scrollToSpy.mock.lastCall![0];
     const expectedTop: number = Math.max(0, 1 * 29 - (viewport!.getElementRef().nativeElement.clientHeight - 29) / 2);
     expect(options.top).toBe(expectedTop);
     expect(options.behavior).toBe('smooth');
@@ -348,7 +349,7 @@ describe('LibraryTrendPage', () => {
     const page: LibraryTrendPage = await loadPageWithHistory(entries);
     const viewport = page['historyViewport']();
     expect(viewport).toBeTruthy();
-    const scrollToSpy: jasmine.Spy = spyOn(viewport!, 'scrollTo');
+    const scrollToSpy: MockInstance = vi.spyOn(viewport!, 'scrollTo');
 
     page['onChartPointSelected']('2026-05-04T12:00:00.000Z');
 
@@ -359,10 +360,10 @@ describe('LibraryTrendPage', () => {
   it('clears the highlighted history entries when new statistics are loaded', async () => {
     const entries: LibraryChangeHistoryEntry[] = [buildHistoryEntry('2026-05-02T12:00:00.000Z')];
     const page: LibraryTrendPage = await loadPageWithHistory(entries);
-    spyOn(page['historyViewport']()!, 'scrollTo');
+    vi.spyOn(page['historyViewport']()!, 'scrollTo');
 
     page['onChartPointSelected']('2026-05-02T12:00:00.000Z');
-    expect(page['highlightedHistoryEntries']().has(entries[0])).toBeTrue();
+    expect(page['highlightedHistoryEntries']().has(entries[0])).toBe(true);
 
     page['loadStats']();
     await fixture.whenStable();

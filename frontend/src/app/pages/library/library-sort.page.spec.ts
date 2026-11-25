@@ -1,4 +1,5 @@
 import { MediaTitlesService } from '../../services/media-titles.service';
+import type { MockInstance } from 'vitest';
 import { signal, WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject } from 'rxjs';
@@ -16,23 +17,29 @@ import { LibraryPage } from './library.page';
 
 describe('LibraryPage sorting', () => {
   let page: LibraryPage;
-  let radarr: jasmine.SpyObj<RadarrApiService>;
-  let sonarr: jasmine.SpyObj<SonarrApiService>;
+  let radarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
+  let sonarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
   let titleSorting: WritableSignal<TitleSortingSettings>;
   const storageKey = 'sort:library';
 
   beforeEach(() => {
     localStorage.removeItem(storageKey);
-    radarr = jasmine.createSpyObj<RadarrApiService>('Radarr', ['fetchFilterValues', 'fetchLibrary']);
-    sonarr = jasmine.createSpyObj<SonarrApiService>('Sonarr', ['fetchFilterValues', 'fetchLibrary']);
-    radarr.fetchFilterValues.and.returnValue(
+    radarr = {
+      fetchFilterValues: vi.fn<RadarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<RadarrApiService['fetchLibrary']>(),
+    };
+    sonarr = {
+      fetchFilterValues: vi.fn<SonarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<SonarrApiService['fetchLibrary']>(),
+    };
+    radarr.fetchFilterValues.mockReturnValue(
       of({ genres: [], tags: [], statuses: [], qualityProfiles: [], audioLanguages: [], subtitleLanguages: [] }),
     );
-    sonarr.fetchFilterValues.and.returnValue(
+    sonarr.fetchFilterValues.mockReturnValue(
       of({ genres: [], tags: [], statuses: [], qualityProfiles: [], audioLanguages: [], subtitleLanguages: [] }),
     );
-    radarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
-    sonarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
+    radarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
+    sonarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
     titleSorting = signal({ enabled: false, ignoredLeadingWords: [] });
     TestBed.configureTestingModule({
       providers: [
@@ -124,12 +131,12 @@ describe('LibraryPage sorting', () => {
 
   it('requests the alphabetical ascending default on both sources', () => {
     page['loadData']();
-    const expected = jasmine.objectContaining({
+    const expected = expect.objectContaining({
       sortField: LibrarySortField.ALPHABETICAL,
       sortDirection: LibrarySortDirection.ASCENDING,
     });
-    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
-    expect(sonarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
+    expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
+    expect(sonarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
   });
 
   it('keeps table components mounted while translated titles are loading', () => {
@@ -137,12 +144,12 @@ describe('LibraryPage sorting', () => {
     page['loadData']();
     fill();
     const response = new Subject<RadarrLibraryBatchResponse>();
-    radarr.fetchLibrary.and.returnValue(response);
+    radarr.fetchLibrary.mockReturnValue(response);
     const revision = TestBed.inject(MediaTitlesService).revision as WritableSignal<string>;
     revision.set('de:translated');
     TestBed.tick();
-    expect(page['radarrInstanceTables']()[0].movies).toHaveSize(2);
-    expect(page['sonarrInstanceTables']()[0].series).toHaveSize(2);
+    expect(page['radarrInstanceTables']()[0].movies).toHaveLength(2);
+    expect(page['sonarrInstanceTables']()[0].series).toHaveLength(2);
     response.next({ syncedAt: null, instances: [{ instanceId: 'r', instanceName: 'Radarr', rows: [movie(1, 'Übersetzt', null, null)] }] });
     response.complete();
     expect(page['radarrInstanceTables']()[0].movies[0].title).toBe('Übersetzt');
@@ -155,7 +162,7 @@ describe('LibraryPage sorting', () => {
     page['sortDirection'].set(LibrarySortDirection.DESCENDING);
     page['titleSearch'].set('alias');
     page['loadData']();
-    radarr.fetchLibrary.calls.reset();
+    radarr.fetchLibrary.mockClear();
     revision.set('de:0');
     TestBed.tick();
     expect(radarr.fetchLibrary).toHaveBeenCalledTimes(1);
@@ -170,12 +177,12 @@ describe('LibraryPage sorting', () => {
     page['sortField'].set(LibrarySortField.AIRED);
     page['sortDirection'].set(LibrarySortDirection.DESCENDING);
     page['loadData']();
-    const expected = jasmine.objectContaining({
+    const expected = expect.objectContaining({
       sortField: LibrarySortField.AIRED,
       sortDirection: LibrarySortDirection.DESCENDING,
     });
-    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
-    expect(sonarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
+    expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
+    expect(sonarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
   });
 
   it('keeps the sorting in local storage and restores it', () => {
@@ -248,9 +255,9 @@ describe('LibraryPage sorting', () => {
     page['restoreSort']();
     expect(page['sortField']()).toBe(LibrarySortField.SIZE);
     page['loadData']();
-    const expected = jasmine.objectContaining({ sortField: LibrarySortField.SIZE, sortDirection: LibrarySortDirection.DESCENDING });
-    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
-    expect(sonarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
+    const expected = expect.objectContaining({ sortField: LibrarySortField.SIZE, sortDirection: LibrarySortDirection.DESCENDING });
+    expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
+    expect(sonarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
   });
 
   it('reactively sorts mixed media from multiple instances while preserving display titles and direction', () => {
@@ -275,7 +282,7 @@ describe('LibraryPage sorting', () => {
   it('reloads the current table query when persisted rules change and cancels the older response', () => {
     const oldResponse = new Subject<RadarrLibraryBatchResponse>();
     const newResponse = new Subject<RadarrLibraryBatchResponse>();
-    radarr.fetchLibrary.and.returnValues(oldResponse, newResponse);
+    radarr.fetchLibrary.mockReturnValueOnce(oldResponse).mockReturnValueOnce(newResponse);
     page['sortField'].set(LibrarySortField.ADDED);
     page['sortDirection'].set(LibrarySortDirection.DESCENDING);
     page['viewMode'].set('table');
@@ -286,8 +293,8 @@ describe('LibraryPage sorting', () => {
     TestBed.tick();
     expect(radarr.fetchLibrary).toHaveBeenCalledTimes(2);
     expect(sonarr.fetchLibrary).toHaveBeenCalledTimes(2);
-    expect(radarr.fetchLibrary.calls.mostRecent().args[0]).toEqual(
-      jasmine.objectContaining({
+    expect(radarr.fetchLibrary.mock.lastCall![0]).toEqual(
+      expect.objectContaining({
         sortField: LibrarySortField.ADDED,
         sortDirection: LibrarySortDirection.DESCENDING,
       }),

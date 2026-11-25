@@ -1,4 +1,5 @@
 import { provideHttpClient, withXhr } from '@angular/common/http';
+import type { MockInstance } from 'vitest';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
@@ -99,7 +100,7 @@ describe('SettingsPage', () => {
         {
           provide: MatDialog,
           useValue: {
-            open: jasmine.createSpy('open').and.returnValue({
+            open: vi.fn().mockReturnValue({
               afterClosed: () => of(true),
             }),
           },
@@ -177,7 +178,7 @@ describe('SettingsPage', () => {
     await fixture.whenStable();
 
     const logos: NodeListOf<HTMLImageElement> = fixture.nativeElement.querySelectorAll('.mat-mdc-tab-body-active img[aria-hidden="true"]');
-    expect(logos).toHaveSize(3);
+    expect(logos).toHaveLength(3);
     expect(logos[0].getAttribute('src')).toBe('/icons/logo_radarr.svg');
     expect(logos[1].getAttribute('src')).toBe('/icons/logo_sonarr.svg');
     expect(logos[2].getAttribute('src')).toBe('/icons/logo_seerr.svg');
@@ -206,7 +207,7 @@ describe('SettingsPage', () => {
     fixture.detectChanges();
 
     const router: Router = TestBed.inject(Router);
-    const navigateSpy: jasmine.Spy = spyOn(router, 'navigate').and.resolveTo(true);
+    const navigateSpy: MockInstance = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
     fixture.componentInstance['handleTabSelectionChange'](1);
     fixture.detectChanges();
@@ -219,7 +220,7 @@ describe('SettingsPage', () => {
     expect(fixture.componentInstance['selectedTabIndex']()).toBe(1);
     expect(navigateSpy).toHaveBeenCalledWith(
       [],
-      jasmine.objectContaining({
+      expect.objectContaining({
         queryParams: { tab: 'arr-instances' },
         queryParamsHandling: 'merge',
         replaceUrl: false,
@@ -256,13 +257,13 @@ describe('SettingsPage', () => {
     fixture.detectChanges();
 
     const router: Router = TestBed.inject(Router);
-    const navigateSpy: jasmine.Spy = spyOn(router, 'navigate').and.resolveTo(true);
+    const navigateSpy: MockInstance = vi.spyOn(router, 'navigate').mockResolvedValue(true);
     const confirmTarget: typeof globalThis & {
       confirm: (message?: string) => boolean;
     } = globalThis as typeof globalThis & {
       confirm: (message?: string) => boolean;
     };
-    spyOn(confirmTarget, 'confirm').and.returnValue(false);
+    vi.spyOn(confirmTarget, 'confirm').mockReturnValue(false);
 
     const settingsGeneralTabWidget: SettingsPage['settingsGeneralTabWidget'] = fixture.componentInstance['settingsGeneralTabWidget']!;
     settingsGeneralTabWidget['settingsForm'].controls.language.markAsDirty();
@@ -278,7 +279,7 @@ describe('SettingsPage', () => {
     expect(fixture.componentInstance['selectedTabIndex']()).toBe(0);
     expect(navigateSpy).toHaveBeenCalledWith(
       [],
-      jasmine.objectContaining({
+      expect.objectContaining({
         queryParams: { tab: 'general' },
         queryParamsHandling: 'merge',
         replaceUrl: true,

@@ -39,7 +39,7 @@ describe('ReleasesService', () => {
 
     expect(service.versions().map((version) => version.version)).toEqual(['1.4.0', '1.3.0']);
     expect(service.currentVersion()).toBe('1.3.0');
-    expect(service.updateAvailable()).toBeTrue();
+    expect(service.updateAvailable()).toBe(true);
     expect(service.loadError()).toBeNull();
   });
 
@@ -53,7 +53,7 @@ describe('ReleasesService', () => {
     await second;
 
     expect(service.loadError()).toBe('releases.unreachable');
-    expect(service.loading()).toBeFalse();
+    expect(service.loading()).toBe(false);
   });
 
   it('probes once per session', async () => {
@@ -71,9 +71,9 @@ describe('ReleasesService', () => {
 
     httpTestingController.expectOne('/api/releases/');
 
-    expect(service.loading()).toBeTrue();
+    expect(service.loading()).toBe(true);
     expect(service.overview()).toBeNull();
-    expect(service.updateAvailable()).toBeFalse();
+    expect(service.updateAvailable()).toBe(false);
 
     httpTestingController.verify();
     void probe;

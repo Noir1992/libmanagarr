@@ -8,7 +8,8 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "test:ci": "ng test --watch=false --browsers=ChromeHeadlessNoSandbox",
+    "test:ci": "ng test --watch=false",
+    "test:cov": "ng test --watch=false --coverage",
     "lint": "ng lint",
     "format": "prettier --write ."
   },
@@ -38,19 +39,16 @@
     "@angular/cli": "^22.0.0",
     "@angular/compiler-cli": "^22.0.0",
     "@eslint/js": "^10.0.1",
-    "@types/jasmine": "^6.0.0",
+    "@vitest/browser-playwright": "^5.1.1",
+    "@vitest/coverage-istanbul": "^5.1.1",
+    "@vitest/eslint-plugin": "^1.6.28",
     "angular-eslint": "^22.6.0",
     "eslint": "^10.4.1",
-    "istanbul-lib-instrument": "^6.0.3",
-    "jasmine-core": "^6.3.0",
-    "karma": "^6.4.4",
-    "karma-chrome-launcher": "^3.2.0",
-    "karma-coverage": "^2.2.1",
-    "karma-jasmine": "^5.1.0",
-    "karma-jasmine-html-reporter": "^2.2.0",
+    "playwright": "^1.65.1",
     "prettier": "^3.8.3",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.60.1"
+    "typescript-eslint": "^8.60.1",
+    "vitest": "^5.1.1"
   },
   "overrides": {
     "eslint": {

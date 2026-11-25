@@ -124,11 +124,11 @@ describe('SymlinkService', () => {
 
   it('reads the path configuration with its probe answers', async () => {
     const pending = service.loadSettings();
-    expect(service.settingsLoading()).toBeTrue();
+    expect(service.settingsLoading()).toBe(true);
     http.expectOne(base).flush(settings());
     await pending;
-    expect(service.settings()?.storageAreas).toHaveSize(1);
-    expect(service.settingsLoading()).toBeFalse();
+    expect(service.settings()?.storageAreas).toHaveLength(1);
+    expect(service.settingsLoading()).toBe(false);
     expect(service.settingsError()).toBeNull();
   });
 
@@ -137,12 +137,12 @@ describe('SymlinkService', () => {
     http.expectOne(base).flush({ title: 'Nope' }, { status: 500, statusText: 'Error' });
     expect((await pending)?.message).toBeDefined();
     expect(service.settingsError()).toBe('Nope');
-    expect(service.settingsLoading()).toBeFalse();
+    expect(service.settingsLoading()).toBe(false);
   });
 
   it('checks support automatically even while disabled and updates the returned effective state', async () => {
     const pending = service.checkCapabilities();
-    expect(service.capabilityChecking()).toBeTrue();
+    expect(service.capabilityChecking()).toBe(true);
     const request = http.expectOne(`${base}/capability-check`);
     expect(request.request.method).toBe('POST');
     request.flush({
@@ -151,9 +151,9 @@ describe('SymlinkService', () => {
       capabilityChecks: [{ storageAreaId: areaId, status: 'Unsupported', detail: 'Symlinks are unsupported.', stale: false }],
     });
     await pending;
-    expect(service.settings()?.enabled).toBeFalse();
+    expect(service.settings()?.enabled).toBe(false);
     expect(service.settings()?.capabilityChecks[0].status).toBe('Unsupported');
-    expect(service.capabilityChecking()).toBeFalse();
+    expect(service.capabilityChecking()).toBe(false);
   });
 
   it('reports automatic verification failures separately from settings saves', async () => {
@@ -162,7 +162,7 @@ describe('SymlinkService', () => {
     await pending;
     expect(service.capabilityError()).toBe('Verification unavailable');
     expect(service.settingsError()).toBeNull();
-    expect(service.capabilityChecking()).toBeFalse();
+    expect(service.capabilityChecking()).toBe(false);
   });
 
   it('does not let an old automatic check replace settings saved afterwards', async () => {
@@ -174,8 +174,8 @@ describe('SymlinkService', () => {
     oldRequest.flush({ ...settings(), mediaRoot: '/old-media', enabled: true });
     await check;
     expect(service.settings()?.mediaRoot).toBe('/new-media');
-    expect(service.settings()?.enabled).toBeFalse();
-    expect(service.capabilityChecking()).toBeFalse();
+    expect(service.settings()?.enabled).toBe(false);
+    expect(service.capabilityChecking()).toBe(false);
   });
 
   it('sends the three lists and keeps the revision with the server', async () => {
@@ -184,7 +184,7 @@ describe('SymlinkService', () => {
     await load;
     const current = service.settings()!;
     const pending = service.saveSettings({ mediaRoot: current.mediaRoot! });
-    expect(service.saving()).toBeTrue();
+    expect(service.saving()).toBe(true);
     const request = http.expectOne(base);
     expect(request.request.method).toBe('PUT');
     expect(request.request.body).toEqual({
@@ -194,7 +194,7 @@ describe('SymlinkService', () => {
     request.flush(settings(1));
     await pending;
     expect(service.settings()?.revision).toBe(1);
-    expect(service.saving()).toBeFalse();
+    expect(service.saving()).toBe(false);
   });
 
   it('reloads the menu count immediately after enabling without opening the overview', async () => {
@@ -209,7 +209,7 @@ describe('SymlinkService', () => {
     const save = service.saveSettings({ mediaRoot: '/media', enabled: true });
     http.expectOne(base).flush({ ...settings(), enabled: true });
     await save;
-    expect(service.saving()).toBeFalse();
+    expect(service.saving()).toBe(false);
     const refresh = http.expectOne(`${base}/count`);
     expect(refresh.request.method).toBe('GET');
     refresh.flush({ count: 1 });
@@ -261,9 +261,9 @@ describe('SymlinkService', () => {
     await save;
     http.expectOne(`${base}/count`).flush({ title: 'Count unavailable' }, { status: 503, statusText: 'Unavailable' });
     await settle();
-    expect(service.settings()?.enabled).toBeTrue();
+    expect(service.settings()?.enabled).toBe(true);
     expect(service.settingsError()).toBeNull();
-    expect(service.saving()).toBeFalse();
+    expect(service.saving()).toBe(false);
     expect(service.overviewError()).toBe('Count unavailable');
   });
 
@@ -281,7 +281,7 @@ describe('SymlinkService', () => {
     expect(await pending).toBe('The media root is required.');
     expect(service.fieldErrors()['symlinks.mediaRoot']).toBe('The media root is required.');
     expect(service.settingsError()).toBe('The media root is required.');
-    expect(service.saving()).toBeFalse();
+    expect(service.saving()).toBe(false);
   });
 
   it('replaces the stored probe answer for the tested area only', async () => {
@@ -302,8 +302,8 @@ describe('SymlinkService', () => {
     const check = await pending;
     expect(check.status).toBe('Available');
     expect(service.settings()?.capabilityChecks).toEqual([check]);
-    expect(service.capabilityStates()[areaId].busy).toBeFalse();
-    expect(service.capabilityStates()[areaId].success).toBeTrue();
+    expect(service.capabilityStates()[areaId].busy).toBe(false);
+    expect(service.capabilityStates()[areaId].success).toBe(true);
   });
 
   it('reads suggestions, links and declines together', async () => {
@@ -313,9 +313,9 @@ describe('SymlinkService', () => {
     http.expectOne(`${base}/suggestions`).flush([suggestion()]);
     http.expectOne(`${base}/rejections`).flush([]);
     await pending;
-    expect(service.suggestions()).toHaveSize(1);
-    expect(service.links()).toHaveSize(1);
-    expect(service.overviewLoading()).toBeFalse();
+    expect(service.suggestions()).toHaveLength(1);
+    expect(service.links()).toHaveLength(1);
+    expect(service.overviewLoading()).toBe(false);
   });
 
   it('asks the preview route what confirming would do', async () => {
@@ -344,7 +344,7 @@ describe('SymlinkService', () => {
       warnings: [],
     });
     const plan = await pending;
-    expect(plan.runnable).toBeFalse();
+    expect(plan.runnable).toBe(false);
     expect(plan.blockers[0].code).toBe('no-file');
   });
 
@@ -365,7 +365,7 @@ describe('SymlinkService', () => {
     http.expectOne(`${base}/suggestions`).flush([{ ...suggestion(), status: 'Creating', linkId: 'link-1' } satisfies SymlinkSuggestion]);
     const created = await pending;
     expect(created.id).toBe('link-1');
-    expect(service.links()).toHaveSize(1);
+    expect(service.links()).toHaveLength(1);
     expect(service.suggestions()[0].status).toBe('Creating');
   });
 
@@ -423,7 +423,7 @@ describe('SymlinkService', () => {
     const rejected = await pending;
     expect(rejected.status).toBe('Rejected');
     expect(service.suggestions()[0].status).toBe('Rejected');
-    expect(service.rejections()).toHaveSize(1);
+    expect(service.rejections()).toHaveLength(1);
   });
 
   it('drops a decline from the archive and lets the pair be offered again', async () => {
@@ -458,8 +458,8 @@ describe('SymlinkService', () => {
     await settle();
     http.expectOne(`${base}/suggestions`).flush([suggestion()]);
     await pending;
-    expect(service.rejections()).toHaveSize(0);
-    expect(service.suggestions()).toHaveSize(1);
+    expect(service.rejections()).toHaveLength(0);
+    expect(service.suggestions()).toHaveLength(1);
   });
 
   it('presents the remembered revision when following upgrades is switched', async () => {
@@ -477,7 +477,7 @@ describe('SymlinkService', () => {
     request.flush({ ...link('link-1', 5), autoFollowUp: false });
     const updated = await pending;
     expect(updated.revision).toBe(5);
-    expect(service.links()[0].autoFollowUp).toBeFalse();
+    expect(service.links()[0].autoFollowUp).toBe(false);
     expect(service.linkStates()['link-1'].error).toBeNull();
   });
 
@@ -508,36 +508,36 @@ describe('SymlinkService', () => {
       };
       await read([original]);
       const retry = service.retryLink('link-1', 3);
-      expect(service.linkStates()['link-1'].repairing).toBeTrue();
+      expect(service.linkStates()['link-1'].repairing).toBe(true);
       const queued: SymlinkLink = { ...link('link-1', 4), setupStep: 'MonitoringDisabled' };
       http.expectOne(`${base}/links/link-1/retry`).flush(queued);
       await retry;
       expect(service.links()[0].findings).toEqual([finding]);
-      expect(service.linkStates()['link-1'].busy).toBeTrue();
-      expect(service.linkStates()['link-1'].success).toBeFalse();
-      await expectAsync(service.retryLink('link-1', 4)).toBeRejected();
+      expect(service.linkStates()['link-1'].busy).toBe(true);
+      expect(service.linkStates()['link-1'].success).toBe(false);
+      await expect(service.retryLink('link-1', 4)).rejects.toThrow();
       http.expectNone(`${base}/links/link-1/retry`);
 
       // An older completed snapshot must not finish a newer repair attempt.
       await read([link('link-1', 3)]);
       expect(service.links()[0].findings).toEqual([finding]);
-      expect(service.linkStates()['link-1'].repairing).toBeTrue();
+      expect(service.linkStates()['link-1'].repairing).toBe(true);
       // A failed refresh is not an outcome of the background repair.
       const failedRead = service.refreshProgress();
       http.expectOne(`${base}/links`).flush('Unavailable', { status: 503, statusText: 'Unavailable' });
       await failedRead;
-      expect(service.linkStates()['link-1'].repairing).toBeTrue();
+      expect(service.linkStates()['link-1'].repairing).toBe(true);
       await read([{ ...queued, revision: 5, setupStep: 'RescanRequested' }]);
       expect(service.links()[0].findings).toEqual([finding]);
-      expect(service.linkStates()['link-1'].repairing).toBeTrue();
+      expect(service.linkStates()['link-1'].repairing).toBe(true);
       const nextFinding = { ...finding, detail: 'Repair did not fix the problem.' };
       await read([
         fails
           ? { ...queued, revision: 6, setupStep: 'MetadataMatched', findings: [nextFinding] }
           : { ...link('link-1', 6), findings: [{ ...finding, code: 'language-mapping-unavailable', detail: 'Telugu retained.' }] },
       ]);
-      expect(service.linkStates()['link-1'].busy).toBeFalse();
-      expect(service.linkStates()['link-1'].repairing).not.toBeTrue();
+      expect(service.linkStates()['link-1'].busy).toBe(false);
+      expect(service.linkStates()['link-1'].repairing).not.toBe(true);
       expect(service.linkStates()['link-1'].success).toBe(!fails);
       expect(service.links()[0].findings[0].detail).toBe(fails ? nextFinding.detail : 'Telugu retained.');
     });
@@ -547,8 +547,8 @@ describe('SymlinkService', () => {
     const pending = service.retryLink('link-1', 3).catch((error: Error) => error.message);
     http.expectOne(`${base}/links/link-1/retry`).flush({ detail: 'Repair refused.' }, { status: 400, statusText: 'Bad Request' });
     expect(await pending).toBe('Repair refused.');
-    expect(service.linkStates()['link-1'].busy).toBeFalse();
-    expect(service.linkStates()['link-1'].repairing).not.toBeTrue();
+    expect(service.linkStates()['link-1'].busy).toBe(false);
+    expect(service.linkStates()['link-1'].repairing).not.toBe(true);
     expect(service.linkStates()['link-1'].error).toBe('Repair refused.');
   });
 
@@ -557,11 +557,11 @@ describe('SymlinkService', () => {
     http.expectOne(`${base}/links`).flush([], { headers: { 'X-LibManagarr-Deletion-Refresh-Pending': 'true' } });
     await settle();
     expect(service.links()).toEqual([]);
-    expect(service.deletionRefreshPending()).toBeFalse();
+    expect(service.deletionRefreshPending()).toBe(false);
     http.expectOne(`${base}/suggestions`).flush([]);
     http.expectOne(`${base}/rejections`).flush([]);
     await pending;
-    expect(service.deletionRefreshPending()).toBeTrue();
+    expect(service.deletionRefreshPending()).toBe(true);
 
     const finished = service.refreshProgress();
     http.expectOne(`${base}/links`).flush([], { headers: { 'X-LibManagarr-Deletion-Refresh-Pending': 'false' } });
@@ -569,8 +569,8 @@ describe('SymlinkService', () => {
     http.expectOne(`${base}/suggestions`).flush([suggestion()]);
     http.expectOne(`${base}/rejections`).flush([]);
     await finished;
-    expect(service.deletionRefreshPending()).toBeFalse();
-    expect(service.suggestions()).toHaveSize(1);
+    expect(service.deletionRefreshPending()).toBe(false);
+    expect(service.suggestions()).toHaveLength(1);
   });
 
   it('retains the deletion until removal and refreshed suggestions can be published together', async () => {
@@ -582,8 +582,8 @@ describe('SymlinkService', () => {
     await load;
 
     const pending = service.deleteLink('link-1', 3);
-    expect(service.linkStates()['link-1'].deleting).toBeTrue();
-    expect(service.linkStates()['link-1'].busy).toBeTrue();
+    expect(service.linkStates()['link-1'].deleting).toBe(true);
+    expect(service.linkStates()['link-1'].busy).toBe(true);
     await service.deleteLink('link-1', 3);
     const request = http.expectOne(`${base}/links/link-1?revision=3`);
     expect(request.request.method).toBe('DELETE');
@@ -595,23 +595,23 @@ describe('SymlinkService', () => {
     http.expectOne(`${base}/rejections`).flush([]);
     await pending;
     expect(service.links()[0].operationStatus).toBe('CleanupPending');
-    expect(service.linkStates()['link-1'].busy).toBeFalse();
-    expect(service.linkStates()['link-1'].deleting).toBeTrue();
+    expect(service.linkStates()['link-1'].busy).toBe(false);
+    expect(service.linkStates()['link-1'].deleting).toBe(true);
 
     const progress = service.refreshProgress();
     expect(service.refreshProgress()).toBe(progress);
     http.expectOne(`${base}/links`).flush([]);
     await settle();
-    expect(service.links()).toHaveSize(1);
+    expect(service.links()).toHaveLength(1);
     expect(service.suggestions()).toEqual([]);
     http.expectOne(`${base}/suggestions`).flush([suggestion()]);
-    expect(service.links()).toHaveSize(1);
+    expect(service.links()).toHaveLength(1);
     http.expectOne(`${base}/rejections`).flush([]);
     await progress;
     expect(service.links()).toEqual([]);
     expect(service.suggestions()).toEqual([suggestion()]);
     expect(service.rejections()).toEqual([]);
-    expect(service.linkStates()['link-1'].deleting).toBeFalse();
+    expect(service.linkStates()['link-1'].deleting).toBe(false);
   });
 
   it('keeps count reads independent from an in-flight coherent overview', async () => {
@@ -627,7 +627,7 @@ describe('SymlinkService', () => {
     rejections.flush([]);
     await overview;
     expect(service.pendingCount()).toBe(1);
-    expect(service.links()).toHaveSize(1);
+    expect(service.links()).toHaveLength(1);
     expect(service.suggestions()).toEqual([suggestion()]);
   });
 
@@ -639,9 +639,9 @@ describe('SymlinkService', () => {
     http.expectOne(`${base}/suggestions`).flush([suggestion()], { headers });
     http.expectOne(`${base}/rejections`).flush([], { headers });
     await pending;
-    expect(service.isAreaCurrent('suggestions', 'server', 7)).toBeTrue();
-    expect(service.isAreaCurrent('links', 'server', 8)).toBeFalse();
-    expect(service.isAreaCurrent('links', 'restarted', 0)).toBeFalse();
+    expect(service.isAreaCurrent('suggestions', 'server', 7)).toBe(true);
+    expect(service.isAreaCurrent('links', 'server', 8)).toBe(false);
+    expect(service.isAreaCurrent('links', 'restarted', 0)).toBe(false);
   });
 
   it('does not publish mixed list revisions from concurrent backend writes', async () => {
@@ -656,7 +656,7 @@ describe('SymlinkService', () => {
     await pending;
     expect(service.links()).toEqual([]);
     expect(service.suggestions()).toEqual([]);
-    expect(service.isAreaCurrent('links', 'server', 7)).toBeFalse();
+    expect(service.isAreaCurrent('links', 'server', 7)).toBe(false);
     expect(service.overviewError()).toBeTruthy();
   });
 
@@ -695,8 +695,8 @@ describe('SymlinkService', () => {
     await settle();
     http.expectOne(`${base}/links`).flush([{ ...link('new-link', 7), linkPath: '/media/series/specials/final-name.mkv' }]);
     await settle();
-    expect(service.linkStates()['new-link'].busy).toBeTrue();
-    expect(service.linkStates()['new-link'].deleting).toBeTrue();
+    expect(service.linkStates()['new-link'].busy).toBe(true);
+    expect(service.linkStates()['new-link'].deleting).toBe(true);
     expect(service.linkStates()['new-link'].error).toBeNull();
     http.expectOne(`${base}/links/new-link?revision=7`).flush(null);
     await settle();
@@ -705,7 +705,7 @@ describe('SymlinkService', () => {
     expect(service.links()).toEqual([]);
     expect(service.suggestions()).toEqual([suggestion('again-2')]);
     expect(service.linkStates()['new-link'].error).toBeNull();
-    expect(service.linkStates()['new-link'].deleting).toBeFalse();
+    expect(service.linkStates()['new-link'].deleting).toBe(false);
     http.expectNone(`${base}/suggestions/refresh`);
   });
 
@@ -729,7 +729,7 @@ describe('SymlinkService', () => {
       expect(await pending).toBe('The entry changed.');
       http.expectNone(`${base}/links/link-1?revision=7`);
       expect(service.links()[0]).toEqual(changed);
-      expect(service.linkStates()['link-1'].deleting).toBeFalse();
+      expect(service.linkStates()['link-1'].deleting).toBe(false);
     });
   }
 
@@ -747,7 +747,7 @@ describe('SymlinkService', () => {
     await pending;
     http.expectNone(`${base}/links/link-1?revision=4`);
     expect(service.linkStates()['link-1'].error).toBeNull();
-    expect(service.linkStates()['link-1'].deleting).toBeTrue();
+    expect(service.linkStates()['link-1'].deleting).toBe(true);
   });
 
   it('bounds repeated revision conflicts and leaves the refreshed row available for another action', async () => {
@@ -768,7 +768,7 @@ describe('SymlinkService', () => {
     await respondOverview([link('link-1', 4)]);
     expect(await pending).toBe('Still changing');
     expect(service.links()[0].revision).toBe(4);
-    expect(service.linkStates()['link-1'].deleting).toBeFalse();
+    expect(service.linkStates()['link-1'].deleting).toBe(false);
     http.expectNone(`${base}/links/link-1?revision=4`);
   });
 
@@ -796,13 +796,13 @@ describe('SymlinkService', () => {
     http.expectOne(`${base}/rejections`).flush([]);
     await retry;
     expect(service.links()).toEqual([]);
-    expect(service.suggestions()).toHaveSize(1);
+    expect(service.suggestions()).toHaveLength(1);
     expect(service.overviewError()).toBeNull();
   });
 
   it('unlocks the row when the delete request itself is rejected', async () => {
     const pending = service.deleteLink('link-1', 3).catch((error: Error) => error.message);
-    expect(service.linkStates()['link-1'].deleting).toBeTrue();
+    expect(service.linkStates()['link-1'].deleting).toBe(true);
     http.expectOne(`${base}/links/link-1?revision=3`).flush({ title: 'No permission' }, { status: 503, statusText: 'Unavailable' });
     await settle();
     http.expectOne(`${base}/links`).flush([link('link-1', 3)]);
@@ -810,8 +810,8 @@ describe('SymlinkService', () => {
     http.expectOne(`${base}/suggestions`).flush([]);
     http.expectOne(`${base}/rejections`).flush([]);
     expect(await pending).toBe('No permission');
-    expect(service.linkStates()['link-1'].deleting).toBeFalse();
-    expect(service.linkStates()['link-1'].busy).toBeFalse();
+    expect(service.linkStates()['link-1'].deleting).toBe(false);
+    expect(service.linkStates()['link-1'].busy).toBe(false);
   });
 
   it('keeps an interrupted deletion queued on the server visible after a failed delete response', async () => {
@@ -868,11 +868,11 @@ describe('SymlinkService', () => {
     const checked = await pending;
 
     // The answer is the row the register holds now — findings and timestamp included, not the copy in hand.
-    expect(checked.findings).toHaveSize(1);
+    expect(checked.findings).toHaveLength(1);
     expect(service.links()[0].findings[0].code).toBe('link-lost');
     expect(service.links()[0].lastCheckedAt).toBe('2026-11-06T14:00:00Z');
     expect(service.linkStates()['link-1'].error).toBeNull();
-    expect(service.linkStates()['link-1'].busy).toBeFalse();
+    expect(service.linkStates()['link-1'].busy).toBe(false);
   });
 
   it('reads the register again when the checked row had moved underneath', async () => {

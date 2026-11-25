@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import type { MockInstance } from 'vitest';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -17,14 +18,16 @@ class LibraryNoopPage {}
 describe('LoginPage', () => {
   let httpController: HttpTestingController;
   let authService: AuthService;
-  let settingsLoadSpy: jasmine.Spy;
+  let settingsLoadSpy: MockInstance;
 
-  const i18nSpy: jasmine.SpyObj<AppI18nService> = jasmine.createSpyObj<AppI18nService>('AppI18nService', ['t']);
+  const i18nSpy: Record<'t', MockInstance> = {
+    t: vi.fn<AppI18nService['t']>(),
+  };
 
-  i18nSpy.t.and.callFake((key: string): string => key);
+  i18nSpy.t.mockImplementation((key: string): string => key);
 
   beforeEach(() => {
-    settingsLoadSpy = jasmine.createSpy('load').and.resolveTo(undefined);
+    settingsLoadSpy = vi.fn().mockResolvedValue(undefined);
 
     TestBed.configureTestingModule({
       providers: [
@@ -180,8 +183,8 @@ describe('LoginPage', () => {
     const submit: HTMLButtonElement = fixture.nativeElement.querySelector('form button[type="submit"]');
     const username: HTMLInputElement = fixture.nativeElement.querySelector('#login-username');
 
-    expect(submit.disabled).toBeTrue();
-    expect(username.disabled).toBeFalse();
+    expect(submit.disabled).toBe(true);
+    expect(username.disabled).toBe(false);
     expect(fixture.nativeElement.querySelector('.auth-wait-line')).not.toBeNull();
   });
 
@@ -206,12 +209,12 @@ describe('LoginPage', () => {
 
     const submit: HTMLButtonElement = fixture.nativeElement.querySelector('form button[type="submit"]');
 
-    expect(submit.disabled).toBeFalse();
+    expect(submit.disabled).toBe(false);
     expect(fixture.nativeElement.querySelector('.auth-wait-line')).toBeNull();
   });
 
   it('opens the password recovery dialog from the credentials form', async () => {
-    const dialogOpenSpy: jasmine.Spy = spyOn(TestBed.inject(MatDialog), 'open');
+    const dialogOpenSpy: MockInstance = vi.spyOn(TestBed.inject(MatDialog), 'open');
     const fixture = await createPage(false);
 
     (fixture.nativeElement.querySelector('.forgot-password-button') as HTMLButtonElement).click();

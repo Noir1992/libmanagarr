@@ -1,4 +1,5 @@
 import { OverlayContainer } from '@angular/cdk/overlay';
+import type { Mock, MockInstance } from 'vitest';
 import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { MatSelectHarness } from '@angular/material/select/testing';
 import { signal } from '@angular/core';
@@ -22,8 +23,11 @@ function deferred<T>() {
 
 describe('EditSymlinkDialogComponent', () => {
   let fixture: ComponentFixture<EditSymlinkDialogComponent>;
-  let service: jasmine.SpyObj<SymlinkService>;
-  let closed: jasmine.Spy;
+  let service: { [K in 'loadChoices' | 'loadSettings' | 'previewLink' | 'saveLink']: Mock<SymlinkService[K]> } & Pick<
+    SymlinkService,
+    'settings'
+  >;
+  let closed: MockInstance;
   const draft = {
     id: 'link-1',
     revision: 9,
@@ -40,10 +44,14 @@ describe('EditSymlinkDialogComponent', () => {
   const plan: SymlinkLinkPlan = { runnable: true, draft, warnings: [], blockers: [] };
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<SymlinkService>('SymlinkService', ['loadChoices', 'loadSettings', 'previewLink', 'saveLink'], {
+    service = {
+      loadChoices: vi.fn<SymlinkService['loadChoices']>(),
+      loadSettings: vi.fn<SymlinkService['loadSettings']>(),
+      previewLink: vi.fn<SymlinkService['previewLink']>(),
+      saveLink: vi.fn<SymlinkService['saveLink']>(),
       settings: signal({ revision: 4 } as SymlinkSettings),
-    });
-    service.loadChoices.and.resolveTo({
+    };
+    service.loadChoices.mockResolvedValue({
       movies: [{ instanceId: 'radarr', instanceName: 'Movies', movieId: 70, title: 'Movie', fileId: 10, path: '/media/movie.mkv' }],
       specials: [
         {
@@ -68,10 +76,10 @@ describe('EditSymlinkDialogComponent', () => {
         },
       ],
     });
-    service.loadSettings.and.resolveTo();
-    service.previewLink.and.resolveTo(plan);
-    service.saveLink.and.resolveTo(draft);
-    closed = jasmine.createSpy('close');
+    service.loadSettings.mockResolvedValue(undefined);
+    service.previewLink.mockResolvedValue(plan);
+    service.saveLink.mockResolvedValue(draft);
+    closed = vi.fn();
     await TestBed.configureTestingModule({
       imports: [EditSymlinkDialogComponent],
       providers: [
@@ -112,15 +120,15 @@ describe('EditSymlinkDialogComponent', () => {
       sonarrEpisodeId: 5,
       replacesId: 'link-1',
     });
-    expect(button('Save').disabled).toBeFalse();
+    expect(button('Save').disabled).toBe(false);
     const select = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatSelectHarness.with({ selector: '#symlink-special' }));
     await select.clickOptions({ text: /Special 6/ });
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
     expect(service.previewLink).toHaveBeenCalledTimes(2);
-    expect(service.previewLink.calls.mostRecent().args[0].sonarrEpisodeId).toBe(6);
-    expect(button('Save').disabled).toBeFalse();
+    expect(service.previewLink.mock.lastCall![0].sonarrEpisodeId).toBe(6);
+    expect(button('Save').disabled).toBe(false);
   });
 
   it('automatically refreshes when the movie changes too', async () => {
@@ -132,8 +140,8 @@ describe('EditSymlinkDialogComponent', () => {
     fixture.detectChanges();
     const select = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatSelectHarness.with({ selector: '#symlink-movie' }));
     await select.clickOptions({ text: 'Second film' });
-    expect(service.previewLink.calls.mostRecent().args[0]).toEqual(jasmine.objectContaining({ radarrMovieId: 71, radarrFileId: 11 }));
-    expect(button('Save').disabled).toBeFalse();
+    expect(service.previewLink.mock.lastCall![0]).toEqual(expect.objectContaining({ radarrMovieId: 71, radarrFileId: 11 }));
+    expect(button('Save').disabled).toBe(false);
   });
 
   for (const staleResult of ['success', 'error'] as const) {
@@ -141,13 +149,13 @@ describe('EditSymlinkDialogComponent', () => {
       await settlePreview();
       const old = deferred<SymlinkLinkPlan>();
       const latest = deferred<SymlinkLinkPlan>();
-      service.previewLink.and.returnValues(old.promise, latest.promise);
+      service.previewLink.mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise);
       const component = fixture.componentInstance;
       component['model'].update((value) => ({ ...value, special: 'sonarr:6' }));
       component['onSelectionChanged']();
       await fixture.whenStable();
       fixture.detectChanges();
-      expect(button('Save').disabled).toBeTrue();
+      expect(button('Save').disabled).toBe(true);
       component['model'].update((value) => ({ ...value, special: 'sonarr:5' }));
       component['onSelectionChanged']();
       await fixture.whenStable();
@@ -162,11 +170,11 @@ describe('EditSymlinkDialogComponent', () => {
       fixture.detectChanges();
       expect(component['plan']()).toBe(currentPlan);
       expect(component['error']()).toBe('');
-      expect(button('Save').disabled).toBeFalse();
+      expect(button('Save').disabled).toBe(false);
       button('Save').click();
       await fixture.whenStable();
       expect(service.saveLink).toHaveBeenCalledWith(
-        jasmine.objectContaining({ sonarrEpisodeId: 5, sourceVersion: 'newest-version' }),
+        expect.objectContaining({ sonarrEpisodeId: 5, sourceVersion: 'newest-version' }),
         'link-1',
       );
     });
@@ -176,7 +184,7 @@ describe('EditSymlinkDialogComponent', () => {
     await settlePreview();
     const old = deferred<SymlinkLinkPlan>();
     const latest = deferred<SymlinkLinkPlan>();
-    service.previewLink.and.returnValues(old.promise, latest.promise);
+    service.previewLink.mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise);
     const component = fixture.componentInstance;
     component['model'].update((value) => ({ ...value, special: 'sonarr:6' }));
     component['onSelectionChanged']();
@@ -187,19 +195,19 @@ describe('EditSymlinkDialogComponent', () => {
     old.resolve(plan);
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(component['previewLoading']()).toBeTrue();
+    expect(component['previewLoading']()).toBe(true);
     expect(component['plan']()).toBeNull();
-    expect(button('Save').disabled).toBeTrue();
+    expect(button('Save').disabled).toBe(true);
     latest.resolve(plan);
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(button('Save').disabled).toBeFalse();
+    expect(button('Save').disabled).toBe(false);
   });
 
   it('locks both selections while the confirmed pair is being saved', async () => {
     await settlePreview();
     const saving = deferred<SymlinkLink>();
-    service.saveLink.and.returnValue(saving.promise);
+    service.saveLink.mockReturnValue(saving.promise);
     button('Save').click();
     fixture.detectChanges();
     const selects = await TestbedHarnessEnvironment.loader(fixture).getAllHarnesses(MatSelectHarness);
@@ -239,7 +247,7 @@ describe('EditSymlinkDialogComponent', () => {
     expect(component['selectedSpecial']()?.instanceId).toBe('sonarr-2');
     await settlePreview();
     expect(service.previewLink).toHaveBeenCalledWith(
-      jasmine.objectContaining({ radarrInstanceId: 'radarr-2', sonarrInstanceId: 'sonarr-2' }),
+      expect.objectContaining({ radarrInstanceId: 'radarr-2', sonarrInstanceId: 'sonarr-2' }),
     );
   });
 
@@ -262,9 +270,9 @@ describe('EditSymlinkDialogComponent', () => {
       fixture.detectChanges();
       await fixture.whenStable();
       expect((await select.getOptions()).length).toBe(1);
-      expect(button('Save').disabled).toBeFalse();
+      expect(button('Save').disabled).toBe(false);
       const clear = input.parentElement!.querySelector('button.clear-search') as HTMLButtonElement;
-      expect(clear.classList.contains('mat-mdc-icon-button')).toBeTrue();
+      expect(clear.classList.contains('mat-mdc-icon-button')).toBe(true);
       clear.click();
       fixture.detectChanges();
       await fixture.whenStable();
@@ -273,7 +281,7 @@ describe('EditSymlinkDialogComponent', () => {
       expect(input.parentElement!.querySelector('button.clear-search')).toBeNull();
       expect((await select.getOptions()).length).toBe(2);
       await select.close();
-      expect(button('Save').disabled).toBeFalse();
+      expect(button('Save').disabled).toBe(false);
     });
   }
 
@@ -291,14 +299,14 @@ describe('EditSymlinkDialogComponent', () => {
     button('Save').click();
     await fixture.whenStable();
     expect(service.saveLink).toHaveBeenCalledWith(
-      jasmine.objectContaining({ revision: 9, configRevision: 4, sourceVersion: 'v1' }),
+      expect.objectContaining({ revision: 9, configRevision: 4, sourceVersion: 'v1' }),
       'link-1',
     );
     expect(closed).toHaveBeenCalledWith(draft);
   });
 
   it('keeps a rejected edit open and automatically refreshes its preview for another attempt', async () => {
-    service.saveLink.and.rejectWith(new Error('The source changed after the preview.'));
+    service.saveLink.mockRejectedValue(new Error('The source changed after the preview.'));
     await settlePreview();
     button('Save').click();
     await fixture.whenStable();
@@ -306,7 +314,7 @@ describe('EditSymlinkDialogComponent', () => {
     expect(closed).not.toHaveBeenCalled();
     expect((fixture.nativeElement as HTMLElement).querySelector('[role=alert]')?.textContent).toContain('source changed');
     expect(service.previewLink).toHaveBeenCalledTimes(2);
-    expect(button('Save').disabled).toBeFalse();
+    expect(button('Save').disabled).toBe(false);
   });
   it('starts with empty selections and shows paths only in the preview', async () => {
     const dialog = TestBed.inject(MatDialog).open(EditSymlinkDialogComponent, {
@@ -336,15 +344,15 @@ describe('EditSymlinkDialogComponent', () => {
       await movie.clickOptions({ text: /Movie/ });
       expect(overlay.querySelector('.selection')?.textContent).not.toContain('/media/movie.mkv');
       expect(service.previewLink).toHaveBeenCalledTimes(1);
-      expect((overlay.querySelector('mat-dialog-actions button:last-child') as HTMLButtonElement).disabled).toBeTrue();
+      expect((overlay.querySelector('mat-dialog-actions button:last-child') as HTMLButtonElement).disabled).toBe(true);
       await special.clickOptions({ text: /Special 5/ });
       await fixture.whenStable();
       fixture.detectChanges();
       expect(service.previewLink).toHaveBeenCalledTimes(2);
-      expect((overlay.querySelector('mat-dialog-actions button:last-child') as HTMLButtonElement).disabled).toBeFalse();
+      expect((overlay.querySelector('mat-dialog-actions button:last-child') as HTMLButtonElement).disabled).toBe(false);
       expect(
         Array.from(overlay.querySelectorAll('mat-dialog-actions button')).some((value) => value.textContent?.trim() === 'Check preview'),
-      ).toBeFalse();
+      ).toBe(false);
       expect(service.previewLink).toHaveBeenCalledWith({
         radarrInstanceId: 'radarr',
         radarrMovieId: 70,
@@ -367,7 +375,7 @@ describe('EditSymlinkDialogComponent', () => {
       title: 'Movie title '.repeat(30),
       path: '/media/' + 'long-directory/'.repeat(50) + 'movie.mkv',
     };
-    service.loadChoices.and.resolveTo(choices);
+    service.loadChoices.mockResolvedValue(choices);
     const dialog = TestBed.inject(MatDialog).open(EditSymlinkDialogComponent, {
       width: '360px',
       maxWidth: '95vw',

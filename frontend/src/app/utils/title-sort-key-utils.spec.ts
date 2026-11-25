@@ -3,7 +3,7 @@ import { buildTitleSortKey, foldTitleWord, isTitleWhitespace, normalizeLeadingWo
 
 describe('title sort keys shared with the backend', () => {
   for (const testCase of cases.keyCases) {
-    it(testCase.name, () => {
+    it(`builds the shared sort key for ${testCase.name}`, () => {
       const words = [...testCase.words];
       expect(buildTitleSortKey(testCase.title, { enabled: true, ignoredLeadingWords: words })).toBe(testCase.expected);
       expect(buildTitleSortKey(testCase.title, { enabled: false, ignoredLeadingWords: words })).toBe(testCase.title);
@@ -14,7 +14,7 @@ describe('title sort keys shared with the backend', () => {
   for (const code of cases.whitespaceCodePoints) {
     it(`uses the explicit Unicode whitespace U+${code.toString(16)}`, () => {
       const whitespace = String.fromCodePoint(code);
-      expect(isTitleWhitespace(whitespace)).toBeTrue();
+      expect(isTitleWhitespace(whitespace)).toBe(true);
       expect(trimTitleWhitespace(`${whitespace}The${whitespace}`)).toBe('The');
       expect(buildTitleSortKey(`${whitespace}The${whitespace}Office`, { enabled: true, ignoredLeadingWords: ['the'] })).toBe('Office');
     });

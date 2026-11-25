@@ -24,7 +24,7 @@ describe('PageFilterWidget active filter bubbles', () => {
         { value: 'comedy', label: 'Comedy' },
       ],
       selectedValues: [DEFAULT_FILTER_ALL],
-      onChanged: jasmine.createSpy('genreChanged'),
+      onChanged: vi.fn(),
     };
     aired = {
       id: 'aired',
@@ -35,7 +35,7 @@ describe('PageFilterWidget active filter bubbles', () => {
         { value: 'aired', label: 'Bereits ausgestrahlt' },
       ],
       selectedValue: 'all',
-      onChanged: jasmine.createSpy('airedChanged'),
+      onChanged: vi.fn(),
     };
     fixture = TestBed.createComponent(PageFilterWidget);
     fixture.componentRef.setInput('filters', [genre, aired]);
@@ -53,8 +53,8 @@ describe('PageFilterWidget active filter bubbles', () => {
     aired.selectedValue = 'aired';
     await fixture.whenStable();
     expect(bubbles().map((bubble) => bubble.textContent)).toEqual([
-      jasmine.stringContaining('Genres: Drama, Comedy'),
-      jasmine.stringContaining('Ausgestrahlt: Bereits ausgestrahlt'),
+      expect.stringContaining('Genres: Drama, Comedy'),
+      expect.stringContaining('Ausgestrahlt: Bereits ausgestrahlt'),
     ]);
 
     const remove = bubbles()[0].querySelector('button')!;
@@ -62,9 +62,9 @@ describe('PageFilterWidget active filter bubbles', () => {
     remove.click();
     await fixture.whenStable();
 
-    expect(genre.onChanged).toHaveBeenCalledOnceWith([]);
+    expect(genre.onChanged).toHaveBeenCalledExactlyOnceWith([]);
     expect(aired.onChanged).not.toHaveBeenCalled();
-    expect(bubbles()).toHaveSize(1);
+    expect(bubbles()).toHaveLength(1);
     expect(bubbles()[0].textContent).toContain('Ausgestrahlt');
     expect(JSON.parse(localStorage.getItem(storageKey)!).genre).toEqual([]);
   });
@@ -104,7 +104,7 @@ describe('PageFilterWidget active filter bubbles', () => {
         type: FilterOptionType.NUMBER_RANGE,
         minValue: 0,
         maxValue: null,
-        onChanged: jasmine.createSpy('scoreChanged'),
+        onChanged: vi.fn(),
       },
       {
         id: 'date',
@@ -112,7 +112,7 @@ describe('PageFilterWidget active filter bubbles', () => {
         type: FilterOptionType.DATE_RANGE,
         startDate: null,
         endDate: '2026-10-01',
-        onChanged: jasmine.createSpy('dateChanged'),
+        onChanged: vi.fn(),
       },
     ];
     fixture.componentRef.setInput('filters', rangeFilters);
@@ -124,8 +124,8 @@ describe('PageFilterWidget active filter bubbles', () => {
       bubble.querySelector('button')!.click();
     }
     await fixture.whenStable();
-    expect(rangeFilters[0].onChanged).toHaveBeenCalledOnceWith({ minValue: null, maxValue: null });
-    expect(rangeFilters[1].onChanged).toHaveBeenCalledOnceWith({ startDate: null, endDate: null });
+    expect(rangeFilters[0].onChanged).toHaveBeenCalledExactlyOnceWith({ minValue: null, maxValue: null });
+    expect(rangeFilters[1].onChanged).toHaveBeenCalledExactlyOnceWith({ startDate: null, endDate: null });
     expect(bubbles()).toEqual([]);
     expect(JSON.parse(localStorage.getItem(storageKey)!)).toEqual({
       __emptyMultiselectDefaults: true,

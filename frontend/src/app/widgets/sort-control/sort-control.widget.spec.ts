@@ -40,7 +40,7 @@ describe('SortControlWidget', () => {
   it('lists the four sortable fields and marks the active one with the current direction', async () => {
     const texts = await itemTexts(await openMenu());
 
-    expect(texts).toHaveSize(4);
+    expect(texts).toHaveLength(4);
     expect(texts[0]).toContain('Alphabetical');
     expect(texts[0]).toContain('arrow_upward');
     expect(texts[1]).toContain('Air date');

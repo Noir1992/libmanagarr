@@ -25,7 +25,7 @@ describe('PageFilterWidget empty multiselect defaults', () => {
         { value: 'comedy', label: 'Comedy' },
       ],
       selectedValues: [],
-      onChanged: jasmine.createSpy('changed'),
+      onChanged: vi.fn(),
     };
     fixture = TestBed.createComponent(PageFilterWidget);
     fixture.componentRef.setInput('filters', [filter]);
@@ -53,7 +53,7 @@ describe('PageFilterWidget empty multiselect defaults', () => {
     localStorage.setItem(storageKey, JSON.stringify({ 'resolution-filter': ['2160p', '4320p'], 'resolution-filter:exclude': true }));
     await fixture.whenStable();
     expect(filter.selectedValues).toEqual(['4k']);
-    expect(filter.exclude).toBeTrue();
+    expect(filter.exclude).toBe(true);
     expect(JSON.parse(localStorage.getItem(storageKey)!)['resolution-filter']).toEqual(['4k']);
   });
 
@@ -91,7 +91,7 @@ describe('PageFilterWidget empty multiselect defaults', () => {
     expect(fixture.componentInstance['activeFilterCount']()).toBe(1);
     fixture.componentInstance['removeFilter'](filter);
     expect(filter.selectedValues).toEqual([]);
-    expect(filter.onChanged).toHaveBeenCalledOnceWith([]);
+    expect(filter.onChanged).toHaveBeenCalledExactlyOnceWith([]);
     expect(JSON.parse(localStorage.getItem(storageKey)!).genre).toEqual([]);
   });
 
@@ -108,6 +108,6 @@ describe('PageFilterWidget empty multiselect defaults', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(filter.selectedValues).toEqual(['drama', 'comedy']);
-    expect(filter.exclude).toBeTrue();
+    expect(filter.exclude).toBe(true);
   });
 });

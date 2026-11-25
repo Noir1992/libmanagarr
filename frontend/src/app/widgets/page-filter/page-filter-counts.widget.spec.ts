@@ -38,14 +38,14 @@ describe('PageFilterWidget option counts', () => {
       ],
       totalCount: 5,
       selectedValues: [],
-      onChanged: jasmine.createSpy('changed'),
+      onChanged: vi.fn(),
     });
     await select.open();
     const options = await select.getOptions();
     expect(await Promise.all(options.map((option) => option.getText()))).toEqual(['All(5)', 'HEVC(3)', 'AV1(0)']);
     const counts = Array.from(document.querySelectorAll<HTMLElement>('.filter-option-count'));
     const rightEdges = counts.map((count) => count.getBoundingClientRect().right);
-    expect(counts).toHaveSize(3);
+    expect(counts).toHaveLength(3);
     expect(Math.max(...rightEdges) - Math.min(...rightEdges)).toBeLessThan(1);
     await options[1].click();
     await select.close();
@@ -62,7 +62,7 @@ describe('PageFilterWidget option counts', () => {
         { value: 'monitored', label: 'Monitored', count: 3 },
       ],
       selectedValue: 'all',
-      onChanged: jasmine.createSpy('changed'),
+      onChanged: vi.fn(),
     });
     await select.open();
     const options = await select.getOptions();
@@ -78,7 +78,7 @@ describe('PageFilterWidget option counts', () => {
       type: FilterOptionType.MULTISELECT,
       options: [{ value: 'one', label: 'One' }],
       selectedValues: [],
-      onChanged: jasmine.createSpy('changed'),
+      onChanged: vi.fn(),
     });
     await select.open();
     const options = await select.getOptions();

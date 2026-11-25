@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy } from '@angular/core';
+import type { MockInstance } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MediaDetailsDialogWidget } from '../media-details-dialog/media-details-dialog.widget';
@@ -77,10 +78,10 @@ class RadarrTableHostComponent {
 
 describe('RadarrTableWidget', () => {
   let fixture: ComponentFixture<RadarrTableHostComponent>;
-  let open: jasmine.Spy;
+  let open: MockInstance;
 
   beforeEach(async () => {
-    open = jasmine.createSpy('open');
+    open = vi.fn();
     await TestBed.configureTestingModule({
       imports: [RadarrTableHostComponent],
       providers: [{ provide: MatDialog, useValue: { open } }],
@@ -101,7 +102,7 @@ describe('RadarrTableWidget', () => {
     expect(cells).toEqual(['Arrival', 'HD', '1500', '900']);
     expect(link.href).toBe('http://localhost:7878/movie/arrival-42');
     expect(row).toBeTruthy();
-    expect(row?.classList.contains('summary-row')).toBeFalse();
+    expect(row?.classList.contains('summary-row')).toBe(false);
   });
 
   it('should render a collapse button in the table header', () => {
@@ -113,10 +114,10 @@ describe('RadarrTableWidget', () => {
   it('opens movie details on row click and keyboard activation while preserving title navigation', () => {
     const row = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('.movie-detail-row')!;
     row.click();
-    expect(open).toHaveBeenCalledOnceWith(
+    expect(open).toHaveBeenCalledExactlyOnceWith(
       MediaDetailsDialogWidget,
-      jasmine.objectContaining({
-        data: jasmine.objectContaining({
+      expect.objectContaining({
+        data: expect.objectContaining({
           title: 'Arrival',
           instanceName: 'Radarr',
           customFormatScore: 900,
@@ -124,7 +125,7 @@ describe('RadarrTableWidget', () => {
         }),
       }),
     );
-    open.calls.reset();
+    open.mockClear();
     const link = row.querySelector('a')!;
     const click = new MouseEvent('click', { bubbles: true, cancelable: true });
     click.preventDefault();
@@ -142,6 +143,6 @@ describe('RadarrTableWidget', () => {
     collapseButton?.click();
     fixture.detectChanges();
 
-    expect(collapseIcon?.classList.contains('is-collapsed')).toBeTrue();
+    expect(collapseIcon?.classList.contains('is-collapsed')).toBe(true);
   });
 });

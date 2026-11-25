@@ -33,7 +33,7 @@ describe('AppLogsService', () => {
   it('sends an explicit empty level selection instead of omitting the parameter', async () => {
     const pending = service.loadLogs(start, end, []);
     const request = http.expectOne((req) => req.url === '/api/logs/');
-    expect(request.request.params.has('levels')).toBeTrue();
+    expect(request.request.params.has('levels')).toBe(true);
     expect(request.request.params.getAll('levels')).toEqual(['']);
     request.flush([]);
     expect(await pending).toEqual([]);
@@ -41,8 +41,7 @@ describe('AppLogsService', () => {
 
   it('propagates HTTP failures to the caller', async () => {
     const pending = service.loadLogs(start, end, ['Error']);
-    const assertion = expectAsync(pending).toBeRejectedWith(jasmine.any(HttpErrorResponse));
     http.expectOne((req) => req.url === '/api/logs/').flush({ detail: 'Cannot read logs' }, { status: 500, statusText: 'Error' });
-    await assertion;
+    await expect(pending).rejects.toBeInstanceOf(HttpErrorResponse);
   });
 });

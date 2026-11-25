@@ -116,7 +116,7 @@ describe('MediaCardWidget', () => {
       ];
       fixture.detectChanges();
       const details = fixture.nativeElement.querySelectorAll('.media-card-detail-row');
-      expect(details).toHaveSize(3);
+      expect(details).toHaveLength(3);
     });
 
     it('renders label and value for each row', () => {
@@ -144,7 +144,7 @@ describe('MediaCardWidget', () => {
       ];
       fixture.detectChanges();
       const values = fixture.nativeElement.querySelectorAll('.media-card-detail-row-value');
-      expect(values).toHaveSize(4);
+      expect(values).toHaveLength(4);
       expect(values[0].classList).toContain('tone-success');
       expect(values[1].classList).toContain('tone-danger');
       expect(values[2].classList).toContain('tone-warning');

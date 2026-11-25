@@ -1,4 +1,5 @@
 import { OverlayContainer } from '@angular/cdk/overlay';
+import type { MockInstance } from 'vitest';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
@@ -8,8 +9,8 @@ import { DirectoryBrowserDialogComponent } from './directory-browser-dialog.comp
 
 describe('DirectoryBrowserDialogComponent', () => {
   let fixture: ComponentFixture<DirectoryBrowserDialogComponent>;
-  let browse: jasmine.Spy;
-  let close: jasmine.Spy;
+  let browse: MockInstance;
+  let close: MockInstance;
   const listing: SymlinkDirectoryListing = {
     path: '/media',
     parentPath: '/',
@@ -19,8 +20,8 @@ describe('DirectoryBrowserDialogComponent', () => {
   };
 
   beforeEach(async () => {
-    browse = jasmine.createSpy('browseDirectories').and.resolveTo(listing);
-    close = jasmine.createSpy('close');
+    browse = vi.fn().mockResolvedValue(listing);
+    close = vi.fn();
     await TestBed.configureTestingModule({
       imports: [DirectoryBrowserDialogComponent],
       providers: [
@@ -41,8 +42,8 @@ describe('DirectoryBrowserDialogComponent', () => {
 
   it('navigates folders and returns the selected directory', async () => {
     await settle();
-    expect(browse).toHaveBeenCalledOnceWith('/media');
-    browse.and.resolveTo({ ...listing, path: '/media/movies', parentPath: '/media', directories: [] });
+    expect(browse).toHaveBeenCalledExactlyOnceWith('/media');
+    browse.mockResolvedValue({ ...listing, path: '/media/movies', parentPath: '/media', directories: [] });
     (fixture.nativeElement.querySelector('.directories button') as HTMLButtonElement).click();
     await settle();
     expect(browse).toHaveBeenCalledWith('/media/movies');
@@ -53,7 +54,7 @@ describe('DirectoryBrowserDialogComponent', () => {
 
   it('returns to the top level with the Home icon button', async () => {
     await settle();
-    browse.and.resolveTo({
+    browse.mockResolvedValue({
       path: '/',
       parentPath: null,
       canSelect: false,
@@ -71,45 +72,45 @@ describe('DirectoryBrowserDialogComponent', () => {
 
   it('navigates to the parent with the Up icon button', async () => {
     await settle();
-    browse.and.resolveTo({ path: '/', parentPath: null, canSelect: false, directories: [], truncated: false });
+    browse.mockResolvedValue({ path: '/', parentPath: null, canSelect: false, directories: [], truncated: false });
     const up = fixture.nativeElement.querySelector('button[aria-label="Go to the parent directory"]') as HTMLButtonElement;
     expect(up.querySelector('mat-icon')?.textContent).toBe('arrow_upward');
     up.click();
     await settle();
     expect(browse).toHaveBeenCalledWith('/');
-    expect(
-      (fixture.nativeElement.querySelector('button[aria-label="Go to the parent directory"]') as HTMLButtonElement).disabled,
-    ).toBeTrue();
+    expect((fixture.nativeElement.querySelector('button[aria-label="Go to the parent directory"]') as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
 
   it('returns no directory when Cancel is clicked', async () => {
     await settle();
     (fixture.nativeElement.querySelector('mat-dialog-actions button') as HTMLButtonElement).click();
-    expect(close).toHaveBeenCalledOnceWith(undefined);
+    expect(close).toHaveBeenCalledExactlyOnceWith(undefined);
   });
 
   it('opens filesystem locations when the configured directory is unavailable', async () => {
-    browse.and.callFake((path: string | null) =>
+    browse.mockImplementation((path: string | null) =>
       path
         ? Promise.reject(new HttpErrorResponse({ status: 404 }))
         : Promise.resolve({ path: null, parentPath: null, canSelect: false, directories: [{ name: '/', path: '/' }], truncated: false }),
     );
     await settle();
     expect(browse).toHaveBeenCalledWith(null);
-    expect(fixture.nativeElement.querySelector('mat-dialog-actions button:last-child').disabled).toBeTrue();
+    expect(fixture.nativeElement.querySelector('mat-dialog-actions button:last-child').disabled).toBe(true);
     expect(fixture.nativeElement.querySelector('.directories').textContent).toContain('/');
   });
 
   it('displays navigation failures and prevents selecting a stale directory', async () => {
     await settle();
-    browse.and.rejectWith(new HttpErrorResponse({ status: 403, error: { detail: 'Permission denied.' } }));
+    browse.mockRejectedValue(new HttpErrorResponse({ status: 403, error: { detail: 'Permission denied.' } }));
     (fixture.nativeElement.querySelector('.directories button') as HTMLButtonElement).click();
     await settle();
     expect(fixture.nativeElement.querySelector('[role=alert]').textContent).toContain('Permission denied.');
-    expect(fixture.nativeElement.querySelector('mat-dialog-actions button:last-child').disabled).toBeTrue();
+    expect(fixture.nativeElement.querySelector('mat-dialog-actions button:last-child').disabled).toBe(true);
   });
   it('grows past the default content limit when the dialog has room', async () => {
-    browse.and.resolveTo({
+    browse.mockResolvedValue({
       ...listing,
       directories: Array.from({ length: 20 }, (_, index) => ({ name: `Folder ${index}`, path: `/media/${index}` })),
     });
@@ -134,7 +135,7 @@ describe('DirectoryBrowserDialogComponent', () => {
   });
 
   it('scrolls only the folders while navigation, path and actions stay visible', async () => {
-    browse.and.resolveTo({
+    browse.mockResolvedValue({
       ...listing,
       directories: Array.from({ length: 100 }, (_, index) => ({ name: `Folder ${index}`, path: `/media/${index}` })),
     });

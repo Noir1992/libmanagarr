@@ -1,4 +1,5 @@
 import { MatDialog } from '@angular/material/dialog';
+import type { Mock } from 'vitest';
 import { of } from 'rxjs';
 import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -58,6 +59,7 @@ describe('SettingsSymlinksTabWidget', () => {
   let element: HTMLElement;
   let component: SettingsSymlinksTabWidget;
   let symlinkStub: SymlinkServiceStub;
+  let dialogStub: { open: Mock };
   let settingsStub: Pick<AppSettingsService, 'localeId' | 'loadInstances' | 'radarrInstances' | 'sonarrInstances'>;
 
   function value(id: string): string {
@@ -84,17 +86,18 @@ describe('SettingsSymlinksTabWidget', () => {
       settingsLoading: signal(false),
       fieldErrors: signal<Record<string, string>>({}),
       capabilityStates: signal<Record<string, SymlinkActionState>>({}),
-      loadSettings: jasmine.createSpy('loadSettings').and.resolveTo(),
-      saveSettings: jasmine.createSpy('saveSettings').and.callFake(async (draft: SymlinkSettings): Promise<SymlinkSettings> => {
+      loadSettings: vi.fn().mockResolvedValue(undefined),
+      saveSettings: vi.fn().mockImplementation(async (draft: SymlinkSettings): Promise<SymlinkSettings> => {
         const saved: SymlinkSettings = { ...createSettings(), ...draft, revision: 8, capabilityChecks: createSettings().capabilityChecks };
         symlinkStub.settings.set(saved);
         return saved;
       }),
-      checkCapabilities: jasmine.createSpy('checkCapabilities').and.resolveTo(),
+      checkCapabilities: vi.fn().mockResolvedValue(undefined),
     };
+    dialogStub = { open: vi.fn().mockReturnValue({ afterClosed: () => of(undefined) }) };
     settingsStub = {
       localeId: () => 'en-US',
-      loadInstances: jasmine.createSpy('loadInstances').and.resolveTo(),
+      loadInstances: vi.fn().mockResolvedValue(undefined),
       radarrInstances: signal([{ id: 'radarr-1', name: 'Movies on the NAS', baseUrl: 'http://localhost:7878', apiKey: 'secret' }]),
       sonarrInstances: signal([{ id: 'sonarr-1', name: 'Series on the NAS', baseUrl: 'http://localhost:8989', apiKey: 'secret' }]),
     } as unknown as Pick<AppSettingsService, 'localeId' | 'loadInstances' | 'radarrInstances' | 'sonarrInstances'>;
@@ -102,7 +105,7 @@ describe('SettingsSymlinksTabWidget', () => {
     await TestBed.configureTestingModule({
       imports: [SettingsSymlinksTabWidget],
       providers: [
-        { provide: MatDialog, useValue: { open: jasmine.createSpy('open').and.returnValue({ afterClosed: () => of(undefined) }) } },
+        { provide: MatDialog, useValue: dialogStub },
         { provide: SymlinkService, useValue: symlinkStub },
         { provide: AppSettingsService, useValue: settingsStub },
       ],
@@ -128,7 +131,7 @@ describe('SettingsSymlinksTabWidget', () => {
     symlinkStub.capabilityChecking.set(true);
     fixture.detectChanges();
     let toggle = element.querySelector('mat-slide-toggle button') as HTMLButtonElement;
-    expect(toggle.disabled).toBeTrue();
+    expect(toggle.disabled).toBe(true);
     expect(toggle.getAttribute('aria-checked')).toBe('true');
     symlinkStub.capabilityChecking.set(false);
     symlinkStub.capabilityError.set('Sonarr is starting');
@@ -140,7 +143,7 @@ describe('SettingsSymlinksTabWidget', () => {
     fixture.detectChanges();
     await settle();
     toggle = element.querySelector('mat-slide-toggle button') as HTMLButtonElement;
-    expect(toggle.disabled).toBeFalse();
+    expect(toggle.disabled).toBe(false);
     expect(toggle.getAttribute('aria-checked')).toBe('true');
   });
 
@@ -169,7 +172,7 @@ describe('SettingsSymlinksTabWidget', () => {
     await settle();
     expect(symlinkStub.saveSettings).toHaveBeenCalledWith({ mediaRoot: '/data/media', enabled: true });
     expect(value('symlink-media-root')).toBe('/data/media');
-    expect(component['form'].dirty).toBeFalse();
+    expect(component['form'].dirty).toBe(false);
     expect(element.querySelector('.field-control-wrap .feedback-icon.success')).not.toBeNull();
   });
 
@@ -183,7 +186,7 @@ describe('SettingsSymlinksTabWidget', () => {
     element.querySelector('#symlink-media-root')!.dispatchEvent(new Event('blur'));
     await settle();
     expect(symlinkStub.saveSettings).not.toHaveBeenCalled();
-    expect(component['form'].dirty).toBeFalse();
+    expect(component['form'].dirty).toBe(false);
   });
 
   it('autosaves on Enter without submitting the form or saving again on blur', async () => {
@@ -192,8 +195,8 @@ describe('SettingsSymlinksTabWidget', () => {
     const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
     input.dispatchEvent(enter);
     await settle();
-    expect(enter.defaultPrevented).toBeTrue();
-    expect(symlinkStub.saveSettings).toHaveBeenCalledOnceWith({ mediaRoot: '/new/media', enabled: true });
+    expect(enter.defaultPrevented).toBe(true);
+    expect(symlinkStub.saveSettings).toHaveBeenCalledExactlyOnceWith({ mediaRoot: '/new/media', enabled: true });
     input.dispatchEvent(new Event('blur'));
     await settle();
     expect(symlinkStub.saveSettings).toHaveBeenCalledTimes(1);
@@ -201,7 +204,7 @@ describe('SettingsSymlinksTabWidget', () => {
 
   it('shows loading feedback and prevents edits and duplicate saves while saving', async () => {
     let finish!: () => void;
-    (symlinkStub.saveSettings as jasmine.Spy).and.callFake(() => {
+    vi.mocked(symlinkStub.saveSettings).mockImplementation(() => {
       symlinkStub.saving.set(true);
       return new Promise<SymlinkSettings>((resolve) => {
         finish = () => {
@@ -216,20 +219,20 @@ describe('SettingsSymlinksTabWidget', () => {
     const input = element.querySelector('#symlink-media-root') as HTMLInputElement;
     input.dispatchEvent(new Event('blur'));
     fixture.detectChanges();
-    expect(input.disabled).toBeTrue();
+    expect(input.disabled).toBe(true);
     expect(element.querySelector('.field-control-wrap .feedback-icon.spinning')).not.toBeNull();
     input.dispatchEvent(new Event('blur'));
     expect(symlinkStub.saveSettings).toHaveBeenCalledTimes(1);
     finish();
     await settle();
-    expect(input.disabled).toBeFalse();
-    expect(component['form'].dirty).toBeFalse();
+    expect(input.disabled).toBe(false);
+    expect(component['form'].dirty).toBe(false);
     expect(element.querySelector('.field-control-wrap .feedback-icon.success')).not.toBeNull();
   });
 
   it('places validation errors beside the media directory and keeps the draft', async () => {
     editRoot('relative/path');
-    (symlinkStub.saveSettings as jasmine.Spy).and.callFake(async (): Promise<never> => {
+    vi.mocked(symlinkStub.saveSettings).mockImplementation(async (): Promise<never> => {
       symlinkStub.fieldErrors.set({ 'symlinks.mediaRoot': 'An absolute media directory is required.' });
       symlinkStub.settingsError.set('The path configuration could not be saved.');
       throw new Error('validation');
@@ -240,7 +243,7 @@ describe('SettingsSymlinksTabWidget', () => {
     expect(element.querySelector('.feedback.error')).toBeNull();
     expect(element.querySelector('.field-control-wrap .feedback-icon.error')).not.toBeNull();
     expect(value('symlink-media-root')).toBe('relative/path');
-    expect(component['form'].dirty).toBeTrue();
+    expect(component['form'].dirty).toBe(true);
     editRoot('/media');
     expect(element.querySelector('.field-error')).toBeNull();
     expect(element.querySelector('.feedback.error')).toBeNull();
@@ -251,7 +254,7 @@ describe('SettingsSymlinksTabWidget', () => {
     component['discardUnsavedChanges']();
     await settle();
     expect(value('symlink-media-root')).toBe('/media');
-    expect(component['form'].dirty).toBeFalse();
+    expect(component['form'].dirty).toBe(false);
   });
 
   it('keeps an unsaved directory when a background result arrives', () => {
@@ -279,27 +282,27 @@ describe('SettingsSymlinksTabWidget', () => {
       symlinkStub.settings.set(createSettings({ enabled: false, capabilityChecks: [check] }));
       await settle();
       const toggle = element.querySelector('mat-slide-toggle button') as HTMLButtonElement;
-      expect(toggle.disabled).toBeTrue();
+      expect(toggle.disabled).toBe(true);
       expect(toggle.getAttribute('aria-checked')).toBe('false');
       expect(element.querySelector('.enable-hint')?.textContent).toContain('cannot create symlinks');
-      expect((element.querySelector('#symlink-media-root') as HTMLInputElement).disabled).toBeFalse();
+      expect((element.querySelector('#symlink-media-root') as HTMLInputElement).disabled).toBe(false);
     });
   }
 
   it('prevents enabling while checking and unlocks only after a successful check', async () => {
     symlinkStub.capabilityChecking.set(true);
     await settle();
-    expect((element.querySelector('mat-slide-toggle button') as HTMLButtonElement).disabled).toBeTrue();
+    expect((element.querySelector('mat-slide-toggle button') as HTMLButtonElement).disabled).toBe(true);
     expect(element.querySelector('.enable-hint')?.textContent).toContain('Checking symlink support');
     symlinkStub.capabilityChecking.set(false);
     await settle();
-    expect((element.querySelector('mat-slide-toggle button') as HTMLButtonElement).disabled).toBeFalse();
+    expect((element.querySelector('mat-slide-toggle button') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('keeps the switch disabled when automatic verification fails', async () => {
     symlinkStub.capabilityError.set('The server could not verify symlink support.');
     await settle();
-    expect((element.querySelector('mat-slide-toggle button') as HTMLButtonElement).disabled).toBeTrue();
+    expect((element.querySelector('mat-slide-toggle button') as HTMLButtonElement).disabled).toBe(true);
     expect(element.querySelector('.enable-hint')?.textContent).toContain('could not verify');
   });
 
@@ -311,8 +314,8 @@ describe('SettingsSymlinksTabWidget', () => {
   it('autosaves the enable switch and keeps existing paths', async () => {
     click(element.querySelector('mat-slide-toggle button'));
     await settle();
-    expect(symlinkStub.saveSettings).toHaveBeenCalledOnceWith({ mediaRoot: '/media', enabled: false });
-    expect(symlinkStub.settings()?.enabled).toBeFalse();
+    expect(symlinkStub.saveSettings).toHaveBeenCalledExactlyOnceWith({ mediaRoot: '/media', enabled: false });
+    expect(symlinkStub.settings()?.enabled).toBe(false);
     expect(element.querySelector('.enabled-control app-feedback-icon .material-symbols-outlined')).not.toBeNull();
   });
 
@@ -320,11 +323,11 @@ describe('SettingsSymlinksTabWidget', () => {
     symlinkStub.settings.set(createSettings({ enabled: false }));
     await settle();
     const toggle = element.querySelector('mat-slide-toggle button') as HTMLButtonElement;
-    expect(toggle.disabled).toBeFalse();
+    expect(toggle.disabled).toBe(false);
     expect(toggle.getAttribute('aria-checked')).toBe('false');
     click(toggle);
     await settle();
-    expect(symlinkStub.saveSettings).toHaveBeenCalledOnceWith({ mediaRoot: '/media', enabled: true });
+    expect(symlinkStub.saveSettings).toHaveBeenCalledExactlyOnceWith({ mediaRoot: '/media', enabled: true });
   });
 
   it('shows a formatted tree with a relative special link', () => {
@@ -336,18 +339,16 @@ describe('SettingsSymlinksTabWidget', () => {
   });
 
   it('autosaves a directory selected in the browser', async () => {
-    const dialog = TestBed.inject(MatDialog);
-    (dialog.open as jasmine.Spy).and.returnValue({ afterClosed: () => of('/selected/media') });
+    dialogStub.open.mockReturnValue({ afterClosed: () => of('/selected/media') });
     click(element.querySelector('.media-root-controls button'));
     await settle();
     expect(value('symlink-media-root')).toBe('/selected/media');
-    expect(symlinkStub.saveSettings).toHaveBeenCalledOnceWith({ mediaRoot: '/selected/media', enabled: true });
+    expect(symlinkStub.saveSettings).toHaveBeenCalledExactlyOnceWith({ mediaRoot: '/selected/media', enabled: true });
   });
 
   for (const result of [undefined, null, '', '   ']) {
     it(`keeps the directory when the browser returns ${JSON.stringify(result)}`, async () => {
-      const dialog = TestBed.inject(MatDialog);
-      (dialog.open as jasmine.Spy).and.returnValue({ afterClosed: () => of(result) });
+      dialogStub.open.mockReturnValue({ afterClosed: () => of(result) });
       editRoot('/my/media');
       click(element.querySelector('.media-root-controls button'));
       await settle();

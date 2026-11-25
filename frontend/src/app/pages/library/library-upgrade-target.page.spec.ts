@@ -1,4 +1,5 @@
 import { MediaTitlesService } from '../../services/media-titles.service';
+import type { MockInstance } from 'vitest';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
@@ -13,17 +14,23 @@ import { LibraryPage } from './library.page';
 
 describe('LibraryPage upgrade target', () => {
   let page: LibraryPage;
-  let radarr: jasmine.SpyObj<RadarrApiService>;
-  let sonarr: jasmine.SpyObj<SonarrApiService>;
+  let radarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
+  let sonarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
   const empty: LibraryFilterValues = { genres: [], tags: [], statuses: [], qualityProfiles: [], audioLanguages: [], subtitleLanguages: [] };
 
   beforeEach(() => {
-    radarr = jasmine.createSpyObj<RadarrApiService>('Radarr', ['fetchFilterValues', 'fetchLibrary']);
-    sonarr = jasmine.createSpyObj<SonarrApiService>('Sonarr', ['fetchFilterValues', 'fetchLibrary']);
-    radarr.fetchFilterValues.and.returnValue(of({ ...empty, counts: { 'upgrade-target-filter': { __all__: 4, below: 1, reached: 2 } } }));
-    sonarr.fetchFilterValues.and.returnValue(of({ ...empty, counts: { 'upgrade-target-filter': { __all__: 6, below: 3, reached: 2 } } }));
-    radarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
-    sonarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
+    radarr = {
+      fetchFilterValues: vi.fn<RadarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<RadarrApiService['fetchLibrary']>(),
+    };
+    sonarr = {
+      fetchFilterValues: vi.fn<SonarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<SonarrApiService['fetchLibrary']>(),
+    };
+    radarr.fetchFilterValues.mockReturnValue(of({ ...empty, counts: { 'upgrade-target-filter': { __all__: 4, below: 1, reached: 2 } } }));
+    sonarr.fetchFilterValues.mockReturnValue(of({ ...empty, counts: { 'upgrade-target-filter': { __all__: 6, below: 3, reached: 2 } } }));
+    radarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
+    sonarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
     TestBed.configureTestingModule({
       providers: [
         { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
@@ -70,9 +77,9 @@ describe('LibraryPage upgrade target', () => {
       score.minValue = -5;
       score.maxValue = 500;
       page['loadData']();
-      const expected = jasmine.objectContaining({ upgradeTargetFilter: selection, scoreMin: -5, scoreMax: 500 });
-      expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
-      expect(sonarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
+      const expected = expect.objectContaining({ upgradeTargetFilter: selection, scoreMin: -5, scoreMax: 500 });
+      expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
+      expect(sonarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
     });
   }
 
@@ -80,7 +87,7 @@ describe('LibraryPage upgrade target', () => {
     upgradeFilter().selectedValue = 'below';
     upgradeFilter().exclude = true;
     page['loadData']();
-    expect(radarr.fetchLibrary).toHaveBeenCalledWith(jasmine.objectContaining({ excludedFilters: ['upgrade-target-filter'] }));
+    expect(radarr.fetchLibrary).toHaveBeenCalledWith(expect.objectContaining({ excludedFilters: ['upgrade-target-filter'] }));
     page['upsertRadarrInstanceTable']({
       instanceId: 'r',
       instanceName: 'Radarr',

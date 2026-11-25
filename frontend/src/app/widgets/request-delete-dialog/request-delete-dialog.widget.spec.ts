@@ -1,13 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { RequestDeleteDialogWidget } from './request-delete-dialog.widget';
 
 describe('RequestDeleteDialogWidget', () => {
   let fixture: ComponentFixture<RequestDeleteDialogWidget>;
-  let dialogRefSpy: jasmine.SpyObj<MatDialogRef<RequestDeleteDialogWidget>>;
+  let dialogRefSpy: Record<'close', MockInstance>;
 
   beforeEach(async () => {
-    dialogRefSpy = jasmine.createSpyObj<MatDialogRef<RequestDeleteDialogWidget>>('MatDialogRef', ['close']);
+    dialogRefSpy = {
+      close: vi.fn<MatDialogRef<RequestDeleteDialogWidget>['close']>(),
+    };
 
     await TestBed.configureTestingModule({
       imports: [RequestDeleteDialogWidget],
@@ -37,7 +40,7 @@ describe('RequestDeleteDialogWidget', () => {
 
     (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.request-dialog-confirm')!.click();
 
-    expect(dialogRefSpy.close).toHaveBeenCalledOnceWith(true);
+    expect(dialogRefSpy.close).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it('closes without a result when the user cancels', () => {
@@ -45,6 +48,6 @@ describe('RequestDeleteDialogWidget', () => {
 
     (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.request-dialog-cancel')!.click();
 
-    expect(dialogRefSpy.close).toHaveBeenCalledOnceWith();
+    expect(dialogRefSpy.close).toHaveBeenCalledExactlyOnceWith();
   });
 });

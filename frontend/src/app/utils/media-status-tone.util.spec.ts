@@ -14,7 +14,7 @@ describe('media status tones', () => {
 
   it('maps pending air statuses to warning regardless of casing', () => {
     for (const status of ['announced', 'inCinemas', 'physicalRelease', 'digitalRelease', 'upcoming', 'tba']) {
-      expect(airStatusTone(status)).withContext(status).toBe('warning');
+      expect(airStatusTone(status), status).toBe('warning');
     }
   });
 

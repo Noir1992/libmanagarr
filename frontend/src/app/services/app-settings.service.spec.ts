@@ -1,4 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
+import type { MockInstance } from 'vitest';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ArrInstanceSettings } from '../interfaces/settings/arr-instance-settings';
@@ -9,15 +10,18 @@ import { AppSettingsService, ValidationProblemError } from './app-settings.servi
 describe('AppSettingsService', () => {
   let service: AppSettingsService;
   let http: HttpTestingController;
-  let i18n: jasmine.SpyObj<AppI18nService>;
+  let i18n: Record<'t' | 'setLanguage', MockInstance>;
   let originalLanguage: string;
   let originalTheme: string | undefined;
 
   beforeEach(() => {
     originalLanguage = document.documentElement.lang;
     originalTheme = document.documentElement.dataset['theme'];
-    i18n = jasmine.createSpyObj<AppI18nService>('AppI18nService', ['t', 'setLanguage']);
-    i18n.t.and.callFake((key) => key);
+    i18n = {
+      t: vi.fn<AppI18nService['t']>(),
+      setLanguage: vi.fn<AppI18nService['setLanguage']>(),
+    };
+    i18n.t.mockImplementation((key) => key);
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting(), { provide: AppI18nService, useValue: i18n }],
     });
@@ -55,7 +59,7 @@ describe('AppSettingsService', () => {
     expect(service.localeId()).toBe('de');
     expect(service.theme()).toBe('dark');
     expect(service.loadError()).toBeNull();
-    expect(i18n.setLanguage).toHaveBeenCalledOnceWith('de');
+    expect(i18n.setLanguage).toHaveBeenCalledExactlyOnceWith('de');
     expect(document.documentElement.lang).toBe('de');
     expect(document.documentElement.dataset['theme']).toBe('dark');
   });
@@ -72,12 +76,12 @@ describe('AppSettingsService', () => {
   });
 
   it('resolves the default theme from the operating-system preference', () => {
-    const matchMediaSpy: jasmine.Spy = spyOn(globalThis, 'matchMedia').and.returnValue({ matches: true } as MediaQueryList);
+    const matchMediaSpy: MockInstance = vi.spyOn(globalThis, 'matchMedia').mockReturnValue({ matches: true } as MediaQueryList);
 
     service.applyDefaultTheme();
     expect(document.documentElement.dataset['theme']).toBe('dark');
 
-    matchMediaSpy.and.returnValue({ matches: false } as MediaQueryList);
+    matchMediaSpy.mockReturnValue({ matches: false } as MediaQueryList);
     service.applyDefaultTheme();
     expect(document.documentElement.dataset['theme']).toBe('light');
   });
@@ -114,7 +118,7 @@ describe('AppSettingsService', () => {
     );
     const error = await pending;
 
-    expect(error).toEqual(jasmine.any(ValidationProblemError));
+    expect(error).toEqual(expect.any(ValidationProblemError));
     expect(error!.message).toBe('Unsupported language');
     expect(error!.fieldErrors).toEqual({ language: ['Unsupported language'] });
     expect(service.language()).toBe('en');
@@ -208,13 +212,13 @@ describe('AppSettingsService', () => {
 
   it('clears the syncing state after a successful response with missing optional fields', async () => {
     const pending = service.syncInstance('Sonarr', 's1');
-    expect(service.isSyncing('Sonarr', 's1')).toBeTrue();
+    expect(service.isSyncing('Sonarr', 's1')).toBe(true);
     const request = http.expectOne('/api/settings/sync');
     expect(request.request.body).toEqual({ kind: 'Sonarr', instanceId: 's1' });
     request.flush({});
 
     expect(await pending).toEqual({ message: '', syncedAt: null, itemCount: 0 });
-    expect(service.isSyncing('Sonarr', 's1')).toBeFalse();
+    expect(service.isSyncing('Sonarr', 's1')).toBe(false);
   });
 
   it('clears the syncing state and propagates server errors after a failed sync', async () => {
@@ -224,11 +228,11 @@ describe('AppSettingsService', () => {
       },
       (error) => error as Error,
     );
-    expect(service.isSyncing('Radarr', 'r1')).toBeTrue();
+    expect(service.isSyncing('Radarr', 'r1')).toBe(true);
     http.expectOne('/api/settings/sync').flush({ title: 'Sync failed' }, { status: 502, statusText: 'Bad Gateway' });
 
     expect((await pending)!.message).toBe('Sync failed');
-    expect(service.isSyncing('Radarr', 'r1')).toBeFalse();
+    expect(service.isSyncing('Radarr', 'r1')).toBe(false);
   });
 
   it('keeps a running synchronization of another instance while one finishes', async () => {
@@ -236,18 +240,18 @@ describe('AppSettingsService', () => {
     const secondSync = service.syncInstance('Radarr', 'r2');
     const requests = http.match('/api/settings/sync');
 
-    expect(requests).toHaveSize(2);
-    expect(service.isSyncing('Sonarr', 's1')).toBeTrue();
-    expect(service.isSyncing('Radarr', 'r2')).toBeTrue();
+    expect(requests).toHaveLength(2);
+    expect(service.isSyncing('Sonarr', 's1')).toBe(true);
+    expect(service.isSyncing('Radarr', 'r2')).toBe(true);
 
     requests[0].flush({ itemCount: 3 });
     expect(await firstSync).toEqual({ message: '', syncedAt: null, itemCount: 3 });
-    expect(service.isSyncing('Sonarr', 's1')).toBeFalse();
-    expect(service.isSyncing('Radarr', 'r2')).toBeTrue();
+    expect(service.isSyncing('Sonarr', 's1')).toBe(false);
+    expect(service.isSyncing('Radarr', 'r2')).toBe(true);
 
     requests[1].flush({ itemCount: 1 });
     await secondSync;
-    expect(service.isSyncing('Radarr', 'r2')).toBeFalse();
+    expect(service.isSyncing('Radarr', 'r2')).toBe(false);
   });
 
   it('keeps the fixed log path and updates settings only after success', async () => {
@@ -307,16 +311,14 @@ describe('AppSettingsService', () => {
       .flush({ language: 'En', theme: 'System', titleSorting: { enabled: true, ignoredLeadingWords: ['The'] } });
     await loaded;
     const pending = service.saveTitleSorting({ enabled: false, ignoredLeadingWords: ['two words'] });
-    const rejected = expectAsync(pending).toBeRejectedWith(jasmine.any(ValidationProblemError));
     http
       .expectOne('/api/settings/title-sorting')
       .flush({ errors: { 'titleSorting.ignoredLeadingWords[0]': ['Single word required'] } }, { status: 400, statusText: 'Bad Request' });
-    await rejected;
+    await expect(pending).rejects.toBeInstanceOf(ValidationProblemError);
     expect(service.titleSorting()).toEqual({ enabled: true, ignoredLeadingWords: ['The'] });
     const network = service.saveTitleSorting({ enabled: false, ignoredLeadingWords: [] });
-    const networkRejected = expectAsync(network).toBeRejectedWith(jasmine.any(Error));
     http.expectOne('/api/settings/title-sorting').error(new ProgressEvent('error'));
-    await networkRejected;
+    await expect(network).rejects.toBeInstanceOf(Error);
     expect(service.titleSorting()).toEqual({ enabled: true, ignoredLeadingWords: ['The'] });
   });
 });

@@ -295,9 +295,10 @@ describe('SonarrSeriesDialogWidget episode table', () => {
       const dd = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.series-dialog-info-row'))
         .find((row) => row.querySelector('dt')?.textContent?.trim() === label)!
         .querySelector('dd')!;
-      expect(tones.some((tone) => dd.classList.contains(tone)))
-        .withContext(label)
-        .toBe(false);
+      expect(
+        tones.some((tone) => dd.classList.contains(tone)),
+        label,
+      ).toBe(false);
     }
   });
 

@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { ReactiveFormsModule } from '@angular/forms';
 import { signal, WritableSignal } from '@angular/core';
 import { AuthProtectionSettings } from '../../../../interfaces/settings/auth-protection-settings';
@@ -8,7 +9,7 @@ import { AuthProtectionSettingsCardWidget } from './auth-protection-settings-car
 
 describe('AuthProtectionSettingsCardWidget', () => {
   let fixture: ComponentFixture<AuthProtectionSettingsCardWidget>;
-  let saveAuthProtectionSpy: jasmine.Spy;
+  let saveAuthProtectionSpy: MockInstance;
   let authProtectionSignal: WritableSignal<AuthProtectionSettings>;
 
   beforeEach(async () => {
@@ -16,7 +17,7 @@ describe('AuthProtectionSettingsCardWidget', () => {
       requestsPerMinute: 10,
       maxFailedAttempts: 5,
     });
-    saveAuthProtectionSpy = jasmine.createSpy('saveAuthProtection').and.callFake(async (authProtection: AuthProtectionSettings) => {
+    saveAuthProtectionSpy = vi.fn().mockImplementation(async (authProtection: AuthProtectionSettings) => {
       authProtectionSignal.set(authProtection);
     });
 
@@ -73,7 +74,7 @@ describe('AuthProtectionSettingsCardWidget', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(saveAuthProtectionSpy).toHaveBeenCalledOnceWith({ requestsPerMinute: 25, maxFailedAttempts: 5 });
+    expect(saveAuthProtectionSpy).toHaveBeenCalledExactlyOnceWith({ requestsPerMinute: 25, maxFailedAttempts: 5 });
     expect(fixture.componentInstance['authProtectionFieldFeedback']('requestsPerMinute')).toBe('success');
   });
 
@@ -101,7 +102,7 @@ describe('AuthProtectionSettingsCardWidget', () => {
   });
 
   it('shows a server validation error below the rejected input', async () => {
-    saveAuthProtectionSpy.and.rejectWith(
+    saveAuthProtectionSpy.mockRejectedValue(
       new ValidationProblemError('Validation failed', {
         'authProtection.maxFailedAttempts': ['The failed attempts must be between 1 and 100.'],
       }),
@@ -125,11 +126,11 @@ describe('AuthProtectionSettingsCardWidget', () => {
     fixture.componentInstance['authProtectionForm'].controls.maxFailedAttempts.setValue(9);
     fixture.componentInstance['authProtectionForm'].controls.maxFailedAttempts.markAsDirty();
 
-    expect(fixture.componentInstance.hasUnsavedChanges()).toBeTrue();
+    expect(fixture.componentInstance.hasUnsavedChanges()).toBe(true);
 
     fixture.componentInstance.discardUnsavedChanges();
 
-    expect(fixture.componentInstance.hasUnsavedChanges()).toBeFalse();
+    expect(fixture.componentInstance.hasUnsavedChanges()).toBe(false);
     expect(fixture.componentInstance['authProtectionForm'].controls.maxFailedAttempts.getRawValue()).toBe(5);
   });
 });

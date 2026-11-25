@@ -1,4 +1,5 @@
 import { SymlinkLiveService } from '../../services/symlink-live.service';
+import type { MockInstance } from 'vitest';
 import { MediaTitlesService } from '../../services/media-titles.service';
 import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { MatMenuHarness } from '@angular/material/menu/testing';
@@ -158,7 +159,7 @@ describe('SymlinksPage', () => {
     linkStates: WritableSignal<Record<string, SymlinkActionState>>;
     overviewError: WritableSignal<string | null>;
   };
-  let dialog: jasmine.SpyObj<MatDialog>;
+  let dialog: Record<'open', MockInstance>;
 
   /** The three cards in the order the page shows them: offers, managed links, rejections. */
   function cards(): HTMLElement[] {
@@ -193,22 +194,24 @@ describe('SymlinksPage', () => {
       overviewLoading: signal(false),
       overviewError: signal<string | null>(null),
       settingsError: signal<string | null>(null),
-      loadOverview: jasmine.createSpy('loadOverview').and.resolveTo(),
-      loadSettings: jasmine.createSpy('loadSettings').and.resolveTo(),
-      refreshProgress: jasmine.createSpy('refreshProgress').and.resolveTo(),
+      loadOverview: vi.fn().mockResolvedValue(undefined),
+      loadSettings: vi.fn().mockResolvedValue(undefined),
+      refreshProgress: vi.fn().mockResolvedValue(undefined),
       deletionRefreshPending: signal(false),
-      rejectSuggestion: jasmine.createSpy('rejectSuggestion').and.resolveTo(createSuggestion({ status: 'Rejected' })),
-      retryLink: jasmine.createSpy('retryLink').and.resolveTo(createLink()),
-      checkLink: jasmine.createSpy('checkLink').and.resolveTo(createLink()),
-      setFollowUp: jasmine.createSpy('setFollowUp').and.callFake(async (id: string, enabled: boolean, revision: number) => {
+      rejectSuggestion: vi.fn().mockResolvedValue(createSuggestion({ status: 'Rejected' })),
+      retryLink: vi.fn().mockResolvedValue(createLink()),
+      checkLink: vi.fn().mockResolvedValue(createLink()),
+      setFollowUp: vi.fn().mockImplementation(async (id: string, enabled: boolean, revision: number) => {
         const updated = createLink({ id, autoFollowUp: enabled, revision: revision + 1 });
         stub.links.update((links) => links.map((link) => (link.id === id ? updated : link)));
         return updated;
       }),
-      deleteLink: jasmine.createSpy('deleteLink').and.resolveTo(),
-      reactivateRejection: jasmine.createSpy('reactivateRejection').and.resolveTo(),
+      deleteLink: vi.fn().mockResolvedValue(undefined),
+      reactivateRejection: vi.fn().mockResolvedValue(undefined),
     };
-    dialog = jasmine.createSpyObj<MatDialog>('MatDialog', ['open']);
+    dialog = {
+      open: vi.fn<MatDialog['open']>(),
+    };
 
     await TestBed.configureTestingModule({
       imports: [SymlinksPage],
@@ -218,7 +221,7 @@ describe('SymlinksPage', () => {
         { provide: SymlinkService, useValue: stub },
         {
           provide: SymlinkLiveService,
-          useValue: { reconcile: jasmine.createSpy(), activatePage: jasmine.createSpy(), deactivatePage: jasmine.createSpy() },
+          useValue: { reconcile: vi.fn(), activatePage: vi.fn(), deactivatePage: vi.fn() },
         },
         { provide: MatDialog, useValue: dialog },
       ],
@@ -350,16 +353,16 @@ describe('SymlinksPage', () => {
     const rows = Array.from(cards()[1].querySelectorAll<HTMLElement>('.item'));
     const toggle = rows[0].querySelector<HTMLButtonElement>('.link-details-toggle')!;
     const icon = toggle.querySelector('.collapse-icon')!;
-    expect(toggle.classList.contains('mat-mdc-icon-button')).toBeTrue();
+    expect(toggle.classList.contains('mat-mdc-icon-button')).toBe(true);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(icon.textContent?.trim()).toBe('expand_more');
-    expect(icon.classList.contains('is-collapsed')).toBeTrue();
+    expect(icon.classList.contains('is-collapsed')).toBe(true);
     expect(rows[0].querySelector('.item-facts')).toBeNull();
     toggle.click();
     await settle();
     const details = rows[0].querySelector<HTMLElement>('.item-facts')!;
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(icon.classList.contains('is-collapsed')).toBeFalse();
+    expect(icon.classList.contains('is-collapsed')).toBe(false);
     expect(toggle.getAttribute('aria-controls')).toBe(details.id);
     expect(getComputedStyle(details).display).toBe('grid');
     expect(rows[1].querySelector('.item-facts')).toBeNull();
@@ -369,7 +372,7 @@ describe('SymlinksPage', () => {
     toggle.click();
     await settle();
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(icon.classList.contains('is-collapsed')).toBeTrue();
+    expect(icon.classList.contains('is-collapsed')).toBe(true);
   });
 
   it('defaults to only Suggestions open and alphabetical ascending, and saves those defaults', async () => {
@@ -396,7 +399,7 @@ describe('SymlinksPage', () => {
     toggle.click();
     await settle();
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(toggle.querySelector('.collapse-icon')?.classList.contains('is-collapsed')).toBeTrue();
+    expect(toggle.querySelector('.collapse-icon')?.classList.contains('is-collapsed')).toBe(true);
     fixture.destroy();
     fixture = TestBed.createComponent(SymlinksPage);
     element = fixture.nativeElement as HTMLElement;
@@ -482,7 +485,7 @@ describe('SymlinksPage', () => {
     expect(cards()[1].textContent).toContain('The Special Movie');
     expect(cards()[1].textContent).toContain('Another Movie');
     expect(JSON.parse(globalThis.localStorage.getItem('filters:symlinks') ?? '{}')).toEqual(
-      jasmine.objectContaining({ status: '', instance: '' }),
+      expect.objectContaining({ status: '', instance: '' }),
     );
   });
 
@@ -501,7 +504,7 @@ describe('SymlinksPage', () => {
     // the repaired value back so nothing has to be repaired again on the next visit.
     expect(rowText(0)).toContain('The Special Movie');
     expect(element.querySelectorAll('.filter-bubble-remove').length).toBe(0);
-    expect(JSON.parse(globalThis.localStorage.getItem('filters:symlinks') ?? '{}')).toEqual(jasmine.objectContaining({ status: '' }));
+    expect(JSON.parse(globalThis.localStorage.getItem('filters:symlinks') ?? '{}')).toEqual(expect.objectContaining({ status: '' }));
   });
 
   it('registers for initial loading through the shared connection', () => {
@@ -633,7 +636,7 @@ describe('SymlinksPage', () => {
     ]);
     fixture.detectChanges();
     const info = fixture.debugElement.query(By.css('.offer-reasons app-info-icon')).componentInstance as InfoIconWidget;
-    expect(info.wide()).toBeTrue();
+    expect(info.wide()).toBe(true);
     expect(info['measurePanelSize']().height).toBeGreaterThan(60);
     (cards()[0].querySelector('.offer-reasons app-info-icon button') as HTMLButtonElement).click();
     await settle();
@@ -651,7 +654,7 @@ describe('SymlinksPage', () => {
       ['Different runtimes', 'The special runs 40 minutes, the movie runs 62 minutes.'],
     ]);
     const panel = overlay.querySelector('.info-popover')!;
-    expect(panel.classList.contains('info-popover--wide')).toBeTrue();
+    expect(panel.classList.contains('info-popover--wide')).toBe(true);
     expect(panel.getBoundingClientRect().width).toBeLessThanOrEqual(Math.min(560, window.innerWidth - 10));
   });
 
@@ -668,8 +671,8 @@ describe('SymlinksPage', () => {
     fixture.detectChanges();
     const note = cards()[0].querySelector('.offer-file-note')!;
     expect(note.textContent).toContain('Existing symlink points to the proposed movie.');
-    expect(note.classList.contains('is-success')).toBeTrue();
-    expect(note.classList.contains('is-warning')).toBeFalse();
+    expect(note.classList.contains('is-success')).toBe(true);
+    expect(note.classList.contains('is-warning')).toBe(false);
     expect(note.querySelector('app-info-icon')).toBeNull();
     expect(note.textContent).not.toContain('inspection result is unavailable');
   });
@@ -698,7 +701,7 @@ describe('SymlinksPage', () => {
       fixture.detectChanges();
       const note = cards()[0].querySelector('.offer-file-note')!;
       expect(note.textContent).toContain(text);
-      expect(note.classList.contains('is-warning')).toBeTrue();
+      expect(note.classList.contains('is-warning')).toBe(true);
       const info = fixture.debugElement.query(By.css('.offer-file-note app-info-icon')).componentInstance as InfoIconWidget;
       expect(info.messageText()).toContain('Actual: other.mkv; expected: movie.mkv.');
     }
@@ -720,7 +723,7 @@ describe('SymlinksPage', () => {
 
     expect(dialog.open).toHaveBeenCalledWith(
       ConfirmSymlinkDialogComponent,
-      jasmine.objectContaining({ data: { suggestion: stub.suggestions()[0], configRevision: 7 } }),
+      expect.objectContaining({ data: { suggestion: stub.suggestions()[0], configRevision: 7 } }),
     );
   });
 
@@ -735,7 +738,7 @@ describe('SymlinksPage', () => {
   });
 
   it('declines with the sentence the author typed', async () => {
-    dialog.open.and.returnValue({
+    dialog.open.mockReturnValue({
       afterClosed: () => of('The film is a different cut.'),
     } as unknown as MatDialogRef<RejectSymlinkDialogComponent>);
     stub.suggestions.set([createSuggestion()]);
@@ -746,13 +749,13 @@ describe('SymlinksPage', () => {
 
     expect(dialog.open).toHaveBeenCalledWith(
       RejectSymlinkDialogComponent,
-      jasmine.objectContaining({ data: { suggestion: stub.suggestions()[0] } }),
+      expect.objectContaining({ data: { suggestion: stub.suggestions()[0] } }),
     );
     expect(stub.rejectSuggestion).toHaveBeenCalledWith('suggestion-1', 'The film is a different cut.');
   });
 
   it('leaves a decline without a reason bare instead of storing spaces', async () => {
-    dialog.open.and.returnValue({ afterClosed: () => of('   ') } as unknown as MatDialogRef<RejectSymlinkDialogComponent>);
+    dialog.open.mockReturnValue({ afterClosed: () => of('   ') } as unknown as MatDialogRef<RejectSymlinkDialogComponent>);
     stub.suggestions.set([createSuggestion()]);
     fixture.detectChanges();
 
@@ -793,12 +796,12 @@ describe('SymlinksPage', () => {
     expect(text).not.toContain('Applied filename');
     expect(text).not.toContain('desired-only.mkv');
     expect(text).not.toContain('applied-only.mkv');
-    expect(actionButtons(1).some((button) => button.textContent?.includes('Retry setup'))).toBeFalse();
+    expect(actionButtons(1).some((button) => button.textContent?.includes('Retry setup'))).toBe(false);
     expect(
       actionButtons(1)
         .find((button) => button.textContent?.trim() === 'Edit')
         ?.classList.contains('secondary-button'),
-    ).toBeTrue();
+    ).toBe(true);
   });
 
   for (const [step, progress] of [
@@ -815,11 +818,11 @@ describe('SymlinksPage', () => {
         stub.links.set([link]);
         fixture.detectChanges();
         expect(cards()[1].querySelector('.item .status-pill')?.textContent).toContain('Setting up');
-        expect(cards()[1].querySelector('.item .status-pill')?.classList.contains('is-success')).toBeFalse();
+        expect(cards()[1].querySelector('.item .status-pill')?.classList.contains('is-success')).toBe(false);
         expect(cards()[1].querySelector('.setup-progress')?.textContent).toContain(progress);
         expect(cards()[1].querySelector('.setup-progress .feedback-icon.spinning')).not.toBeNull();
-        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBeTrue();
-        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Delete')?.disabled).toBeTrue();
+        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBe(true);
+        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Delete')?.disabled).toBe(true);
         fixture.componentInstance['edit'](link);
         await fixture.componentInstance['deleteAsync'](link);
         expect(dialog.open).not.toHaveBeenCalled();
@@ -829,8 +832,8 @@ describe('SymlinksPage', () => {
         fixture.detectChanges();
         expect(cards()[1].querySelector('.item .status-pill')?.textContent).toContain('Active');
         expect(cards()[1].querySelector('.setup-progress')).toBeNull();
-        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBeFalse();
-        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Delete')?.disabled).toBeFalse();
+        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBe(false);
+        expect(actionButtons(1).find((button) => button.textContent?.trim() === 'Delete')?.disabled).toBe(false);
       });
     }
   }
@@ -840,9 +843,9 @@ describe('SymlinksPage', () => {
     fixture.detectChanges();
     const buttons = actionButtons(1);
     const repair = buttons.find((button) => button.textContent?.trim() === 'Repair');
-    expect(repair?.disabled).toBeFalse();
-    expect(buttons.find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBeTrue();
-    expect(buttons.find((button) => button.textContent?.trim() === 'Delete')?.disabled).toBeTrue();
+    expect(repair?.disabled).toBe(false);
+    expect(buttons.find((button) => button.textContent?.trim() === 'Edit')?.disabled).toBe(true);
+    expect(buttons.find((button) => button.textContent?.trim() === 'Delete')?.disabled).toBe(true);
 
     repair!.click();
     await settle();
@@ -856,7 +859,7 @@ describe('SymlinksPage', () => {
       stub.links.set([link]);
       let resolve: ((value: SymlinkLink) => void) | undefined;
       let reject: ((error: Error) => void) | undefined;
-      (stub.retryLink as jasmine.Spy).and.returnValue(
+      vi.mocked(stub.retryLink).mockReturnValue(
         new Promise<SymlinkLink>((done, refused) => {
           resolve = done;
           reject = refused;
@@ -866,17 +869,17 @@ describe('SymlinksPage', () => {
       const button = actionButtons(1).find((candidate) => candidate.textContent?.trim() === 'Repair')!;
       button.click();
       fixture.detectChanges();
-      expect(button.disabled).toBeTrue();
+      expect(button.disabled).toBe(true);
       expect(button.textContent).toContain('Repair');
       expect(button.querySelector('.feedback-icon.spinning')).not.toBeNull();
-      expect(actionButtons(1).every((candidate) => candidate.disabled)).toBeTrue();
+      expect(actionButtons(1).every((candidate) => candidate.disabled)).toBe(true);
       await fixture.componentInstance['repairAsync'](link);
       expect(stub.retryLink).toHaveBeenCalledTimes(1);
 
       if (fails) reject?.(new Error('Repair was refused.'));
       else resolve?.(link);
       await settle();
-      expect(button.disabled).toBeFalse();
+      expect(button.disabled).toBe(false);
       expect(button.querySelector('.feedback-icon.spinning')).toBeNull();
     });
   }
@@ -887,7 +890,7 @@ describe('SymlinksPage', () => {
     fixture.detectChanges();
     const button = actionButtons(1).find((candidate) => candidate.textContent?.includes('Repair'))!;
     expect(button).toBeDefined();
-    expect(button.disabled).toBeTrue();
+    expect(button.disabled).toBe(true);
     expect(button.querySelector('.feedback-icon.spinning')).not.toBeNull();
     await fixture.componentInstance['repairAsync'](createLink());
     expect(stub.retryLink).not.toHaveBeenCalled();
@@ -895,14 +898,14 @@ describe('SymlinksPage', () => {
     stub.linkStates.set({ 'link-1': { busy: false } });
     stub.links.set([createLink({ findings: [], setupStep: 'Completed' })]);
     fixture.detectChanges();
-    expect(actionButtons(1).some((candidate) => candidate.textContent?.includes('Repair'))).toBeFalse();
+    expect(actionButtons(1).some((candidate) => candidate.textContent?.includes('Repair'))).toBe(false);
   });
 
   it('retains a locked deletion and swaps it for its suggestion after an event refresh completes', async () => {
     fixture.destroy();
-    spyOnProperty(globalThis.document, 'hidden', 'get').and.returnValue(false);
-    const intervals = spyOn(globalThis, 'setInterval').and.callThrough();
-    (stub.refreshProgress as jasmine.Spy).and.callFake(async () => {
+    vi.spyOn(globalThis.document, 'hidden', 'get').mockReturnValue(false);
+    const intervals = vi.spyOn(globalThis, 'setInterval');
+    vi.mocked(stub.refreshProgress).mockImplementation(async () => {
       stub.links.set([]);
       stub.suggestions.set([createSuggestion()]);
     });
@@ -913,10 +916,10 @@ describe('SymlinksPage', () => {
     stub.links.set([createLink({ operationStatus: 'CleanupPending' })]);
     fixture.detectChanges();
     expect(cards()[1].querySelectorAll('.item').length).toBe(1);
-    expect(actionButtons(1).every((button) => button.disabled)).toBeTrue();
+    expect(actionButtons(1).every((button) => button.disabled)).toBe(true);
     expect(cards()[1].querySelector('.danger-button .feedback-icon.spinning')).not.toBeNull();
 
-    expect(intervals.calls.allArgs().some((args) => args[1] === 5000)).toBeFalse();
+    expect(intervals.mock.calls.some((args) => args[1] === 5000)).toBe(false);
     await stub.refreshProgress();
     await settle();
 
@@ -933,11 +936,11 @@ describe('SymlinksPage', () => {
       if (phase === 'request') stub.linkStates.set({ 'link-1': { deleting: true, busy: true } });
       fixture.detectChanges();
       const row = cards()[1].querySelector('.item')!;
-      expect(Array.from(row.querySelectorAll<HTMLButtonElement>('.item-actions button')).every((button) => button.disabled)).toBeTrue();
+      expect(Array.from(row.querySelectorAll<HTMLButtonElement>('.item-actions button')).every((button) => button.disabled)).toBe(true);
       expect(row.getAttribute('aria-busy')).toBe('true');
       expect(row.querySelector('.danger-button .feedback-icon.spinning')).not.toBeNull();
       expect(cards()[0].querySelector('.item')).toBeNull();
-      const confirm = spyOn(globalThis, 'confirm');
+      const confirm = vi.spyOn(globalThis, 'confirm');
       const component = fixture.componentInstance;
       await component['deleteAsync'](stub.links()[0]);
       component['edit'](stub.links()[0]);
@@ -947,11 +950,9 @@ describe('SymlinksPage', () => {
       expect(dialog.open).not.toHaveBeenCalled();
       expect(confirm).not.toHaveBeenCalled();
       // Completing the HTTP request alone does not unlock an unfinished deletion.
-      if (phase === 'request') {
-        stub.linkStates.set({ 'link-1': { deleting: true, busy: false } });
-        fixture.detectChanges();
-        expect(Array.from(row.querySelectorAll<HTMLButtonElement>('.item-actions button')).every((button) => button.disabled)).toBeTrue();
-      }
+      stub.linkStates.set({ 'link-1': { deleting: true, busy: false } });
+      fixture.detectChanges();
+      expect(Array.from(row.querySelectorAll<HTMLButtonElement>('.item-actions button')).every((button) => button.disabled)).toBe(true);
     });
   }
 
@@ -964,14 +965,14 @@ describe('SymlinksPage', () => {
     stub.links.set([createLink({ operationStatus: 'CleanupPending' })]);
     fixture.detectChanges();
     expect(cards()[1].querySelectorAll('.item').length).toBe(1);
-    expect(actionButtons(1).every((button) => button.disabled)).toBeTrue();
+    expect(actionButtons(1).every((button) => button.disabled)).toBe(true);
   });
 
   it('omits the manual check and check timestamps even when the task has checked the row', () => {
     stub.links.set([createLink({ lastCheckedAt: '2026-11-05T18:30:00.000Z', lastSuccessfulCheckAt: '2026-11-01T09:00:00.000Z' })]);
     fixture.detectChanges();
 
-    expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Check')).toBeFalse();
+    expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Check')).toBe(false);
     expect(rowText(1)).not.toContain('Last checked');
     expect(rowText(1)).not.toContain('Nothing to report since');
   });
@@ -991,7 +992,7 @@ describe('SymlinksPage', () => {
     it(`hides Repair during normal ${state.operationStatus}/${state.setupStep} progress`, () => {
       stub.links.set([createLink({ ...state, findings: [] })]);
       fixture.detectChanges();
-      expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBeFalse();
+      expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBe(false);
     });
   }
 
@@ -1032,29 +1033,29 @@ describe('SymlinksPage', () => {
       }),
     ]);
     fixture.detectChanges();
-    expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBeTrue();
+    expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBe(true);
   });
 
   it('offers Repair after a missing-link finding', () => {
     stub.links.set([createLink({ findings: [{ code: 'link-lost', detail: 'Missing link', detectedAt: '2026-11-05T18:30:00Z' }] })]);
     fixture.detectChanges();
-    expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBeTrue();
+    expect(actionButtons(1).some((button) => button.textContent?.trim() === 'Repair')).toBe(true);
   });
 
   it('only deletes a link after the question was answered', async () => {
     stub.links.set([createLink()]);
     fixture.detectChanges();
-    const question: jasmine.Spy = spyOn(globalThis, 'confirm').and.returnValue(false);
+    const question: MockInstance = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
 
     actionButtons(1)
       .find((button) => button.textContent?.includes('Delete'))!
       .click();
     await settle();
     expect(stub.deleteLink).not.toHaveBeenCalled();
-    expect(question.calls.mostRecent().args[0]).toContain('Only the symlink file will be deleted.');
-    expect(question.calls.mostRecent().args[0]).toContain('original movie file');
+    expect(question.mock.lastCall![0]).toContain('Only the symlink file will be deleted.');
+    expect(question.mock.lastCall![0]).toContain('original movie file');
 
-    question.and.returnValue(true);
+    question.mockReturnValue(true);
     actionButtons(1)
       .find((button) => button.textContent?.includes('Delete'))!
       .click();
@@ -1086,7 +1087,7 @@ describe('SymlinksPage', () => {
       stub.rejections.set([rejection]);
       let resolve: (() => void) | undefined;
       let reject: ((error: Error) => void) | undefined;
-      (stub.reactivateRejection as jasmine.Spy).and.returnValue(
+      vi.mocked(stub.reactivateRejection).mockReturnValue(
         new Promise<void>((done, refused) => {
           resolve = done;
           reject = refused;
@@ -1096,7 +1097,7 @@ describe('SymlinksPage', () => {
       const button = actionButtons(2)[0];
       button.click();
       fixture.detectChanges();
-      expect(button.disabled).toBeTrue();
+      expect(button.disabled).toBe(true);
       expect(button.textContent).toContain('Release again');
       expect(button.querySelector('.feedback-icon.spinning')).not.toBeNull();
       await fixture.componentInstance['reactivateAsync'](rejection);
@@ -1105,16 +1106,16 @@ describe('SymlinksPage', () => {
       if (fails) reject?.(new Error('The archive is busy.'));
       else resolve?.();
       await settle();
-      expect(button.disabled).toBeFalse();
+      expect(button.disabled).toBe(false);
       expect(button.querySelector('.feedback-icon.spinning')).toBeNull();
-      if (fails) expect(stub.overviewError()).toBe('The archive is busy.');
+      expect(stub.overviewError()).toBe(fails ? 'The archive is busy.' : null);
     });
   }
 
   it('reports a decline that could not be lifted where the list sits', async () => {
     stub.rejections.set([createRejection()]);
     fixture.detectChanges();
-    (stub.reactivateRejection as jasmine.Spy).and.rejectWith(new Error('The archive is busy.'));
+    vi.mocked(stub.reactivateRejection).mockRejectedValue(new Error('The archive is busy.'));
 
     actionButtons(2)[0].click();
     await settle();
@@ -1146,7 +1147,7 @@ describe('SymlinksPage', () => {
     const settingsLink = content.querySelector('a')!;
     expect(settingsLink.textContent?.trim()).toBe('Settings');
     expect(settingsLink.getAttribute('href')).toBe('/settings?tab=symlinks');
-    expect(settingsLink.classList.contains('mat-mdc-outlined-button')).toBeTrue();
+    expect(settingsLink.classList.contains('mat-mdc-outlined-button')).toBe(true);
     stub.settings.set(createSettings({ enabled: true }));
     fixture.detectChanges();
     expect(element.querySelector('.list-controls')).not.toBeNull();

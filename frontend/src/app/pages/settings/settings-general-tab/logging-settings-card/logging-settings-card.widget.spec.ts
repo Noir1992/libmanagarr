@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { ReactiveFormsModule } from '@angular/forms';
 import { signal, WritableSignal } from '@angular/core';
 import { LoggingSettings } from '../../../../interfaces/settings/logging-settings';
@@ -8,7 +9,7 @@ import { LoggingSettingsCardWidget } from './logging-settings-card.widget';
 
 describe('LoggingSettingsCardWidget', () => {
   let fixture: ComponentFixture<LoggingSettingsCardWidget>;
-  let saveLoggingSettingsSpy: jasmine.Spy;
+  let saveLoggingSettingsSpy: MockInstance;
   let loggingSignal: WritableSignal<LoggingSettings>;
 
   beforeEach(async () => {
@@ -17,7 +18,7 @@ describe('LoggingSettingsCardWidget', () => {
       retentionDays: 30,
       minimumLevel: 'Information',
     });
-    saveLoggingSettingsSpy = jasmine.createSpy('saveLoggingSettings').and.callFake(async (logging: LoggingSettings) => {
+    saveLoggingSettingsSpy = vi.fn().mockImplementation(async (logging: LoggingSettings) => {
       loggingSignal.set(logging);
     });
 
@@ -73,8 +74,8 @@ describe('LoggingSettingsCardWidget', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(saveLoggingSettingsSpy).toHaveBeenCalledOnceWith(
-      jasmine.objectContaining({
+    expect(saveLoggingSettingsSpy).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
         path: './logs',
         retentionDays: 7,
         minimumLevel: 'Information',
@@ -96,7 +97,7 @@ describe('LoggingSettingsCardWidget', () => {
   });
 
   it('shows a server validation error below the retention input', async () => {
-    saveLoggingSettingsSpy.and.rejectWith(
+    saveLoggingSettingsSpy.mockRejectedValue(
       new ValidationProblemError('Validation failed', {
         'settings.logging.retentionDays': ['Retention not allowed.'],
       }),

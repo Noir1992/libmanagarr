@@ -1,4 +1,5 @@
 import { MediaTitlesService } from '../../services/media-titles.service';
+import type { MockInstance } from 'vitest';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
@@ -11,8 +12,8 @@ import { LibraryPage } from './library.page';
 
 describe('LibraryPage media filters', () => {
   let page: LibraryPage;
-  let radarr: jasmine.SpyObj<RadarrApiService>;
-  let sonarr: jasmine.SpyObj<SonarrApiService>;
+  let radarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
+  let sonarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
   const values: LibraryFilterValues = {
     genres: [],
     tags: [],
@@ -28,12 +29,18 @@ describe('LibraryPage media filters', () => {
   };
 
   beforeEach(() => {
-    radarr = jasmine.createSpyObj<RadarrApiService>('Radarr', ['fetchFilterValues', 'fetchLibrary']);
-    sonarr = jasmine.createSpyObj<SonarrApiService>('Sonarr', ['fetchFilterValues', 'fetchLibrary']);
-    radarr.fetchFilterValues.and.returnValue(of(values));
-    sonarr.fetchFilterValues.and.returnValue(of({ ...values, resolutions: ['2160p', '1080p'], videoCodecs: ['AV1'] }));
-    radarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
-    sonarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [] }));
+    radarr = {
+      fetchFilterValues: vi.fn<RadarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<RadarrApiService['fetchLibrary']>(),
+    };
+    sonarr = {
+      fetchFilterValues: vi.fn<SonarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<SonarrApiService['fetchLibrary']>(),
+    };
+    radarr.fetchFilterValues.mockReturnValue(of(values));
+    sonarr.fetchFilterValues.mockReturnValue(of({ ...values, resolutions: ['2160p', '1080p'], videoCodecs: ['AV1'] }));
+    radarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
+    sonarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [] }));
     TestBed.configureTestingModule({
       providers: [
         { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
@@ -65,7 +72,7 @@ describe('LibraryPage media filters', () => {
     const restored = page['filterOptions']().find((option) => option.id === filter.id);
     if (restored?.type !== FilterOptionType.MULTISELECT) throw new Error('Missing refreshed filter');
     expect(restored.selectedValues).toEqual(['HEVC']);
-    expect(restored.exclude).toBeTrue();
+    expect(restored.exclude).toBe(true);
   });
 
   it('sends all media filters to both sources and converts decimal Mbit/s to bit/s', () => {
@@ -85,7 +92,7 @@ describe('LibraryPage media filters', () => {
       }
     }
     page['loadData']();
-    const expected = jasmine.objectContaining({
+    const expected = expect.objectContaining({
       resolutions: ['1080p'],
       videoCodecs: ['HEVC'],
       audioCodecs: ['AAC'],
@@ -95,12 +102,12 @@ describe('LibraryPage media filters', () => {
       videoBitrateMax: 25_250_000,
       excludedFilters: ['video-bitrate-range'],
     });
-    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
-    expect(sonarr.fetchLibrary).toHaveBeenCalledOnceWith(expected);
+    expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
+    expect(sonarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expected);
   });
 
   it('offers the same resolution groups as statistics in descending resolution order', async () => {
-    sonarr.fetchFilterValues.and.returnValue(
+    sonarr.fetchFilterValues.mockReturnValue(
       of({ ...values, resolutions: ['Unknown', 'SD', '480p', '576p', '720p', '1080p', '1440p', '2160p', '4320p'] }),
     );
     await page['loadFilterValues']();
@@ -117,6 +124,6 @@ describe('LibraryPage media filters', () => {
 
   it('leaves bitrate bounds unset until a range is entered', () => {
     page['loadData']();
-    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(jasmine.objectContaining({ videoBitrateMin: null, videoBitrateMax: null }));
+    expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ videoBitrateMin: null, videoBitrateMax: null }));
   });
 });

@@ -1,4 +1,5 @@
 import { MediaTitlesService } from '../../services/media-titles.service';
+import type { MockInstance } from 'vitest';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject } from 'rxjs';
@@ -13,8 +14,8 @@ import { LibraryPage } from './library.page';
 
 describe('LibraryPage filter counts', () => {
   let page: LibraryPage;
-  let radarr: jasmine.SpyObj<RadarrApiService>;
-  let sonarr: jasmine.SpyObj<SonarrApiService>;
+  let radarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
+  let sonarr: Record<'fetchFilterValues' | 'fetchLibrary', MockInstance>;
   const empty: LibraryFilterValues = {
     genres: [],
     tags: [],
@@ -25,10 +26,16 @@ describe('LibraryPage filter counts', () => {
   };
 
   beforeEach(() => {
-    radarr = jasmine.createSpyObj<RadarrApiService>('Radarr', ['fetchFilterValues', 'fetchLibrary']);
-    sonarr = jasmine.createSpyObj<SonarrApiService>('Sonarr', ['fetchFilterValues', 'fetchLibrary']);
-    radarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [], counts: {} }));
-    sonarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [], counts: {} }));
+    radarr = {
+      fetchFilterValues: vi.fn<RadarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<RadarrApiService['fetchLibrary']>(),
+    };
+    sonarr = {
+      fetchFilterValues: vi.fn<SonarrApiService['fetchFilterValues']>(),
+      fetchLibrary: vi.fn<SonarrApiService['fetchLibrary']>(),
+    };
+    radarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [], counts: {} }));
+    sonarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [], counts: {} }));
     TestBed.configureTestingModule({
       providers: [
         { provide: MediaTitlesService, useValue: { revision: signal('en:0') } },
@@ -49,7 +56,7 @@ describe('LibraryPage filter counts', () => {
   });
 
   it('adds movie and episode counts without creating duplicate options for casing differences', async () => {
-    radarr.fetchFilterValues.and.returnValue(
+    radarr.fetchFilterValues.mockReturnValue(
       of({
         ...empty,
         videoCodecs: ['HEVC'],
@@ -59,7 +66,7 @@ describe('LibraryPage filter counts', () => {
         },
       }),
     );
-    sonarr.fetchFilterValues.and.returnValue(
+    sonarr.fetchFilterValues.mockReturnValue(
       of({
         ...empty,
         videoCodecs: ['hevc', 'AV1'],
@@ -83,8 +90,8 @@ describe('LibraryPage filter counts', () => {
   });
 
   it('keeps counts absent when an older backend response does not supply them', async () => {
-    radarr.fetchFilterValues.and.returnValue(of({ ...empty, videoCodecs: ['HEVC'] }));
-    sonarr.fetchFilterValues.and.returnValue(of(empty));
+    radarr.fetchFilterValues.mockReturnValue(of({ ...empty, videoCodecs: ['HEVC'] }));
+    sonarr.fetchFilterValues.mockReturnValue(of(empty));
     await page['loadFilterValues']();
     const codec = page['filterOptions']().find((filter) => filter.id === 'video-codec-filter');
     if (codec?.type !== FilterOptionType.MULTISELECT) throw new Error('Missing codec filter');
@@ -92,21 +99,21 @@ describe('LibraryPage filter counts', () => {
     expect(codec.totalCount).toBeUndefined();
   });
   it('replaces full-library counts with current results while keeping options and selections', async () => {
-    radarr.fetchFilterValues.and.returnValue(
+    radarr.fetchFilterValues.mockReturnValue(
       of({ ...empty, videoCodecs: ['HEVC', 'AV1'], counts: { 'video-codec-filter': { HEVC: 100, AV1: 50, __all__: 150 } } }),
     );
-    sonarr.fetchFilterValues.and.returnValue(of(empty));
+    sonarr.fetchFilterValues.mockReturnValue(of(empty));
     await page['loadFilterValues']();
     const codec = () => page['filterOptions']().find((filter) => filter.id === 'video-codec-filter') as MultiSelectFilterOption;
     codec().selectedValues = ['HEVC'];
-    radarr.fetchLibrary.and.returnValue(
+    radarr.fetchLibrary.mockReturnValue(
       of({
         syncedAt: null,
         instances: [],
         counts: { 'video-codec-filter': { HEVC: 1, __all__: 1 }, 'episode-type-filter': { movie: 1, __all__: 1 } },
       }),
     );
-    sonarr.fetchLibrary.and.returnValue(
+    sonarr.fetchLibrary.mockReturnValue(
       of({
         syncedAt: null,
         instances: [],
@@ -123,8 +130,8 @@ describe('LibraryPage filter counts', () => {
     const type = page['filterOptions']().find((filter) => filter.id === 'episode-type-filter') as MultiSelectFilterOption;
     expect(type.options.map((option) => option.count)).toEqual([1, 2, 0]);
     expect(type.totalCount).toBe(3);
-    radarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [], counts: {} }));
-    sonarr.fetchLibrary.and.returnValue(of({ syncedAt: null, instances: [], counts: {} }));
+    radarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [], counts: {} }));
+    sonarr.fetchLibrary.mockReturnValue(of({ syncedAt: null, instances: [], counts: {} }));
     page['loadData']();
     expect(codec().options.map((option) => option.count)).toEqual([0, 0]);
     expect(codec().totalCount).toBe(0);
@@ -132,12 +139,12 @@ describe('LibraryPage filter counts', () => {
   });
 
   it('ignores an older result arriving after a newer filter request', async () => {
-    radarr.fetchFilterValues.and.returnValue(of({ ...empty, videoCodecs: ['HEVC'] }));
-    sonarr.fetchFilterValues.and.returnValue(of(empty));
+    radarr.fetchFilterValues.mockReturnValue(of({ ...empty, videoCodecs: ['HEVC'] }));
+    sonarr.fetchFilterValues.mockReturnValue(of(empty));
     await page['loadFilterValues']();
     const oldResult = new Subject<RadarrLibraryBatchResponse>();
     const newResult = new Subject<RadarrLibraryBatchResponse>();
-    radarr.fetchLibrary.and.returnValues(oldResult, newResult);
+    radarr.fetchLibrary.mockReturnValueOnce(oldResult).mockReturnValueOnce(newResult);
     page['loadData']();
     page['loadData']();
     newResult.next({ syncedAt: null, instances: [], counts: { 'video-codec-filter': { HEVC: 1, __all__: 1 } } });
@@ -147,6 +154,6 @@ describe('LibraryPage filter counts', () => {
     const codec = page['filterOptions']().find((filter) => filter.id === 'video-codec-filter') as MultiSelectFilterOption;
     expect(codec.options[0].count).toBe(1);
     expect(codec.totalCount).toBe(1);
-    expect(page['loading']()).toBeFalse();
+    expect(page['loading']()).toBe(false);
   });
 });

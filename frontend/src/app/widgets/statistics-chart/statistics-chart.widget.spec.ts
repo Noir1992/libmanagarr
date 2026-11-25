@@ -39,7 +39,7 @@ describe('StatisticsChartWidget value list', () => {
     expect(toggle.querySelector('.chart-values-count')!.textContent!.trim()).toBe('(2)');
     toggle.click();
     await fixture.whenStable();
-    expect(element.querySelectorAll('.chart-row-button')).toHaveSize(2);
+    expect(element.querySelectorAll('.chart-row-button')).toHaveLength(2);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(toggle.textContent).toContain('Hide values');
     toggle.click();
@@ -51,9 +51,9 @@ describe('StatisticsChartWidget value list', () => {
     element.querySelectorAll('.pie-segment')[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await fixture.whenStable();
     const rows = element.querySelectorAll<HTMLButtonElement>('.chart-row-button');
-    expect(rows[0].classList.contains('expanded')).toBeFalse();
-    expect(rows[1].classList.contains('expanded')).toBeTrue();
-    expect(element.querySelectorAll('app-media-files-tree')).toHaveSize(1);
+    expect(rows[0].classList.contains('expanded')).toBe(false);
+    expect(rows[1].classList.contains('expanded')).toBe(true);
+    expect(element.querySelectorAll('app-media-files-tree')).toHaveLength(1);
     expect(element.querySelector('.chart-values-toggle')!.getAttribute('aria-expanded')).toBe('true');
   });
 
@@ -63,13 +63,13 @@ describe('StatisticsChartWidget value list', () => {
     await fixture.whenStable();
     segment.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await fixture.whenStable();
-    expect(element.querySelector('.chart-row-button')!.classList.contains('expanded')).toBeFalse();
+    expect(element.querySelector('.chart-row-button')!.classList.contains('expanded')).toBe(false);
     expect(element.querySelector('.chart-values-toggle')!.getAttribute('aria-expanded')).toBe('true');
     element.querySelector<HTMLButtonElement>('.chart-values-toggle')!.click();
     await fixture.whenStable();
     segment.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await fixture.whenStable();
-    expect(element.querySelector('.chart-row-button')!.classList.contains('expanded')).toBeTrue();
+    expect(element.querySelector('.chart-row-button')!.classList.contains('expanded')).toBe(true);
     expect(element.querySelector('.chart-values-toggle')!.getAttribute('aria-expanded')).toBe('true');
   });
 });

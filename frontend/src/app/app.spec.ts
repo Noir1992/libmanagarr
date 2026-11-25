@@ -1,4 +1,5 @@
 import { AuthService } from './services/auth.service';
+import type { MockInstance } from 'vitest';
 import { provideHttpClient, withXhr } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { computed, signal, WritableSignal } from '@angular/core';
@@ -57,14 +58,14 @@ describe('App', () => {
 
     const hiddenIcon: Element | null = fixture.nativeElement.querySelector('.navigation-version-icon');
 
-    expect(hiddenIcon?.classList.contains('is-visible')).toBeFalse();
+    expect(hiddenIcon?.classList.contains('is-visible')).toBe(false);
 
     overview.set(overviewWith('1.3.0', true));
     fixture.detectChanges();
 
     const visibleIcon: Element | null = fixture.nativeElement.querySelector('.navigation-version-icon');
 
-    expect(visibleIcon?.classList.contains('is-visible')).toBeTrue();
+    expect(visibleIcon?.classList.contains('is-visible')).toBe(true);
   });
 
   // The frame is the entry's own identity, so the rules resolving in the browser are the proof:
@@ -107,7 +108,7 @@ describe('App', () => {
 
   it('shows a logout failure without claiming the session ended', async () => {
     const fixture = TestBed.createComponent(App);
-    const logout = spyOn(TestBed.inject(AuthService), 'logoutAsync').and.rejectWith(new Error('network unavailable'));
+    const logout = vi.spyOn(TestBed.inject(AuthService), 'logoutAsync').mockRejectedValue(new Error('network unavailable'));
     await fixture.componentInstance['logoutAsync']();
     await fixture.whenStable();
     expect(logout).toHaveBeenCalledTimes(1);
@@ -147,7 +148,7 @@ describe('App', () => {
     const fixture: ComponentFixture<App> = TestBed.createComponent(App);
     fixture.detectChanges();
 
-    expect(isNavigationOpen(fixture)).toBeTrue();
+    expect(isNavigationOpen(fixture)).toBe(true);
   });
 
   it('should keep the navigation closed by default on a narrow viewport', () => {
@@ -155,7 +156,7 @@ describe('App', () => {
     const fixture: ComponentFixture<App> = TestBed.createComponent(App);
     fixture.detectChanges();
 
-    expect(isNavigationOpen(fixture)).toBeFalse();
+    expect(isNavigationOpen(fixture)).toBe(false);
   });
 
   it('should collapse the navigation from the toggle on a wide viewport', () => {
@@ -169,8 +170,8 @@ describe('App', () => {
     toggleButton?.click();
     fixture.detectChanges();
 
-    expect(isNavigationOpen(fixture)).toBeFalse();
-    expect(compiled.querySelector('.app-sidebar')?.hasAttribute('inert')).toBeTrue();
+    expect(isNavigationOpen(fixture)).toBe(false);
+    expect(compiled.querySelector('.app-sidebar')?.hasAttribute('inert')).toBe(true);
   });
 
   it('should persist the wide navigation toggle and start closed on the next app start', () => {
@@ -189,7 +190,7 @@ describe('App', () => {
     const nextFixture: ComponentFixture<App> = TestBed.createComponent(App);
     nextFixture.detectChanges();
 
-    expect(isNavigationOpen(nextFixture)).toBeFalse();
+    expect(isNavigationOpen(nextFixture)).toBe(false);
   });
 
   it('should not persist the navigation state on a narrow viewport', () => {
@@ -202,7 +203,7 @@ describe('App', () => {
     );
     toggleButton?.click();
     fixture.detectChanges();
-    expect(isNavigationOpen(fixture)).toBeTrue();
+    expect(isNavigationOpen(fixture)).toBe(true);
     expect(globalThis.localStorage.getItem(NAVIGATION_OPEN_STORAGE_KEY)).toBeNull();
 
     toggleButton?.click();
@@ -220,7 +221,7 @@ describe('App', () => {
     fixture.componentInstance['closeNavigation']();
     fixture.detectChanges();
 
-    expect(isNavigationOpen(fixture)).toBeTrue();
+    expect(isNavigationOpen(fixture)).toBe(true);
     expect(compiled.querySelector('.navigation-backdrop')).toBeNull();
   });
 
@@ -234,12 +235,12 @@ describe('App', () => {
     );
     toggleButton?.click();
     fixture.detectChanges();
-    expect(isNavigationOpen(fixture)).toBeTrue();
+    expect(isNavigationOpen(fixture)).toBe(true);
 
     fixture.componentInstance['closeNavigation']();
     fixture.detectChanges();
 
-    expect(isNavigationOpen(fixture)).toBeFalse();
+    expect(isNavigationOpen(fixture)).toBe(false);
   });
 
   it('should render the navigation backdrop on an open narrow drawer', () => {
@@ -274,12 +275,12 @@ describe('App', () => {
 
     toggleButton?.click();
     fixture.detectChanges();
-    expect(isNavigationOpen(fixture)).toBeTrue();
-    expect(compiled.querySelector('.app-sidebar')?.hasAttribute('inert')).toBeFalse();
+    expect(isNavigationOpen(fixture)).toBe(true);
+    expect(compiled.querySelector('.app-sidebar')?.hasAttribute('inert')).toBe(false);
 
     toggleButton?.click();
     fixture.detectChanges();
-    expect(isNavigationOpen(fixture)).toBeFalse();
+    expect(isNavigationOpen(fixture)).toBe(false);
   });
 
   it('should hide the scroll-to-top button while the content is not scrolled', () => {
@@ -317,7 +318,7 @@ describe('App', () => {
 
     const compiled: HTMLElement = fixture.nativeElement as HTMLElement;
     const scrollHost: HTMLElement = makeScrollable(compiled);
-    const scrollToSpy: jasmine.Spy = spyOn(scrollHost, 'scrollTo');
+    const scrollToSpy: MockInstance = vi.spyOn(scrollHost, 'scrollTo');
 
     scrollHost.scrollTop = 400;
     scrollHost.dispatchEvent(new Event('scroll'));
@@ -389,7 +390,7 @@ describe('App', () => {
       removeEventListener: (): void => undefined,
     } as unknown as MediaQueryList;
 
-    spyOn(globalThis, 'matchMedia').and.returnValue(mediaQueryStub);
+    vi.spyOn(globalThis, 'matchMedia').mockReturnValue(mediaQueryStub);
   }
 
   function isNavigationOpen(fixture: ComponentFixture<App>): boolean {

@@ -66,7 +66,7 @@ describe('LogsPage', () => {
   function getViewport(): CdkVirtualScrollViewport {
     const viewport = fixture.debugElement.query(By.directive(CdkVirtualScrollViewport));
 
-    expect(viewport).withContext('virtual scroll viewport should exist').toBeTruthy();
+    expect(viewport, 'virtual scroll viewport should exist').toBeTruthy();
 
     return viewport!.componentInstance as CdkVirtualScrollViewport;
   }
@@ -110,10 +110,10 @@ describe('LogsPage', () => {
 
     expect(compiled.textContent).toContain('Logs');
     expect(compiled.textContent).toContain('Logs description');
-    expect(fixture.componentInstance['logsState']()).toHaveSize(1);
+    expect(fixture.componentInstance['logsState']()).toHaveLength(1);
     expect(fixture.componentInstance['logsState']()[0].message).toBe('Cleanup completed.');
     expect(compiled.querySelector('table')).not.toBeNull();
-    expect(fixture.componentInstance['filters']()[1].persist).toBeFalse();
+    expect(fixture.componentInstance['filters']()[1].persist).toBe(false);
   });
 
   it('searches loaded sources and messages as case-insensitive phrases without API requests', async () => {
@@ -155,13 +155,13 @@ describe('LogsPage', () => {
     expect(fixture.componentInstance['visibleLogs']()).toEqual([entries[1]]);
 
     await search('snapshot sync');
-    expect(fixture.componentInstance['visibleLogs']()).toHaveSize(0);
+    expect(fixture.componentInstance['visibleLogs']()).toHaveLength(0);
     expect(fixture.nativeElement.querySelector('.no-data-state')?.textContent).toContain('No logs found for the selected filter.');
     expect(fixture.nativeElement.querySelector('table')).toBeNull();
 
     await search('   ');
     expect(fixture.componentInstance['visibleLogs']()).toEqual(entries);
-    expect(fixture.componentInstance['isFiltered']()).toBeFalse();
+    expect(fixture.componentInstance['isFiltered']()).toBe(false);
     (fixture.nativeElement.querySelector('app-search-clear button') as HTMLButtonElement).click();
     fixture.detectChanges();
     await fixture.whenStable();
@@ -200,8 +200,8 @@ describe('LogsPage', () => {
     input.value = '';
     input.dispatchEvent(new Event('input'));
     fixture.detectChanges();
-    expect(fixture.componentInstance['visibleLogs']()).toHaveSize(2);
-    expect(fixture.componentInstance['isFiltered']()).toBeTrue();
+    expect(fixture.componentInstance['visibleLogs']()).toHaveLength(2);
+    expect(fixture.componentInstance['isFiltered']()).toBe(true);
   });
 
   it('shows a no data section when no log entries are returned', async () => {
@@ -271,8 +271,8 @@ describe('LogsPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(fixture.componentInstance['logsState']()).toHaveSize(0);
-    expect(fixture.componentInstance['isFiltered']()).toBeFalse();
+    expect(fixture.componentInstance['logsState']()).toHaveLength(0);
+    expect(fixture.componentInstance['isFiltered']()).toBe(false);
     expect(fixture.nativeElement.querySelector('.no-data-state')?.textContent).toContain('No logs found.');
   });
 

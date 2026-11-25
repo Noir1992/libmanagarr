@@ -60,7 +60,7 @@ describe('TrendChartWidget', () => {
 
   function mockChartBounds(): SVGSVGElement {
     const svg = fixture.nativeElement.querySelector('svg') as SVGSVGElement;
-    spyOn(svg, 'getBoundingClientRect').and.returnValue({ left: 0, top: 0, width: 960, height: 360 } as DOMRect);
+    vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 960, height: 360 } as DOMRect);
     return svg;
   }
 
@@ -100,12 +100,12 @@ describe('TrendChartWidget', () => {
     const svg = mockChartBounds();
     const wheel = new WheelEvent('wheel', { clientX: 936, deltaY: -100, cancelable: true, bubbles: true });
     svg.dispatchEvent(wheel);
-    expect(wheel.defaultPrevented).toBeTrue();
+    expect(wheel.defaultPrevented).toBe(true);
     expect(fixture.componentInstance['viewport']().start).toBeCloseTo(0.2);
     expect(fixture.componentInstance['viewport']().end).toBe(1);
     const outside = new WheelEvent('wheel', { clientX: 20, deltaY: -100, cancelable: true });
     svg.dispatchEvent(outside);
-    expect(outside.defaultPrevented).toBeFalse();
+    expect(outside.defaultPrevented).toBe(false);
   });
 
   it('keeps panning and zoom within the available time range and resets on new data', () => {
@@ -128,7 +128,7 @@ describe('TrendChartWidget', () => {
   it('moves the visible range while dragging and clears the tooltip', () => {
     setFullChart();
     const svg = mockChartBounds();
-    spyOn(svg, 'setPointerCapture');
+    vi.spyOn(svg, 'setPointerCapture');
     const widget = fixture.componentInstance;
     widget['changeZoom'](2);
     fixture.detectChanges();
@@ -154,9 +154,9 @@ describe('TrendChartWidget', () => {
     const reset = fixture.nativeElement.querySelector('button[aria-label="Reset zoom"]') as HTMLButtonElement;
     reset.click();
     fixture.detectChanges();
-    expect(widget['zoomed']()).toBeFalse();
+    expect(widget['zoomed']()).toBe(false);
     expect(widget['hoverTooltip']()).toBeNull();
-    expect(reset.disabled).toBeTrue();
+    expect(reset.disabled).toBe(true);
   });
 
   it('disables zoom when there is only one data point', () => {
@@ -166,7 +166,7 @@ describe('TrendChartWidget', () => {
     fixture.detectChanges();
     widget['changeZoom'](2);
     expect(widget['viewport']()).toEqual({ start: 0, end: 1 });
-    expect(widget['canZoomIn']()).toBeFalse();
+    expect(widget['canZoomIn']()).toBe(false);
   });
 
   it('emits the nearest point timestamp when a chart point is clicked', () => {
@@ -192,7 +192,7 @@ describe('TrendChartWidget', () => {
   it('suppresses the point selection after a panning drag', () => {
     setFullChart();
     const svg = mockChartBounds();
-    spyOn(svg, 'setPointerCapture');
+    vi.spyOn(svg, 'setPointerCapture');
     const widget = fixture.componentInstance;
     const emitted: string[] = [];
     widget.pointSelected.subscribe((occurredAt: string) => emitted.push(occurredAt));
@@ -204,7 +204,7 @@ describe('TrendChartWidget', () => {
     svg.dispatchEvent(new MouseEvent('click', { clientX: 620, clientY: 160 }));
     expect(emitted).toEqual([]);
     svg.dispatchEvent(new MouseEvent('click', { clientX: 620, clientY: 160 }));
-    expect(emitted).toHaveSize(1);
+    expect(emitted).toHaveLength(1);
   });
 
   it('renders the chart title and tooltip on hover', async () => {
@@ -216,7 +216,7 @@ describe('TrendChartWidget', () => {
     expect(svg).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('Media changes');
 
-    spyOn(svg!, 'getBoundingClientRect').and.returnValue({
+    vi.spyOn(svg!, 'getBoundingClientRect').mockReturnValue({
       x: 0,
       y: 0,
       left: 0,

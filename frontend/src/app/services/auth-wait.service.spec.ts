@@ -37,8 +37,8 @@ describe('AuthWaitService', () => {
    * otherwise shorten the exact text by a second — which the runner decides, not the code.
    */
   function withFrozenClock(body: () => void): void {
-    jasmine.clock().install();
-    jasmine.clock().mockDate(clockBase);
+    vi.useFakeTimers();
+    vi.setSystemTime(clockBase);
 
     try {
       body();
@@ -46,7 +46,7 @@ describe('AuthWaitService', () => {
       // Stops the ticking interval through the faked clearInterval, so the real one is never handed
       // an id of the mock clock after the uninstall below.
       service.clear();
-      jasmine.clock().uninstall();
+      vi.useRealTimers();
     }
   }
 
@@ -57,8 +57,8 @@ describe('AuthWaitService', () => {
   });
 
   it('should know nothing about a wait at the start', () => {
-    expect(service.waiting()).toBeFalse();
-    expect(service.accountLocked()).toBeFalse();
+    expect(service.waiting()).toBe(false);
+    expect(service.accountLocked()).toBe(false);
     expect(countdownOf('account_lock')).toBeNull();
     expect(countdownOf('ip_limit')).toBeNull();
   });
@@ -67,7 +67,7 @@ describe('AuthWaitService', () => {
     withFrozenClock((): void => {
       service.record(refusal('account_locked', 45));
 
-      expect(service.accountLocked()).toBeTrue();
+      expect(service.accountLocked()).toBe(true);
       expect(countdownOf('account_lock')).toBe('00:45');
       expect(countdownOf('ip_limit')).toBeNull();
     });
@@ -78,7 +78,7 @@ describe('AuthWaitService', () => {
       service.record(refusal('account_locked', 120));
       service.record(refusal('too_many_requests', 30));
 
-      expect(service.accountLocked()).toBeTrue();
+      expect(service.accountLocked()).toBe(true);
       expect(countdownOf('account_lock')).toBe('02:00');
       expect(countdownOf('ip_limit')).toBe('00:30');
     });
@@ -87,8 +87,8 @@ describe('AuthWaitService', () => {
   it('should report waiting while either wait runs', () => {
     service.record(refusal('too_many_requests', 20));
 
-    expect(service.waiting()).toBeTrue();
-    expect(service.accountLocked()).toBeFalse();
+    expect(service.waiting()).toBe(true);
+    expect(service.accountLocked()).toBe(false);
   });
 
   it('should stop waiting when a recorded deadline already passed', () => {
@@ -96,7 +96,7 @@ describe('AuthWaitService', () => {
     service.record(refusal('account_locked', -1));
 
     expect(countdownOf('account_lock')).toBeNull();
-    expect(service.waiting()).toBeFalse();
+    expect(service.waiting()).toBe(false);
   });
 
   it('should forget every wait on request', () => {
@@ -105,20 +105,20 @@ describe('AuthWaitService', () => {
 
     service.clear();
 
-    expect(service.waiting()).toBeFalse();
+    expect(service.waiting()).toBe(false);
     expect(service.endsAtOf('account_lock')).toBeNull();
   });
 
   it('should keep no wait for a refusal that names neither limit', () => {
     service.record(refusal('invalid_credentials', 60));
 
-    expect(service.waiting()).toBeFalse();
+    expect(service.waiting()).toBe(false);
   });
 
   it('should keep no wait for a refusal that carries no usable timing', () => {
     service.record(refusal('account_locked', null));
 
-    expect(service.waiting()).toBeFalse();
+    expect(service.waiting()).toBe(false);
     expect(service.endsAtOf('account_lock')).toBeNull();
   });
 
@@ -136,12 +136,12 @@ describe('AuthWaitService', () => {
       service.record(refusal('account_locked', 3));
       expect(countdownOf('account_lock')).toBe('00:03');
 
-      jasmine.clock().tick(1000);
+      vi.advanceTimersByTime(1000);
       expect(countdownOf('account_lock')).toBe('00:02');
 
-      jasmine.clock().tick(3000);
+      vi.advanceTimersByTime(3000);
       expect(countdownOf('account_lock')).toBeNull();
-      expect(service.waiting()).toBeFalse();
+      expect(service.waiting()).toBe(false);
     });
   });
 });

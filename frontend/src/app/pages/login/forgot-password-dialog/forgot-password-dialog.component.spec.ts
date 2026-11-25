@@ -1,17 +1,22 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
 import { MatDialogRef } from '@angular/material/dialog';
 import { AppI18nService } from '../../../services/app-i18n.service';
 import { ForgotPasswordDialogComponent } from './forgot-password-dialog.component';
 
 describe('ForgotPasswordDialogComponent', () => {
-  let dialogRefSpy: jasmine.SpyObj<MatDialogRef<ForgotPasswordDialogComponent>>;
+  let dialogRefSpy: Record<'close', MockInstance>;
   let fixture: ComponentFixture<ForgotPasswordDialogComponent>;
-  const i18nSpy: jasmine.SpyObj<AppI18nService> = jasmine.createSpyObj<AppI18nService>('AppI18nService', ['t']);
+  const i18nSpy: Record<'t', MockInstance> = {
+    t: vi.fn<AppI18nService['t']>(),
+  };
 
-  i18nSpy.t.and.callFake((key: string): string => key);
+  i18nSpy.t.mockImplementation((key: string): string => key);
 
   beforeEach(async () => {
-    dialogRefSpy = jasmine.createSpyObj<MatDialogRef<ForgotPasswordDialogComponent>>('MatDialogRef', ['close']);
+    dialogRefSpy = {
+      close: vi.fn<MatDialogRef<ForgotPasswordDialogComponent>['close']>(),
+    };
 
     await TestBed.configureTestingModule({
       providers: [

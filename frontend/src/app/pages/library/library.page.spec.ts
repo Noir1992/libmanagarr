@@ -1,4 +1,5 @@
 import { MediaTitlesService } from '../../services/media-titles.service';
+import type { MockInstance } from 'vitest';
 import { signal, WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject } from 'rxjs';
@@ -14,14 +15,20 @@ import { LibraryPage } from './library.page';
 
 describe('LibraryPage instance filters', () => {
   let page: LibraryPage;
-  let sonarr: jasmine.SpyObj<SonarrApiService>;
-  let radarr: jasmine.SpyObj<RadarrApiService>;
+  let sonarr: Record<'fetchLibrary' | 'fetchFilterValues', MockInstance>;
+  let radarr: Record<'fetchLibrary' | 'fetchFilterValues', MockInstance>;
   let sonarrInstances: WritableSignal<ArrInstanceSettings[]>;
   let radarrInstances: WritableSignal<ArrInstanceSettings[]>;
 
   beforeEach(() => {
-    sonarr = jasmine.createSpyObj<SonarrApiService>('SonarrApiService', ['fetchLibrary', 'fetchFilterValues']);
-    radarr = jasmine.createSpyObj<RadarrApiService>('RadarrApiService', ['fetchLibrary', 'fetchFilterValues']);
+    sonarr = {
+      fetchLibrary: vi.fn<SonarrApiService['fetchLibrary']>(),
+      fetchFilterValues: vi.fn<SonarrApiService['fetchFilterValues']>(),
+    };
+    radarr = {
+      fetchLibrary: vi.fn<RadarrApiService['fetchLibrary']>(),
+      fetchFilterValues: vi.fn<RadarrApiService['fetchFilterValues']>(),
+    };
     const filterValues: LibraryFilterValues = {
       genres: ['Drama'],
       tags: ['Favorite'],
@@ -30,9 +37,9 @@ describe('LibraryPage instance filters', () => {
       audioLanguages: ['English'],
       subtitleLanguages: ['German'],
     };
-    sonarr.fetchFilterValues.and.returnValue(of(filterValues));
-    radarr.fetchFilterValues.and.returnValue(of(filterValues));
-    sonarr.fetchLibrary.and.returnValue(
+    sonarr.fetchFilterValues.mockReturnValue(of(filterValues));
+    radarr.fetchFilterValues.mockReturnValue(of(filterValues));
+    sonarr.fetchLibrary.mockReturnValue(
       of({
         syncedAt: null,
         instances: [
@@ -57,7 +64,7 @@ describe('LibraryPage instance filters', () => {
         ],
       }),
     );
-    radarr.fetchLibrary.and.returnValue(
+    radarr.fetchLibrary.mockReturnValue(
       of({
         syncedAt: null,
         instances: [
@@ -99,7 +106,7 @@ describe('LibraryPage instance filters', () => {
             radarrInstances,
             loadError: signal(null),
             titleSorting: signal({ enabled: false, ignoredLeadingWords: [] }),
-            loadInstances: jasmine.createSpy().and.resolveTo(),
+            loadInstances: vi.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -119,11 +126,11 @@ describe('LibraryPage instance filters', () => {
     it(`should include ${excluded} again when its instance selection is cleared`, async () => {
       await page['loadFilterValues']();
       page['loadData']();
-      expect(page['gridItems']()).toHaveSize(2);
-      sonarr.fetchLibrary.calls.reset();
-      radarr.fetchLibrary.calls.reset();
-      sonarr.fetchFilterValues.calls.reset();
-      radarr.fetchFilterValues.calls.reset();
+      expect(page['gridItems']()).toHaveLength(2);
+      sonarr.fetchLibrary.mockClear();
+      radarr.fetchLibrary.mockClear();
+      sonarr.fetchFilterValues.mockClear();
+      radarr.fetchFilterValues.mockClear();
       const filter = instanceFilter(excluded);
       filter.selectedValues = [];
 
@@ -131,10 +138,10 @@ describe('LibraryPage instance filters', () => {
 
       const excludedApi = excluded === 'sonarr' ? sonarr : radarr;
       const includedApi = excluded === 'sonarr' ? radarr : sonarr;
-      expect(excludedApi.fetchFilterValues).toHaveBeenCalledOnceWith(['__all__']);
+      expect(excludedApi.fetchFilterValues).toHaveBeenCalledExactlyOnceWith(['__all__']);
       expect(excludedApi.fetchLibrary).toHaveBeenCalledTimes(1);
       expect(includedApi.fetchLibrary).toHaveBeenCalledTimes(1);
-      const request = includedApi.fetchLibrary.calls.mostRecent().args[0];
+      const request = includedApi.fetchLibrary.mock.lastCall![0];
       expect(request.sonarrInstanceFilter).toEqual(['__all__']);
       expect(request.radarrInstanceFilter).toEqual(['__all__']);
       expect(instanceFilter(excluded).selectedValues).toEqual([]);
@@ -154,27 +161,27 @@ describe('LibraryPage instance filters', () => {
     await page['loadFilterValues']();
     page['loadData']();
 
-    expect(sonarr.fetchFilterValues).toHaveBeenCalledOnceWith(['__all__']);
-    expect(radarr.fetchFilterValues).toHaveBeenCalledOnceWith(['__all__']);
+    expect(sonarr.fetchFilterValues).toHaveBeenCalledExactlyOnceWith(['__all__']);
+    expect(radarr.fetchFilterValues).toHaveBeenCalledExactlyOnceWith(['__all__']);
     expect(sonarr.fetchLibrary).toHaveBeenCalledTimes(1);
     expect(radarr.fetchLibrary).toHaveBeenCalledTimes(1);
-    expect(page['loading']()).toBeFalse();
-    expect(page['initialLoadComplete']()).toBeTrue();
+    expect(page['loading']()).toBe(false);
+    expect(page['initialLoadComplete']()).toBe(true);
     expect(page['loadError']()).toBeNull();
-    expect(page['gridItems']()).toHaveSize(2);
+    expect(page['gridItems']()).toHaveLength(2);
   });
 
   it('should skip a source when all of its instances are excluded', async () => {
     const filter = instanceFilter('radarr');
     filter.selectedValues = ['__all__'];
     filter.exclude = true;
-    expect(filter.excludeAllRestricts).toBeTrue();
+    expect(filter.excludeAllRestricts).toBe(true);
 
     page['loadData']();
 
     expect(radarr.fetchLibrary).not.toHaveBeenCalled();
     expect(sonarr.fetchLibrary).toHaveBeenCalledTimes(1);
-    const request = sonarr.fetchLibrary.calls.mostRecent().args[0];
+    const request = sonarr.fetchLibrary.mock.lastCall![0];
     expect(request.radarrInstanceFilter).toEqual(['__all__']);
     expect(request.excludedFilters).toContain('radarr-instance-filter');
     expect(page['visibleItemCount']()).toBe(1);
@@ -189,10 +196,10 @@ describe('LibraryPage instance filters', () => {
 
     expect(radarr.fetchLibrary).toHaveBeenCalledTimes(1);
     expect(sonarr.fetchLibrary).toHaveBeenCalledTimes(1);
-    const request = radarr.fetchLibrary.calls.mostRecent().args[0];
+    const request = radarr.fetchLibrary.mock.lastCall![0];
     expect(request.radarrInstanceFilter).toEqual(['__all__']);
     expect(request.excludedFilters).not.toContain('radarr-instance-filter');
-    expect(page['gridItems']()).toHaveSize(2);
+    expect(page['gridItems']()).toHaveLength(2);
   });
 
   for (const absent of ['sonarr', 'radarr'] as const) {
@@ -204,7 +211,7 @@ describe('LibraryPage instance filters', () => {
 
       expect((absent === 'sonarr' ? sonarr : radarr).fetchLibrary).not.toHaveBeenCalled();
       expect((absent === 'sonarr' ? radarr : sonarr).fetchLibrary).toHaveBeenCalledTimes(1);
-      expect(page['loading']()).toBeFalse();
+      expect(page['loading']()).toBe(false);
       expect(page['visibleItemCount']()).toBe(1);
     });
   }
@@ -246,50 +253,50 @@ describe('LibraryPage instance filters', () => {
   it('cancels both obsolete library requests and cancels on destruction', () => {
     const sonarrPending = new Subject<never>();
     const radarrPending = new Subject<never>();
-    sonarr.fetchLibrary.and.returnValue(sonarrPending);
-    radarr.fetchLibrary.and.returnValue(radarrPending);
+    sonarr.fetchLibrary.mockReturnValue(sonarrPending);
+    radarr.fetchLibrary.mockReturnValue(radarrPending);
     page['loadData']();
-    expect(sonarrPending.observers).toHaveSize(1);
-    expect(radarrPending.observers).toHaveSize(1);
+    expect(sonarrPending.observers).toHaveLength(1);
+    expect(radarrPending.observers).toHaveLength(1);
     page['loadData']();
-    expect(sonarrPending.observers).toHaveSize(1);
-    expect(radarrPending.observers).toHaveSize(1);
+    expect(sonarrPending.observers).toHaveLength(1);
+    expect(radarrPending.observers).toHaveLength(1);
     page.ngOnDestroy();
-    expect(sonarrPending.observed).toBeFalse();
-    expect(radarrPending.observed).toBeFalse();
+    expect(sonarrPending.observed).toBe(false);
+    expect(radarrPending.observed).toBe(false);
   });
 
   it('debounces ranges into one request with the latest bounds', () => {
-    jasmine.clock().install();
+    vi.useFakeTimers();
     try {
       const range = page['filterOptions']().find((filter) => filter.id === 'score-range');
       if (range?.type !== FilterOptionType.NUMBER_RANGE) throw new Error('Missing score range');
       range.minValue = 10;
       range.onChanged({ minValue: range.minValue, maxValue: range.maxValue });
-      jasmine.clock().tick(100);
+      vi.advanceTimersByTime(100);
       range.minValue = 20;
       range.onChanged({ minValue: range.minValue, maxValue: range.maxValue });
-      jasmine.clock().tick(199);
+      vi.advanceTimersByTime(199);
       expect(radarr.fetchLibrary).not.toHaveBeenCalled();
-      jasmine.clock().tick(1);
-      expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(jasmine.objectContaining({ scoreMin: 20 }));
+      vi.advanceTimersByTime(1);
+      expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ scoreMin: 20 }));
       expect(sonarr.fetchLibrary).toHaveBeenCalledTimes(1);
     } finally {
-      jasmine.clock().uninstall();
+      vi.useRealTimers();
     }
   });
 
   it('cancels old option requests and never replaces current options with old results', async () => {
     const oldOptions = new Subject<LibraryFilterValues>();
-    sonarr.fetchFilterValues.and.returnValue(oldOptions);
+    sonarr.fetchFilterValues.mockReturnValue(oldOptions);
     const oldLoad = page['loadFilterValues']();
-    expect(oldOptions.observed).toBeTrue();
-    sonarr.fetchFilterValues.and.returnValue(
+    expect(oldOptions.observed).toBe(true);
+    sonarr.fetchFilterValues.mockReturnValue(
       of({ genres: ['Current'], tags: [], statuses: [], qualityProfiles: [], audioLanguages: [], subtitleLanguages: [] }),
     );
-    expect(await page['loadFilterValues']()).toBeTrue();
-    expect(await oldLoad).toBeFalse();
-    expect(oldOptions.observed).toBeFalse();
+    expect(await page['loadFilterValues']()).toBe(true);
+    expect(await oldLoad).toBe(false);
+    expect(oldOptions.observed).toBe(false);
     const genre = page['filterOptions']().find((filter) => filter.id === 'genre-filter');
     if (genre?.type !== FilterOptionType.MULTISELECT) throw new Error('Missing genre filter');
     expect(genre.options.map((option) => option.value)).toContain('Current');
@@ -299,15 +306,15 @@ describe('LibraryPage instance filters', () => {
     if (range?.type !== FilterOptionType.DATE_RANGE) throw new Error('Missing Added range');
     expect(range.startDate).toBeNull();
     expect(range.endDate).toBeNull();
-    expect(range.supportsExclusion).toBeTrue();
+    expect(range.supportsExclusion).toBe(true);
     range.startDate = '2026-01-10';
     range.endDate = '2026-01-31';
     range.exclude = true;
     await page['loadFilterValues']();
     page['loadData']();
-    const request = jasmine.objectContaining({ addedFrom: '2026-01-10', addedTo: '2026-01-31', excludedFilters: ['added-range'] });
-    expect(radarr.fetchLibrary).toHaveBeenCalledOnceWith(request);
-    expect(sonarr.fetchLibrary).toHaveBeenCalledOnceWith(request);
+    const request = expect.objectContaining({ addedFrom: '2026-01-10', addedTo: '2026-01-31', excludedFilters: ['added-range'] });
+    expect(radarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(request);
+    expect(sonarr.fetchLibrary).toHaveBeenCalledExactlyOnceWith(request);
   });
 
   it('keeps entity addition dates in movie details and series cards', () => {

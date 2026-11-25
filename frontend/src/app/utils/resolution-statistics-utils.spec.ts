@@ -50,9 +50,7 @@ describe('Resolution statistics groups', () => {
   for (const [group, resolutions] of Object.entries(examples)) {
     it(`assigns the supplied resolutions to ${group}`, () => {
       for (const resolution of resolutions) {
-        expect(groupResolutionStatistics([item(resolution)])[0].label)
-          .withContext(resolution)
-          .toBe(group);
+        expect(groupResolutionStatistics([item(resolution)])[0].label, resolution).toBe(group);
       }
     });
   }

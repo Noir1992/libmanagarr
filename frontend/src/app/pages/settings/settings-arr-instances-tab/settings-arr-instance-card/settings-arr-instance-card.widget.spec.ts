@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { Mock, MockInstance } from 'vitest';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { ARR_APPLICATION_KINDS, ArrApplicationKind } from '../../../../interfaces/general/arr-application-kind';
 import { ArrInstanceFormGroup } from '../../../../interfaces/settings/arr-instance-form-group';
@@ -11,7 +12,7 @@ import { SettingsArrInstanceCardWidget } from './settings-arr-instance-card.widg
 describe('ArrInstanceCardWidget', () => {
   let fixture: ComponentFixture<SettingsArrInstanceCardWidget>;
   let sonarrInstances: ArrInstanceSettings[];
-  let saveSonarrInstanceSpy: jasmine.Spy;
+  let saveSonarrInstanceSpy: Mock<AppSettingsService['saveSonarrInstance']>;
   let sonarrInstancesSignal: WritableSignal<ArrInstanceSettings[]>;
   let radarrInstancesSignal: WritableSignal<ArrInstanceSettings[]>;
   let syncingArrInstancesSignal: WritableSignal<ReadonlySet<string>>;
@@ -78,26 +79,28 @@ describe('ArrInstanceCardWidget', () => {
         apiKey: 'secret-2',
       },
     ];
-    saveSonarrInstanceSpy = jasmine.createSpy('saveSonarrInstance').and.callFake(async (index: number, instance: ArrInstanceSettings) => {
-      sonarrInstances[index] = {
-        ...instance,
-        id: 'sonarr-2',
-      };
-    });
+    saveSonarrInstanceSpy = vi
+      .fn<AppSettingsService['saveSonarrInstance']>()
+      .mockImplementation(async (index: number, instance: ArrInstanceSettings) => {
+        sonarrInstances[index] = {
+          ...instance,
+          id: 'sonarr-2',
+        };
+      });
     sonarrInstancesSignal = signal([...sonarrInstances]);
     radarrInstancesSignal = signal<ArrInstanceSettings[]>([]);
     syncingArrInstancesSignal = signal<ReadonlySet<string>>(new Set<string>());
     appSettingsServiceStub = {
       saveSonarrInstance: saveSonarrInstanceSpy,
-      saveRadarrInstance: jasmine.createSpy('saveRadarrInstance').and.resolveTo(),
-      deleteSonarrInstance: jasmine.createSpy('deleteSonarrInstance').and.resolveTo(),
-      deleteRadarrInstance: jasmine.createSpy('deleteRadarrInstance').and.resolveTo(),
-      testConnection: jasmine.createSpy('testConnection').and.resolveTo({
+      saveRadarrInstance: vi.fn().mockResolvedValue(undefined),
+      deleteSonarrInstance: vi.fn().mockResolvedValue(undefined),
+      deleteRadarrInstance: vi.fn().mockResolvedValue(undefined),
+      testConnection: vi.fn().mockResolvedValue({
         message: '',
         testedAt: null,
         isSuccess: true,
       }),
-      syncInstance: jasmine.createSpy('syncInstance').and.resolveTo({
+      syncInstance: vi.fn().mockResolvedValue({
         message: '',
         syncedAt: null,
         itemCount: 0,
@@ -143,7 +146,7 @@ describe('ArrInstanceCardWidget', () => {
     fixture.detectChanges();
 
     const inputs: NodeListOf<HTMLInputElement> = fixture.nativeElement.querySelectorAll('input');
-    expect(inputs).toHaveSize(3);
+    expect(inputs).toHaveLength(3);
     expect(inputs[0].value).toBe('Sonarr 1');
     expect(inputs[1].value).toBe('http://localhost:8989');
   });
@@ -165,9 +168,11 @@ describe('ArrInstanceCardWidget', () => {
     fixture.componentRef.setInput('isDeletingState', false);
     fixture.detectChanges();
 
-    spyOn(fixture.componentInstance.removeInstance, 'emit');
-    spyOn(fixture.componentInstance as unknown as Record<string, () => Promise<void>>, 'testConnectionAsync').and.resolveTo();
-    spyOn(fixture.componentInstance as unknown as Record<string, () => Promise<void>>, 'syncInstanceAsync').and.resolveTo();
+    vi.spyOn(fixture.componentInstance.removeInstance, 'emit');
+    vi.spyOn(fixture.componentInstance as unknown as Record<string, () => Promise<void>>, 'testConnectionAsync').mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(fixture.componentInstance as unknown as Record<string, () => Promise<void>>, 'syncInstanceAsync').mockResolvedValue(undefined);
 
     const visibilityButton: HTMLButtonElement = fixture.nativeElement.querySelector('.password-wrap button');
     const actionButtons: NodeListOf<HTMLButtonElement> = fixture.nativeElement.querySelectorAll('.instance-actions button');
@@ -178,8 +183,8 @@ describe('ArrInstanceCardWidget', () => {
     actionButtons[2].click();
 
     expect(fixture.componentInstance.removeInstance.emit).toHaveBeenCalled();
-    expect((fixture.componentInstance as unknown as Record<string, jasmine.Spy>)['testConnectionAsync']).toHaveBeenCalled();
-    expect((fixture.componentInstance as unknown as Record<string, jasmine.Spy>)['syncInstanceAsync']).toHaveBeenCalled();
+    expect((fixture.componentInstance as unknown as Record<string, MockInstance>)['testConnectionAsync']).toHaveBeenCalled();
+    expect((fixture.componentInstance as unknown as Record<string, MockInstance>)['syncInstanceAsync']).toHaveBeenCalled();
   });
 
   it('should toggle the api key visibility locally', () => {
@@ -223,9 +228,9 @@ describe('ArrInstanceCardWidget', () => {
     const instanceGroup: ArrInstanceFormGroup = fixture.componentInstance['instanceGroup']();
 
     expect(instanceGroup.controls.id.getRawValue()).toBe('sonarr-2');
-    expect(instanceGroup.dirty).toBeFalse();
-    expect(fixture.nativeElement.querySelectorAll('.instance-actions button')[1].disabled).toBeFalse();
-    expect(fixture.nativeElement.querySelector('.instance-card').classList.contains('has-success')).toBeTrue();
+    expect(instanceGroup.dirty).toBe(false);
+    expect(fixture.nativeElement.querySelectorAll('.instance-actions button')[1].disabled).toBe(false);
+    expect(fixture.nativeElement.querySelector('.instance-card').classList.contains('has-success')).toBe(true);
   });
 
   it('should auto-save the name on blur for a persisted instance', async () => {
@@ -246,7 +251,7 @@ describe('ArrInstanceCardWidget', () => {
     expect(saveSonarrInstanceSpy).toHaveBeenCalledTimes(1);
     expect(saveSonarrInstanceSpy).toHaveBeenCalledWith(
       0,
-      jasmine.objectContaining({
+      expect.objectContaining({
         id: 'arr-1',
         name: 'Sonarr 1 renamed',
         baseUrl: 'http://localhost:8989',
@@ -257,7 +262,7 @@ describe('ArrInstanceCardWidget', () => {
   });
 
   it('shows server validation errors on the affected input', async () => {
-    saveSonarrInstanceSpy.and.rejectWith(
+    saveSonarrInstanceSpy.mockRejectedValue(
       new ValidationProblemError('Validation failed', {
         'sonarrInstances[0].name': ['The name must be unique.'],
       }),
@@ -272,7 +277,7 @@ describe('ArrInstanceCardWidget', () => {
     fixture.detectChanges();
 
     const nameInput: HTMLInputElement = fixture.nativeElement.querySelector(`#${fixture.componentInstance.nameFieldId}`);
-    expect(nameInput.classList.contains('has-error')).toBeTrue();
+    expect(nameInput.classList.contains('has-error')).toBe(true);
     expect(fixture.componentInstance['instanceFieldErrorMessage']('name')).toBe('The name must be unique.');
     expect(fixture.nativeElement.textContent).toContain('The name must be unique.');
   });
@@ -283,14 +288,14 @@ describe('ArrInstanceCardWidget', () => {
     fixture.detectChanges();
 
     const actionButtonsBefore: NodeListOf<HTMLButtonElement> = fixture.nativeElement.querySelectorAll('.instance-actions button');
-    expect(actionButtonsBefore[2].disabled).toBeFalse();
+    expect(actionButtonsBefore[2].disabled).toBe(false);
 
     syncingArrInstancesSignal.set(new Set([`${ARR_APPLICATION_KINDS.SONARR}:arr-1`]));
     fixture.detectChanges();
 
     const actionButtons: NodeListOf<HTMLButtonElement> = fixture.nativeElement.querySelectorAll('.instance-actions button');
-    expect(actionButtons[1].disabled).toBeTrue();
-    expect(actionButtons[2].disabled).toBeTrue();
+    expect(actionButtons[1].disabled).toBe(true);
+    expect(actionButtons[2].disabled).toBe(true);
   });
 
   it('keeps the remove button usable while another instance is synchronizing', () => {
@@ -302,6 +307,6 @@ describe('ArrInstanceCardWidget', () => {
     fixture.detectChanges();
 
     const actionButtons: NodeListOf<HTMLButtonElement> = fixture.nativeElement.querySelectorAll('.instance-actions button');
-    expect(actionButtons[2].disabled).toBeFalse();
+    expect(actionButtons[2].disabled).toBe(false);
   });
 });

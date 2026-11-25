@@ -24,7 +24,7 @@ describe('PageFilterWidget', () => {
       label: 'Test Switch',
       type: FilterOptionType.SWITCH,
       value: false,
-      onChanged: jasmine.createSpy('switchChanged'),
+      onChanged: vi.fn(),
     };
     multiFilter = {
       id: 'test-multi',
@@ -35,7 +35,7 @@ describe('PageFilterWidget', () => {
         { value: '2', label: 'Two' },
       ],
       selectedValues: [],
-      onChanged: jasmine.createSpy('multiChanged'),
+      onChanged: vi.fn(),
     };
     await TestBed.configureTestingModule({ imports: [PageFilterWidget] }).compileComponents();
     fixture = TestBed.createComponent(PageFilterWidget);
@@ -59,7 +59,7 @@ describe('PageFilterWidget', () => {
       persist,
       startDate: new Date('2024-01-01T00:00:00Z'),
       endDate: new Date('2024-01-02T23:59:00Z'),
-      onChanged: jasmine.createSpy('dateChanged'),
+      onChanged: vi.fn(),
     };
   }
 
@@ -83,15 +83,15 @@ describe('PageFilterWidget', () => {
 
   it('updates the switch, calls its callback, and persists the change', () => {
     component['onToggleChanged'](switchFilter, { checked: true } as MatSlideToggleChange);
-    expect(switchFilter.value).toBeTrue();
-    expect(switchFilter.onChanged).toHaveBeenCalledOnceWith(true);
+    expect(switchFilter.value).toBe(true);
+    expect(switchFilter.onChanged).toHaveBeenCalledExactlyOnceWith(true);
     expect(savedFilters()['test-switch']).toBe(true);
   });
 
   it('updates the multiselect, calls its callback, and persists the selected values', () => {
     component['onMultiSelectChanged'](multiFilter, ['1']);
     expect(multiFilter.selectedValues).toEqual(['1']);
-    expect(multiFilter.onChanged).toHaveBeenCalledOnceWith(['1']);
+    expect(multiFilter.onChanged).toHaveBeenCalledExactlyOnceWith(['1']);
     expect(savedFilters()['test-multi']).toEqual(['1']);
   });
 
@@ -102,7 +102,7 @@ describe('PageFilterWidget', () => {
     restoredFixture.componentRef.setInput('storagePrefix', 'page-filter-unit-test');
     restoredFixture.detectChanges();
     await restoredFixture.whenStable();
-    expect(switchFilter.value).toBeTrue();
+    expect(switchFilter.value).toBe(true);
     expect(multiFilter.selectedValues).toEqual(['2']);
     expect(switchFilter.onChanged).not.toHaveBeenCalled();
     expect(multiFilter.onChanged).not.toHaveBeenCalled();
@@ -119,7 +119,7 @@ describe('PageFilterWidget', () => {
         { value: 'kept', label: 'Kept' },
       ],
       selectedValue: null,
-      onChanged: jasmine.createSpy('selectChanged'),
+      onChanged: vi.fn(),
     };
   }
 
@@ -168,7 +168,7 @@ describe('PageFilterWidget', () => {
     component['onDateTimeRangeChanged'](filter, value);
     expect(filter.startDate).toEqual(value.startDate);
     expect(filter.endDate).toEqual(value.endDate);
-    expect(filter.onChanged).toHaveBeenCalledOnceWith(value);
+    expect(filter.onChanged).toHaveBeenCalledExactlyOnceWith(value);
     expect(savedFilters()['test-date']).toEqual({ startDate: value.startDate.toISOString(), endDate: value.endDate.toISOString() });
   });
 
@@ -186,12 +186,12 @@ describe('PageFilterWidget', () => {
     restoredFixture.componentRef.setInput('storagePrefix', 'page-filter-unit-test');
     restoredFixture.detectChanges();
     await restoredFixture.whenStable();
-    expect(switchFilter.value).toBeTrue();
+    expect(switchFilter.value).toBe(true);
     expect(filter.startDate).toEqual(new Date('2024-01-01T00:00:00Z'));
     expect(filter.endDate).toEqual(new Date('2024-01-02T23:59:00Z'));
     const value = { startDate: new Date('2024-02-01T14:00:00Z'), endDate: new Date('2024-02-02T15:00:00Z') };
     restoredFixture.componentInstance['onDateTimeRangeChanged'](filter, value);
-    expect(filter.onChanged).toHaveBeenCalledOnceWith(value);
+    expect(filter.onChanged).toHaveBeenCalledExactlyOnceWith(value);
     expect(savedFilters()['test-switch']).toBe(true);
     expect(savedFilters()['test-date']).toBeUndefined();
   });
@@ -209,9 +209,9 @@ describe('PageFilterWidget', () => {
     fixture.componentRef.setInput('bubblesBelow', true);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.classList.contains('page-filter--bubbles-below')).toBeTrue();
+    expect(fixture.nativeElement.classList.contains('page-filter--bubbles-below')).toBe(true);
     expect(fixture.nativeElement.querySelector('.filter-bar .filter-summary')).toBeNull();
-    expect(fixture.nativeElement.querySelectorAll('.filter-bar ~ .filter-summary .filter-bubble')).toHaveSize(1);
+    expect(fixture.nativeElement.querySelectorAll('.filter-bar ~ .filter-summary .filter-bubble')).toHaveLength(1);
   });
 
   it('omits the separate bubble row in bubblesBelow mode while no filter is active', () => {

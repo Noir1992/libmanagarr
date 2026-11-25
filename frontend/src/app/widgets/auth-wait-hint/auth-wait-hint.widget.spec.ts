@@ -45,8 +45,8 @@ describe('AuthWaitHintWidget', () => {
    * whatever milliseconds pass between those two reads.
    */
   function withFrozenClock(body: () => void): void {
-    jasmine.clock().install();
-    jasmine.clock().mockDate(clockBase);
+    vi.useFakeTimers();
+    vi.setSystemTime(clockBase);
 
     try {
       body();
@@ -54,7 +54,7 @@ describe('AuthWaitHintWidget', () => {
       // Stops the ticking interval through the faked clearInterval, so the real one is never handed
       // an id of the mock clock after the uninstall below.
       waitService.clear();
-      jasmine.clock().uninstall();
+      vi.useRealTimers();
     }
   }
 
@@ -84,7 +84,7 @@ describe('AuthWaitHintWidget', () => {
     render();
 
     expect(fixture.nativeElement.querySelector('.auth-wait-countdown')?.getAttribute('aria-hidden')).toBe('true');
-    expect(fixture.nativeElement.querySelector('.auth-wait-detail')?.hasAttribute('aria-hidden')).toBeFalse();
+    expect(fixture.nativeElement.querySelector('.auth-wait-detail')?.hasAttribute('aria-hidden')).toBe(false);
   });
 
   it('should explain that the ip limit does not care about the proof', () => {
