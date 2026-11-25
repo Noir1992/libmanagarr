@@ -1,3 +1,4 @@
+using LibManagarr.Api.Models;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -52,6 +53,7 @@ public static class BackupEndpoints
         ClaimsPrincipal user,
         AccountService accountService,
         BackupExportService exportService,
+        ISettingsService settingsService,
         CancellationToken cancellationToken)
     {
         if (!TryGetSession(user, out int accountId)) return AuthProblems.NoAccount();
@@ -66,7 +68,7 @@ public static class BackupEndpoints
         }
         catch (BackupException exception)
         {
-            return BackupProblem(exception);
+            return await BackupProblemAsync(exception, settingsService, cancellationToken);
         }
     }
 
@@ -81,6 +83,7 @@ public static class BackupEndpoints
         ClaimsPrincipal user,
         StoragePaths paths,
         BackupImportService importService,
+        ISettingsService settingsService,
         CancellationToken cancellationToken)
     {
         if (!TryGetSession(user, out int accountId)) return AuthProblems.NoAccount();
@@ -101,7 +104,7 @@ public static class BackupEndpoints
         }
         catch (BackupException exception)
         {
-            return BackupProblem(exception);
+            return await BackupProblemAsync(exception, settingsService, cancellationToken);
         }
         finally
         {
@@ -118,6 +121,7 @@ public static class BackupEndpoints
         BackupImportService importService,
         IHostApplicationLifetime lifetime,
         ApplicationRestart restart,
+        ISettingsService settingsService,
         CancellationToken cancellationToken)
     {
         if (!TryGetSession(user, out int accountId)) return AuthProblems.NoAccount();
@@ -137,15 +141,17 @@ public static class BackupEndpoints
         }
         catch (BackupException exception)
         {
-            return BackupProblem(exception);
+            return await BackupProblemAsync(exception, settingsService, cancellationToken);
         }
     }
 
-    private static IResult DiscardImportAsync(
+    private static async Task<IResult> DiscardImportAsync(
         string importId,
         HttpContext httpContext,
         ClaimsPrincipal user,
-        BackupImportService importService)
+        BackupImportService importService,
+        ISettingsService settingsService,
+        CancellationToken cancellationToken)
     {
         if (!TryGetSession(user, out int accountId)) return AuthProblems.NoAccount();
         try
@@ -155,7 +161,7 @@ public static class BackupEndpoints
         }
         catch (BackupException exception)
         {
-            return BackupProblem(exception);
+            return await BackupProblemAsync(exception, settingsService, cancellationToken);
         }
     }
 
@@ -190,8 +196,25 @@ public static class BackupEndpoints
     private static ProblemHttpResult IdentityProblem(string title, string failureKind, int? remainingAttempts) =>
         AuthProblems.ProofFailure(StatusCodes.Status400BadRequest, title, BackupErrorCodes.IdentityVerificationFailed, failureKind, remainingAttempts);
 
-    private static ProblemHttpResult BackupProblem(BackupException exception) =>
-        AuthProblems.Problem(exception.StatusCode, exception.Message, exception.Code);
+    private static async Task<ProblemHttpResult> BackupProblemAsync(
+        BackupException exception, ISettingsService settingsService, CancellationToken cancellationToken)
+    {
+        string title = exception.Message;
+        if (exception.LimitBytes.HasValue || exception.RequiredBytes.HasValue)
+        {
+            // Use the running installation's preference, never the settings inside the rejected archive.
+            AppSettings settings = await settingsService.GetSnapshotAsync(cancellationToken);
+            if (exception.LimitBytes is { } limit)
+                title += $" Limit: {FileSizeFormatter.Format(limit, settings.SizeUnitSystem, settings.Language)}.";
+            if (exception.RequiredBytes is { } required)
+                title += $" Required: {FileSizeFormatter.Format(required, settings.SizeUnitSystem, settings.Language)}.";
+        }
+
+        ProblemHttpResult problem = AuthProblems.Problem(exception.StatusCode, title, exception.Code);
+        if (exception.LimitBytes is { } limitBytes) problem.ProblemDetails.Extensions["limitBytes"] = limitBytes;
+        if (exception.RequiredBytes is { } requiredBytes) problem.ProblemDetails.Extensions["requiredBytes"] = requiredBytes;
+        return problem;
+    }
 
     private static bool TryGetSession(ClaimsPrincipal user, out int accountId) =>
         int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out accountId);

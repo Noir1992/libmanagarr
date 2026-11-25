@@ -1,4 +1,6 @@
 export type TranslationKey =
+  | 'settings.backup.errorSizeLimit'
+  | 'settings.backup.errorRequiredSpace'
   | 'settings.sizeUnits'
   | 'settings.sizeUnits.info'
   | 'settings.sizeUnits.decimal'

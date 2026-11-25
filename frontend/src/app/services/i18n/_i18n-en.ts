@@ -1,6 +1,8 @@
 import { TranslationKey } from './_i18n-key';
 
 export const i18nEn: Record<TranslationKey, string> = {
+  'settings.backup.errorSizeLimit': 'The backup exceeds the allowed size. Limit: {size}.',
+  'settings.backup.errorRequiredSpace': 'There is not enough free disk space. Required: {size}.',
   'settings.sizeUnits': 'File size units',
   'settings.sizeUnits.info': 'Applies to file sizes throughout the app. Decimal uses a factor of 1000; binary uses 1024.',
   'settings.sizeUnits.decimal': 'Decimal (KB, MB, GB, TB)',

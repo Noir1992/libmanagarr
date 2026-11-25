@@ -1,6 +1,8 @@
 import { TranslationKey } from './_i18n-key';
 
 export const i18nDe: Record<TranslationKey, string> = {
+  'settings.backup.errorSizeLimit': 'Das Backup überschreitet die zulässige Größe. Grenze: {size}.',
+  'settings.backup.errorRequiredSpace': 'Es ist zu wenig Speicherplatz vorhanden. Benötigt: {size}.',
   'settings.sizeUnits': 'Einheiten für Dateigrößen',
   'settings.sizeUnits.info': 'Gilt für Dateigrößen in der gesamten Anwendung. Dezimal verwendet Faktor 1000, binär Faktor 1024.',
   'settings.sizeUnits.decimal': 'Dezimal (KB, MB, GB, TB)',

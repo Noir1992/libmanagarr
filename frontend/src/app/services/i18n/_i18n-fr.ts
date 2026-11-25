@@ -1,6 +1,8 @@
 import { TranslationKey } from './_i18n-key';
 
 export const i18nFr: Record<TranslationKey, string> = {
+  'settings.backup.errorSizeLimit': 'La sauvegarde dépasse la taille autorisée. Limite : {size}.',
+  'settings.backup.errorRequiredSpace': 'Espace disque insuffisant. Espace requis : {size}.',
   'settings.sizeUnits': 'Unités de taille des fichiers',
   'settings.sizeUnits.info':
     'S’applique aux tailles des fichiers dans toute l’application. Le système décimal utilise un facteur de 1000 ; le système binaire utilise 1024.',

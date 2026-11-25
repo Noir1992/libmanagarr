@@ -6,6 +6,7 @@ import { BackupExportRequest } from '../interfaces/backup/backup-export-request'
 import { BackupImportPreview } from '../interfaces/backup/backup-import-preview';
 import { BackupProofRequest } from '../interfaces/backup/backup-proof-request';
 import { BackupStatus } from '../interfaces/backup/backup-status';
+import { FileSizeService } from './file-size.service';
 import { AppI18nService } from './app-i18n.service';
 import { AuthRequestError, toAuthRequestError, translateAuthError } from './auth-error.util';
 import { AuthWaitService } from './auth-wait.service';
@@ -22,6 +23,7 @@ import { AuthService } from './auth.service';
 @Injectable({ providedIn: 'root' })
 export class BackupService {
   /* Injections */
+  private readonly fileSize = inject(FileSizeService);
   private readonly http: HttpClient = inject(HttpClient);
   private readonly authService: AuthService = inject(AuthService);
   private readonly authWaitService: AuthWaitService = inject(AuthWaitService);
@@ -86,6 +88,13 @@ export class BackupService {
   translateError(error: unknown): string {
     if (!(error instanceof AuthRequestError)) {
       return error instanceof Error && error.message.trim().length > 0 ? error.message : this.i18n.t('settings.backup.error');
+    }
+
+    if (error.code === 'backup_size_limit_exceeded' && error.limitBytes !== null) {
+      return this.i18n.t('settings.backup.errorSizeLimit', { size: this.fileSize.localized(error.limitBytes) });
+    }
+    if (error.code === 'backup_insufficient_disk_space' && error.requiredBytes !== null) {
+      return this.i18n.t('settings.backup.errorRequiredSpace', { size: this.fileSize.localized(error.requiredBytes) });
     }
 
     const key: TranslationKey | undefined = error.code === null ? undefined : BACKUP_ERROR_KEYS[error.code];

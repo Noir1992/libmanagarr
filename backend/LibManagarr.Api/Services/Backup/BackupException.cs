@@ -60,5 +60,14 @@ public sealed class BackupException : Exception
 
     public int StatusCode { get; init; } = StatusCodes.Status400BadRequest;
 
-    public BackupException WithStatus(int statusCode) => new(Code, Message, InnerException) { StatusCode = statusCode };
+    public long? LimitBytes { get; init; }
+
+    public long? RequiredBytes { get; init; }
+
+    public BackupException WithStatus(int statusCode) => new(Code, Message, InnerException)
+    {
+        StatusCode = statusCode,
+        LimitBytes = LimitBytes,
+        RequiredBytes = RequiredBytes
+    };
 }

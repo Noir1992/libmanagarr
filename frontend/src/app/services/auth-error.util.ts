@@ -16,6 +16,8 @@ interface ProblemPayload {
   retryAfterSeconds?: number;
   retryAt?: string;
   serverTime?: string;
+  limitBytes?: number;
+  requiredBytes?: number;
 }
 
 /**
@@ -37,6 +39,8 @@ export class AuthRequestError extends Error {
     readonly failureKind: AuthFailureKind | null = null,
     readonly remainingAttempts: number | null = null,
     readonly retryEndsAt: number | null = null,
+    readonly limitBytes: number | null = null,
+    readonly requiredBytes: number | null = null,
   ) {
     super(message);
     this.name = 'AuthRequestError';
@@ -140,6 +144,8 @@ function toProblemError(problem: ProblemPayload, message: string, status: number
     readFailureKind(problem.failureKind),
     readRemainingAttempts(problem.remainingAttempts),
     readRetryEndsAt(problem, retryAfterHeader),
+    readByteCount(problem.limitBytes),
+    readByteCount(problem.requiredBytes),
   );
 }
 
@@ -209,8 +215,14 @@ function readProblemPayload(payload: unknown): ProblemPayload | null {
     remainingAttempts: typeof record.remainingAttempts === 'number' ? record.remainingAttempts : undefined,
     retryAfterSeconds: typeof record.retryAfterSeconds === 'number' ? record.retryAfterSeconds : undefined,
     retryAt: typeof record.retryAt === 'string' ? record.retryAt : undefined,
+    limitBytes: typeof record.limitBytes === 'number' ? record.limitBytes : undefined,
+    requiredBytes: typeof record.requiredBytes === 'number' ? record.requiredBytes : undefined,
     serverTime: typeof record.serverTime === 'string' ? record.serverTime : undefined,
   };
+}
+
+function readByteCount(value: number | undefined): number | null {
+  return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function readFailureKind(value: string | undefined): AuthFailureKind | null {

@@ -44,7 +44,10 @@ internal static class BackupArchiveCodec
         if (archive.Length > BackupArchiveFormat.MaxArchiveBytes)
         {
             throw new BackupException(BackupErrorCodes.SizeLimitExceeded,
-                $"The backup file exceeds the limit of {BackupArchiveFormat.MaxArchiveBytes / 1_000_000d:0.##} MB.");
+                "The backup file exceeds the allowed size.")
+            {
+                LimitBytes = BackupArchiveFormat.MaxArchiveBytes
+            };
         }
 
         BackupArchiveHeader header = ReadHeader(archive);
@@ -290,7 +293,10 @@ internal static class BackupChunkReader
             total += plaintext.Length;
             if (total > BackupArchiveFormat.MaxUncompressedBytes)
             {
-                throw new BackupException(BackupErrorCodes.SizeLimitExceeded, "The backup expands beyond the allowed size.");
+                throw new BackupException(BackupErrorCodes.SizeLimitExceeded, "The backup expands beyond the allowed size.")
+                {
+                    LimitBytes = BackupArchiveFormat.MaxUncompressedBytes
+                };
             }
 
             await destination.WriteAsync(plaintext, cancellationToken);
