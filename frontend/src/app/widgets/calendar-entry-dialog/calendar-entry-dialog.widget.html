@@ -29,7 +29,12 @@
     @if (releaseTypeLabel(); as label) {
       <div class="calendar-entry-dialog-row">
         <span class="calendar-entry-dialog-label">{{ releaseTypeRowLabel() }}</span>
-        <span class="calendar-entry-dialog-value">{{ label }}</span>
+        <span class="calendar-entry-dialog-value calendar-entry-dialog-release-value">
+          @if (releaseTypeIcon(); as icon) {
+            <mat-icon class="material-symbols-outlined calendar-entry-dialog-release-icon" aria-hidden="true">{{ icon }}</mat-icon>
+          }
+          {{ label }}
+        </span>
       </div>
     }
     <div class="calendar-entry-dialog-row">
@@ -42,7 +47,23 @@
     </div>
     <div class="calendar-entry-dialog-row">
       <span class="calendar-entry-dialog-label">{{ instanceRowLabel() }}</span>
-      <span class="calendar-entry-dialog-value">{{ data.entry.instanceName }}</span>
+      @if (instanceUrl(); as url) {
+        <span class="calendar-entry-dialog-value">
+          {{ data.entry.instanceName }}
+          <a
+            class="instance-link"
+            [href]="url"
+            target="_blank"
+            rel="noopener"
+            [title]="instanceLinkLabel()"
+            [attr.aria-label]="instanceLinkLabel()"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">link</span>
+          </a>
+        </span>
+      } @else {
+        <span class="calendar-entry-dialog-value">{{ data.entry.instanceName }}</span>
+      }
     </div>
   </div>
 </mat-dialog-content>

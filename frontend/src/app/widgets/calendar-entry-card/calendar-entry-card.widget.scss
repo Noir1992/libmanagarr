@@ -103,8 +103,17 @@
 }
 
 .calendar-entry-card-release {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
   color: var(--theme-muted);
   font-size: 0.8rem;
+}
+
+.calendar-entry-card-release-icon {
+  font-size: 0.95rem;
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .calendar-entry-card-separator {

@@ -16,6 +16,9 @@ public sealed class CalendarEntry
 
     public required string Title { get; init; }
 
+    // Slug of the series or movie inside its Arr instance; the frontend builds the deep link from it.
+    public string? TitleSlug { get; init; }
+
     public string? EpisodeTitle { get; init; }
 
     public int? SeasonNumber { get; init; }

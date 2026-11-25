@@ -175,6 +175,11 @@
                           [attr.aria-label]="row.statusLabel"
                           >{{ row.statusIcon }}</mat-icon
                         >
+                        @if (row.releaseTypeIcon; as icon) {
+                          <mat-icon class="material-symbols-outlined calendar-month-release" [attr.aria-label]="row.releaseTypeLabel">{{
+                            icon
+                          }}</mat-icon>
+                        }
                         <span class="calendar-month-time">{{ row.timeText }}</span>
                         <span class="calendar-month-title" [title]="row.entry.title">{{ row.entry.title }}</span>
                       </div>
@@ -219,7 +224,14 @@
                           >{{ row.typeAttr === 'movie' ? 'movie' : 'live_tv' }}</mat-icon
                         >
                         <span class="calendar-agenda-title" [title]="row.title">{{ row.title }}</span>
-                        <span class="calendar-agenda-release">{{ row.releaseTypeText }}</span>
+                        <span class="calendar-agenda-release">
+                          @if (row.releaseTypeIcon; as icon) {
+                            <mat-icon class="material-symbols-outlined calendar-agenda-release-icon" aria-hidden="true">{{
+                              icon
+                            }}</mat-icon>
+                          }
+                          {{ row.releaseTypeText }}</span
+                        >
                       </div>
                       <span class="calendar-agenda-status" [attr.data-status]="row.status">
                         <mat-icon class="material-symbols-outlined" aria-hidden="true">{{ row.statusIcon }}</mat-icon>
