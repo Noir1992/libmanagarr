@@ -57,6 +57,18 @@ public sealed class JsonSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SizeUnitSystem_DefaultsToDecimalAndPersistsBinaryAcrossServiceInstances()
+    {
+        JsonSettingsService service = CreateService();
+        AppSettings settings = await service.GetAsync(CancellationToken.None);
+        Assert.Equal(SizeUnitSystem.Decimal, settings.SizeUnitSystem);
+        settings.SizeUnitSystem = SizeUnitSystem.Binary;
+        await service.SaveAsync(settings, CancellationToken.None);
+        AppSettings reloaded = await CreateService().GetAsync(CancellationToken.None);
+        Assert.Equal(SizeUnitSystem.Binary, reloaded.SizeUnitSystem);
+    }
+
+    [Fact]
     public async Task SaveAsync_ShouldAllowSavingAfterACancelledWrite()
     {
         JsonSettingsService service = CreateService();

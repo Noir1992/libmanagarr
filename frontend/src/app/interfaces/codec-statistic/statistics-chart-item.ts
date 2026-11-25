@@ -9,6 +9,7 @@ export interface StatisticsChartItem {
   dashOffset: string;
   tooltip: string;
   metaText: string;
+  metaTooltip?: string | null;
 }
 
 export interface StatisticsChartExpandedItem extends StatisticsChartItem {

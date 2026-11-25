@@ -44,7 +44,7 @@ internal static class BackupArchiveCodec
         if (archive.Length > BackupArchiveFormat.MaxArchiveBytes)
         {
             throw new BackupException(BackupErrorCodes.SizeLimitExceeded,
-                $"The backup file exceeds the limit of {BackupArchiveFormat.MaxArchiveBytes / (1024 * 1024)} MB.");
+                $"The backup file exceeds the limit of {BackupArchiveFormat.MaxArchiveBytes / 1_000_000d:0.##} MB.");
         }
 
         BackupArchiveHeader header = ReadHeader(archive);

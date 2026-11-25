@@ -6,6 +6,7 @@ import { MediaDetailData } from '../../interfaces/general/media-detail-data';
 import { MediaDetailsDialogWidget } from '../media-details-dialog/media-details-dialog.widget';
 import { MediaGridDetailTone, MediaGridItem } from '../../interfaces/general/media-grid-item';
 import { LibraryStatus } from '../../interfaces/library/library-status';
+import { FileSizeService } from '../../services/file-size.service';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { TranslationKey } from '../../services/i18n/_i18n-key';
 import { airStatusLabel } from '../../utils/air-status-label.util';
@@ -20,6 +21,7 @@ import { specialsLast } from '../../utils/media-detail-utils';
   styleUrl: './sonarr-series-dialog.widget.scss',
 })
 export class SonarrSeriesDialogWidget {
+  protected readonly fileSize = inject(FileSizeService);
   protected readonly i18n: AppI18nService = inject(AppI18nService);
   private readonly dialogRef: MatDialogRef<SonarrSeriesDialogWidget> = inject(MatDialogRef<SonarrSeriesDialogWidget>);
   private readonly dialog = inject(MatDialog);
@@ -61,10 +63,7 @@ export class SonarrSeriesDialogWidget {
       row('common.column.instance', series?.instanceName),
       row('filter.seriesMonitored', flag(series?.monitored, 'library.details.yes', 'library.details.no')),
       row('filter.addedRange', series?.addedAt ? formatDate(series.addedAt, 'medium', this.locale) : na),
-      row(
-        'library.details.totalSize',
-        this.data.size == null ? na : `${(this.data.size / 1024 ** 3).toLocaleString(this.locale, { maximumFractionDigits: 2 })} GiB`,
-      ),
+      row('library.details.totalSize', this.data.size == null ? na : this.fileSize.format(this.data.size, this.locale)),
       row('common.column.profile', series?.qualityProfileName),
       row('filter.tags', series?.tags?.join(', ')),
     ];

@@ -15,6 +15,7 @@
       <div class="detail-row">
         <dt>{{ row.label }}</dt>
         <dd
+          [title]="row.key === 'library.details.size' ? fileSize.exact(sizeBytes()) : null"
           [class.score-reached]="row.key === 'common.column.score' && scoreTone() === 'reached'"
           [class.score-below]="row.key === 'common.column.score' && scoreTone() === 'below'"
           [class.tone-success]="row.tone === 'success'"

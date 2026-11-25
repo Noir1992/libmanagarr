@@ -4,6 +4,8 @@ public sealed class AppSettings
 {
     public AppLanguage Language { get; set; } = AppLanguage.En;
 
+    public SizeUnitSystem SizeUnitSystem { get; set; } = SizeUnitSystem.Decimal;
+
     public ThemeMode Theme { get; set; } = ThemeMode.System;
 
     public List<ArrInstanceSettings> SonarrInstances { get; set; } = [];

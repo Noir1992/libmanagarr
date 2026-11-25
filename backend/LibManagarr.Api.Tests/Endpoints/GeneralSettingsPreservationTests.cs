@@ -94,6 +94,32 @@ public sealed class GeneralSettingsPreservationTests
         Assert.Null(service.Saved);
     }
 
+    [Theory]
+    [InlineData(SizeUnitSystem.Decimal)]
+    [InlineData(SizeUnitSystem.Binary)]
+    public async Task SaveGeneralSettings_SavesSizeUnitsAndPreservesThemWhenOmitted(SizeUnitSystem units)
+    {
+        StubSettingsService service = new(new AppSettings());
+        Assert.IsType<NoContent>((await SaveGeneral(new() { SizeUnitSystem = units }, service)).Result);
+        Assert.Equal(units, service.Saved!.SizeUnitSystem);
+        Assert.IsType<NoContent>((await SaveGeneral(new() { Theme = ThemeMode.Dark }, service)).Result);
+        Assert.Equal(units, service.Saved!.SizeUnitSystem);
+        var response = await Invoke<Ok<GeneralSettingsDto>>("GetGeneralSettingsAsync", service, CancellationToken.None);
+        Assert.Equal(units, response.Value!.SizeUnitSystem);
+        Assert.IsType<NoContent>((await SaveFull("""{"language":"en","theme":"dark"}""", service)).Result);
+        Assert.Equal(units, service.Saved!.SizeUnitSystem);
+    }
+
+    [Fact]
+    public async Task SaveGeneralSettings_RejectsUnknownSizeUnits()
+    {
+        StubSettingsService service = new(new AppSettings());
+        var result = await SaveGeneral(new() { SizeUnitSystem = (SizeUnitSystem)99 }, service);
+        var problem = Assert.IsType<ValidationProblem>(result.Result);
+        Assert.Contains("sizeUnitSystem", problem.ProblemDetails.Errors.Keys);
+        Assert.Null(service.Saved);
+    }
+
     private static Task<Results<NoContent, ValidationProblem>> SaveGeneral(
         GeneralSettingsUpdateRequest request,
         ISettingsService service) =>

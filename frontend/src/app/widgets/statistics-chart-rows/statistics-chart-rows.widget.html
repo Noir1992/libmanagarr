@@ -7,7 +7,7 @@
             <span class="swatch" [style.background]="item.color"></span>
             <span>
               {{ item.label }}
-              <small class="chart-meta">{{ item.metaText }}</small>
+              <small class="chart-meta" [title]="item.metaTooltip ?? null">{{ item.metaText }}</small>
             </span>
           </span>
           <span class="chart-row-right">

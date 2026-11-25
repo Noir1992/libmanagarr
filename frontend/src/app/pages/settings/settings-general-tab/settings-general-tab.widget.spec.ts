@@ -1,3 +1,4 @@
+import { SizeUnitSystem } from '../../../interfaces/general/size-unit-system';
 import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
@@ -59,6 +60,7 @@ describe('SettingsGeneralTabWidget', () => {
   } as Pick<AppI18nService, 't' | 'tForLanguage'>;
 
   beforeEach(async () => {
+    const sizeUnitSystem = signal<SizeUnitSystem>('Decimal');
     const languageSignal: WritableSignal<AppLanguage> = signal<AppLanguage>('en');
     const themeSignal: WritableSignal<AppTheme> = signal<AppTheme>('system');
     const loggingSignal: WritableSignal<LoggingSettings> = signal<LoggingSettings>({
@@ -80,12 +82,15 @@ describe('SettingsGeneralTabWidget', () => {
       | 'authProtection'
       | 'language'
       | 'theme'
+      | 'sizeUnitSystem'
       | 'titleSorting'
     > = {
+      sizeUnitSystem,
       loadLoggingSettings: vi.fn().mockResolvedValue(undefined),
-      saveGeneral: vi.fn().mockImplementation(async (value: { language: AppLanguage; theme: AppTheme }) => {
+      saveGeneral: vi.fn().mockImplementation(async (value: { language: AppLanguage; theme: AppTheme; sizeUnitSystem: SizeUnitSystem }) => {
         languageSignal.set(value.language);
         themeSignal.set(value.theme);
+        sizeUnitSystem.set(value.sizeUnitSystem);
       }),
       saveLoggingSettings: vi.fn().mockResolvedValue(undefined),
       saveAuthProtection: vi.fn().mockImplementation(async (value: AuthProtectionSettings) => {
@@ -133,6 +138,22 @@ describe('SettingsGeneralTabWidget', () => {
 
     expect(settingsService.saveGeneral).toHaveBeenCalledTimes(1);
     expect(fixture.componentInstance['generalFieldFeedbackState']().language).toBe('success');
+  });
+
+  it('autosaves the unit selection and restores it when changes are discarded', async () => {
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const settings = vi.mocked(TestBed.inject(AppSettingsService));
+    expect(fixture.nativeElement.querySelector('#size-unit-select').textContent).toContain('settings.sizeUnits.decimal');
+    fixture.componentInstance['settingsForm'].controls.sizeUnitSystem.setValue('Binary');
+    await vi.waitFor(() =>
+      expect(settings.saveGeneral).toHaveBeenCalledWith({ language: 'en', theme: 'system', sizeUnitSystem: 'Binary' }),
+    );
+    expect(settings.sizeUnitSystem()).toBe('Binary');
+    fixture.componentInstance['settingsForm'].controls.sizeUnitSystem.setValue('Decimal');
+    fixture.componentInstance['settingsForm'].controls.sizeUnitSystem.markAsDirty();
+    fixture.componentInstance['discardUnsavedChanges']();
+    expect(fixture.componentInstance['settingsForm'].controls.sizeUnitSystem.value).toBe('Binary');
   });
 
   it('shows a server validation error below the language select', async () => {

@@ -1,3 +1,4 @@
+import { FileSizeService } from '../../../services/file-size.service';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -460,10 +461,12 @@ export class SettingsBackupTabWidget extends SettingsUnsavedChangesBase implemen
     return preview.hasSeerrInstance ? `${counts}${this.i18n.t('settings.backup.preview.instanceSeerr')}` : counts;
   }
 
+  protected readonly fileSize = inject(FileSizeService);
+
   protected sizeLabelOf(preview: BackupImportPreview): string {
     return this.i18n.t('settings.backup.preview.sizeValue', {
-      archive: this.megabytesOf(preview.archiveBytes),
-      expanded: this.megabytesOf(preview.uncompressedBytes),
+      archive: this.fileSize.format(preview.archiveBytes),
+      expanded: this.fileSize.format(preview.uncompressedBytes),
     });
   }
 
@@ -594,10 +597,6 @@ export class SettingsBackupTabWidget extends SettingsUnsavedChangesBase implemen
     if (input !== undefined) {
       input.value = '';
     }
-  }
-
-  private megabytesOf(bytes: number): string {
-    return (Math.round((bytes / (1024 * 1024)) * 10) / 10).toString();
   }
 
   /**

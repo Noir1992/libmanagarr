@@ -19,7 +19,7 @@ import { LibraryChangeHistoryEntry } from '../../interfaces/library-trend/librar
 import { LibraryTrendPoint } from '../../interfaces/library-trend/library-trend-point';
 import { LibraryTrendStatisticsResponse } from '../../interfaces/library-trend/library-trend-statistics-response';
 import { ArrInstanceSettings } from '../../interfaces/settings/arr-instance-settings';
-import { FormatBytesPipe } from '../../pipes/format-bytes.pipe';
+import { FileSizeService } from '../../services/file-size.service';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { AppSettingsService } from '../../services/app-settings.service';
 import { LibraryTrendStatisticsApiService } from '../../services/library-trend-statistics-api.service';
@@ -67,13 +67,13 @@ export class LibraryTrendPage implements OnInit {
   private readonly i18n: AppI18nService = inject(AppI18nService);
 
   /* Constants */
-  protected readonly formatBytesPipe: FormatBytesPipe = new FormatBytesPipe();
+  protected readonly fileSize = inject(FileSizeService);
   protected readonly historyColumns: readonly string[] = ['occurredAt', 'instanceName', 'changeType', 'entityTitle', 'deltaSizeBytes'];
   protected readonly chartAccentColor: string = 'var(--theme-accent)';
   protected readonly chartPositiveColor: string = 'var(--theme-success-color)';
   protected readonly chartNegativeColor: string = 'var(--theme-danger-color)';
   protected readonly defaultHistoryDateRange: ReturnType<typeof buildDefaultHistoryDateRange> = buildDefaultHistoryDateRange();
-  protected readonly formatBytes: (value: number) => string = (value: number): string => this.formatBytesPipe.transform(value);
+  protected readonly formatBytes: (value: number) => string = (value: number): string => this.fileSize.format(value);
   protected readonly absolute: (x: number) => number = Math.abs;
 
   /* I18n signals */
@@ -412,11 +412,7 @@ export class LibraryTrendPage implements OnInit {
 
     return chartId === 'media'
       ? [this.formatTimestamp(point.occurredAt), `${this.mediaFilesLabel()}: ${this.formatNumber(point.mediaFileCount)}`, deltaLabel]
-      : [
-          this.formatTimestamp(point.occurredAt),
-          `${this.storageLabel()}: ${this.formatBytesPipe.transform(point.totalSizeBytes)}`,
-          deltaLabel,
-        ];
+      : [this.formatTimestamp(point.occurredAt), `${this.storageLabel()}: ${this.fileSize.format(point.totalSizeBytes)}`, deltaLabel];
   }
 
   private buildLinePath(points: readonly TrendChartPoint[]): string {
@@ -518,7 +514,7 @@ export class LibraryTrendPage implements OnInit {
   }
 
   private formatAxisValue(value: number, chartId: TrendChartSeries): string {
-    return chartId === 'media' ? this.formatNumber(value) : this.formatBytesPipe.transform(value);
+    return chartId === 'media' ? this.formatNumber(value) : this.fileSize.format(value);
   }
 
   private formatTimestamp(value: string): string {
@@ -551,7 +547,7 @@ export class LibraryTrendPage implements OnInit {
       prefix = '-';
     }
 
-    return `${prefix}${this.formatBytesPipe.transform(Math.abs(value))}`;
+    return `${prefix}${this.fileSize.format(Math.abs(value))}`;
   }
 
   private localeId(): string {

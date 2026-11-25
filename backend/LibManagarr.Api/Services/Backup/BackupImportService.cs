@@ -464,7 +464,7 @@ public sealed class BackupImportService(
         if (drive.IsReady && drive.AvailableFreeSpace < needed)
         {
             throw new BackupException(BackupErrorCodes.InsufficientDiskSpace,
-                $"At least {needed / (1024 * 1024)} MB of free space below the config directory is needed.")
+                $"At least {needed / 1_000_000d:0.##} MB of free space below the config directory is needed.")
             {
                 StatusCode = StatusCodes.Status507InsufficientStorage
             };

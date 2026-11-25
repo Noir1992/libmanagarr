@@ -1,4 +1,8 @@
 export type TranslationKey =
+  | 'settings.sizeUnits'
+  | 'settings.sizeUnits.info'
+  | 'settings.sizeUnits.decimal'
+  | 'settings.sizeUnits.binary'
   | 'settings.titleSorting.title'
   | 'settings.titleSorting.help'
   | 'settings.titleSorting.wordList'

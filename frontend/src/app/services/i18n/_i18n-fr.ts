@@ -1,6 +1,11 @@
 import { TranslationKey } from './_i18n-key';
 
 export const i18nFr: Record<TranslationKey, string> = {
+  'settings.sizeUnits': 'Unités de taille des fichiers',
+  'settings.sizeUnits.info':
+    'S’applique aux tailles des fichiers dans toute l’application. Le système décimal utilise un facteur de 1000 ; le système binaire utilise 1024.',
+  'settings.sizeUnits.decimal': 'Décimal (KB, MB, GB, TB)',
+  'settings.sizeUnits.binary': 'Binaire (KiB, MiB, GiB, TiB)',
   'symlinks.searchMovie': 'Rechercher des films',
   'symlinks.searchSpecial': 'Rechercher des épisodes spéciaux',
   'symlinks.releaseGroup': 'Groupe de publication',

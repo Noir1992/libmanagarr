@@ -235,6 +235,11 @@ public static class AppSettingsValidator
             errors["theme"] = ["The theme must be 'light', 'dark', or 'system'."];
         }
 
+        if (!Enum.IsDefined(settings.SizeUnitSystem))
+        {
+            errors["sizeUnitSystem"] = ["The size unit system must be Decimal or Binary."];
+        }
+
         AppendAuthProtectionErrors(errors, settings.AuthProtection);
     }
 

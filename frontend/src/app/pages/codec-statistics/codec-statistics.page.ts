@@ -19,7 +19,7 @@ import { FilterOptionType } from '../../enums/filter-option-type';
 import { LibraryRequestFilter } from '../../interfaces/library/library-request-filter';
 import { MediaTreeNode } from '../../interfaces/media-tree/media-tree-node';
 import { ArrInstanceSettings } from '../../interfaces/settings/arr-instance-settings';
-import { FormatBytesPipe } from '../../pipes/format-bytes.pipe';
+import { FileSizeService } from '../../services/file-size.service';
 import { AppI18nService } from '../../services/app-i18n.service';
 import { AppSettingsService } from '../../services/app-settings.service';
 import { CodecStatisticsApiService } from '../../services/codec-statistics-api.service';
@@ -54,7 +54,7 @@ import { StatisticsChartWidget } from '../../widgets/statistics-chart/statistics
 })
 export class CodecStatisticsPage implements OnInit, OnDestroy {
   /* Injections */
-  private readonly formatBytesPipe: FormatBytesPipe = new FormatBytesPipe();
+  protected readonly fileSize = inject(FileSizeService);
   private readonly appSettingsService: AppSettingsService = inject(AppSettingsService);
   private readonly codecStatisticsApi: CodecStatisticsApiService = inject(CodecStatisticsApiService);
   private readonly i18n: AppI18nService = inject(AppI18nService);
@@ -358,7 +358,8 @@ export class CodecStatisticsPage implements OnInit, OnDestroy {
           dashArray: `${length} ${Math.max(0, circumference - length)}`,
           dashOffset: `${-offset}`,
           tooltip: `${item.label} - ${item.percentage}% - ${item.count} ${this.i18n.t('codecStats.mediaFiles')}`,
-          metaText: `${item.count} files · ${this.formatBytesPipe.transform(item.totalSizeBytes ?? 0)}`,
+          metaTooltip: this.fileSize.exact(item.totalSizeBytes),
+          metaText: `${item.count} files · ${this.fileSize.format(item.totalSizeBytes ?? 0)}`,
           get treeRoots() {
             return (treeRoots ??= buildTree());
           },

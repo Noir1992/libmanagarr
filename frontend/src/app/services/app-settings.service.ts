@@ -1,3 +1,4 @@
+import { SizeUnitSystem } from '../interfaces/general/size-unit-system';
 import { DOCUMENT, registerLocaleData } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import localeDe from '@angular/common/locales/de';
@@ -93,6 +94,8 @@ export class AppSettingsService {
   private readonly loadedState: WritableSignal<boolean> = signal<boolean>(false);
   private readonly syncingArrInstanceKeys: WritableSignal<ReadonlySet<string>> = signal<ReadonlySet<string>>(new Set<string>());
   private readonly languageState: WritableSignal<AppLanguage> = signal<AppLanguage>(DEFAULT_LANGUAGE);
+  private readonly sizeUnitSystemState = signal<SizeUnitSystem>('Decimal');
+  readonly sizeUnitSystem = this.sizeUnitSystemState.asReadonly();
   private readonly themeState: WritableSignal<AppTheme> = signal<AppTheme>(DEFAULT_THEME);
   private readonly titleSortingState = signal<TitleSortingSettings>({ enabled: false, ignoredLeadingWords: [] });
   private readonly sonarrInstancesState: WritableSignal<ArrInstanceSettings[]> = signal<ArrInstanceSettings[]>(DEFAULT_SONARR_INSTANCES);
@@ -180,12 +183,13 @@ export class AppSettingsService {
     }
   }
 
-  async saveGeneral(settings: { language: AppLanguage; theme: AppTheme }): Promise<void> {
+  async saveGeneral(settings: { language: AppLanguage; theme: AppTheme; sizeUnitSystem?: SizeUnitSystem }): Promise<void> {
     try {
       await firstValueFrom(
         this.http.put<void>(`${this.apiUrl}general`, {
           language: APP_LANGUAGE_TO_BACKEND_LANGUAGE[settings.language],
           theme: APP_THEME_TO_BACKEND_THEME[settings.theme],
+          sizeUnitSystem: settings.sizeUnitSystem ?? this.sizeUnitSystemState(),
         }),
       );
 
@@ -193,6 +197,7 @@ export class AppSettingsService {
       this.applyTheme(settings.theme);
       this.languageState.set(settings.language);
       this.themeState.set(settings.theme);
+      this.sizeUnitSystemState.set(settings.sizeUnitSystem ?? this.sizeUnitSystemState());
       this.loadErrorState.set(null);
     } catch (error) {
       throw this.mapHttpError(error, this.i18n.t('settings.saveError'));
@@ -437,6 +442,7 @@ export class AppSettingsService {
       this.applyTheme(theme);
       this.languageState.set(language);
       this.themeState.set(theme);
+      this.sizeUnitSystemState.set(backendSettings.sizeUnitSystem ?? 'Decimal');
       this.titleSortingState.set({
         enabled: backendSettings.titleSorting?.enabled ?? false,
         ignoredLeadingWords: [...(backendSettings.titleSorting?.ignoredLeadingWords ?? [])],
@@ -451,6 +457,7 @@ export class AppSettingsService {
       this.applyTheme(DEFAULT_THEME);
       this.languageState.set(DEFAULT_LANGUAGE);
       this.themeState.set(DEFAULT_THEME);
+      this.sizeUnitSystemState.set('Decimal');
       this.authProtectionState.set(DEFAULT_AUTH_PROTECTION);
       this.loadErrorState.set(this.mapHttpError(error, this.i18n.t('settings.loadError')).message);
     } finally {

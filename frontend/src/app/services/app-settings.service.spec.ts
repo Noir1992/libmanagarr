@@ -58,6 +58,7 @@ describe('AppSettingsService', () => {
     expect(service.language()).toBe('de');
     expect(service.localeId()).toBe('de');
     expect(service.theme()).toBe('dark');
+    expect(service.sizeUnitSystem()).toBe('Decimal');
     expect(service.loadError()).toBeNull();
     expect(i18n.setLanguage).toHaveBeenCalledExactlyOnceWith('de');
     expect(document.documentElement.lang).toBe('de');
@@ -86,11 +87,39 @@ describe('AppSettingsService', () => {
     expect(document.documentElement.dataset['theme']).toBe('light');
   });
 
+  it('defaults older settings to decimal and loads persisted binary units', async () => {
+    expect(service.sizeUnitSystem()).toBe('Decimal');
+    const loading = service.load();
+    http.expectOne('/api/settings/general').flush({ language: 'En', theme: 'System', sizeUnitSystem: 'Binary' });
+    await loading;
+    expect(service.sizeUnitSystem()).toBe('Binary');
+    const saving = service.saveGeneral({ language: 'de', theme: 'dark' });
+    const request = http.expectOne('/api/settings/general');
+    expect(request.request.body.sizeUnitSystem).toBe('Binary');
+    request.flush(null);
+    await saving;
+    expect(service.sizeUnitSystem()).toBe('Binary');
+  });
+
+  it('changes size units only after a successful save', async () => {
+    const saving = service.saveGeneral({ language: 'en', theme: 'system', sizeUnitSystem: 'Binary' });
+    expect(service.sizeUnitSystem()).toBe('Decimal');
+    const request = http.expectOne('/api/settings/general');
+    expect(request.request.body.sizeUnitSystem).toBe('Binary');
+    request.flush(null);
+    await saving;
+    expect(service.sizeUnitSystem()).toBe('Binary');
+    const failing = service.saveGeneral({ language: 'en', theme: 'system', sizeUnitSystem: 'Decimal' }).catch((error: unknown) => error);
+    http.expectOne('/api/settings/general').flush({}, { status: 500, statusText: 'Error' });
+    expect(await failing).toBeInstanceOf(Error);
+    expect(service.sizeUnitSystem()).toBe('Binary');
+  });
+
   it('updates language and theme only after a successful save', async () => {
     const pending = service.saveGeneral({ language: 'fr', theme: 'light' });
     const request = http.expectOne('/api/settings/general');
     expect(request.request.method).toBe('PUT');
-    expect(request.request.body).toEqual({ language: 'Fr', theme: 'Light' });
+    expect(request.request.body).toEqual({ language: 'Fr', theme: 'Light', sizeUnitSystem: 'Decimal' });
     expect(service.language()).toBe('en');
     request.flush(null);
     await pending;
@@ -298,7 +327,7 @@ describe('AppSettingsService', () => {
     expect(service.titleSorting()).toEqual({ enabled: true, ignoredLeadingWords: ['The', 'A'] });
     const generalSave = service.saveGeneral({ language: 'de', theme: 'dark' });
     const generalRequest = http.expectOne('/api/settings/general');
-    expect(generalRequest.request.body).toEqual({ language: 'De', theme: 'Dark' });
+    expect(generalRequest.request.body).toEqual({ language: 'De', theme: 'Dark', sizeUnitSystem: 'Decimal' });
     generalRequest.flush(null);
     await generalSave;
     expect(service.titleSorting()).toEqual({ enabled: true, ignoredLeadingWords: ['The', 'A'] });

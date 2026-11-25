@@ -60,6 +60,32 @@
           <p class="field-error">{{ fieldFeedbackMessage('theme') }}</p>
         }
       </div>
+      <div class="field">
+        <div class="field-label-row">
+          <label id="size-unit-select-label" for="size-unit-select">{{ sizeUnitHeading() }}</label>
+          <app-info-icon [messageText]="sizeUnitInfo()" />
+        </div>
+        <div class="field-control-wrap">
+          <mat-select
+            id="size-unit-select"
+            formControlName="sizeUnitSystem"
+            [class.has-error]="fieldFeedbackMessage('sizeUnitSystem') !== null"
+            aria-labelledby="size-unit-select-label"
+          >
+            @for (unit of sizeUnitOptions; track unit) {
+              <mat-option [value]="unit">{{ sizeUnitLabel(unit) }}</mat-option>
+            }
+          </mat-select>
+          <app-feedback-icon
+            [state]="generalFieldSavingState().sizeUnitSystem ? 'loading' : fieldFeedback('sizeUnitSystem')"
+            variant="overlay-space"
+            [tooltipText]="fieldFeedbackMessage('sizeUnitSystem')"
+          />
+        </div>
+        @if (fieldFeedbackMessage('sizeUnitSystem')) {
+          <p class="field-error">{{ fieldFeedbackMessage('sizeUnitSystem') }}</p>
+        }
+      </div>
     </div>
   </section>
 
