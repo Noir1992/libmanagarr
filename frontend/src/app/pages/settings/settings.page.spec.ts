@@ -1,6 +1,6 @@
 import { provideHttpClient, withXhr } from '@angular/common/http';
 import type { MockInstance } from 'vitest';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting, TestRequest } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
@@ -83,6 +83,12 @@ function createInstancesResponse(): InstancesSettingsBackend {
   };
 }
 
+// Every wait is bounded and the waits of one test stay below the per-test timeout of the browser runner
+// (15 s in Vitest browser mode): if Vitest aborted a pumping test instead, the verify() in the afterEach
+// would throw, and the teardown it skips then breaks the spec files that share the browser page afterwards.
+const PUMP_TIMEOUT_MS: number = 2000;
+const PUMP_INTERVAL_MS: number = 20;
+
 describe('SettingsPage', () => {
   let fixture: ComponentFixture<SettingsPage>;
   let httpTestingController: HttpTestingController;
@@ -141,6 +147,27 @@ describe('SettingsPage', () => {
     httpTestingController.verify();
   });
 
+  // The tab body is only created once the tab panel finished switching, and its requests appear with it.
+  // A fixed sleep races that render: on a slow runner the request is still missing, the unclaimed request
+  // then fails the verify() in the afterEach above, and the teardown it skips breaks the next spec file in
+  // the shared browser page. Pumping until the request is pending removes the assumption about the timing.
+  async function requestWhenDispatched(url: string): Promise<TestRequest> {
+    return vi.waitUntil(
+      async (): Promise<TestRequest | undefined> => {
+        fixture.detectChanges();
+        const pendingRequests: TestRequest[] = httpTestingController.match(url);
+        if (pendingRequests.length > 1) {
+          // The pump claims every request matching the url, so a duplicate has to fail here: expectOne
+          // reported "found 2 requests" and the pump would otherwise flush one and drop the other.
+          throw new Error(`Expected one request to ${url}, found ${pendingRequests.length}.`);
+        }
+
+        return pendingRequests[0];
+      },
+      { timeout: PUMP_TIMEOUT_MS, interval: PUMP_INTERVAL_MS, message: `waiting for the request to ${url}` },
+    );
+  }
+
   it('should load settings into the page state', async () => {
     fixture.detectChanges();
 
@@ -165,23 +192,25 @@ describe('SettingsPage', () => {
     fixture.detectChanges();
 
     fixture.componentInstance['selectedTabIndex'].set(1);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    fixture.detectChanges();
-    httpTestingController.expectOne('/api/settings/instances').flush(createInstancesResponse());
-    httpTestingController.expectOne('/api/settings/seerr').flush(null, { status: 204, statusText: 'No Content' });
-    await fixture.whenStable();
-    fixture.detectChanges();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    fixture.detectChanges();
-    await fixture.whenStable();
+    const instancesRequest: TestRequest = await requestWhenDispatched('/api/settings/instances');
+    instancesRequest.flush(createInstancesResponse());
+    const seerrRequest: TestRequest = await requestWhenDispatched('/api/settings/seerr');
+    seerrRequest.flush(null, { status: 204, statusText: 'No Content' });
 
-    const logos: NodeListOf<HTMLImageElement> = fixture.nativeElement.querySelectorAll('.mat-mdc-tab-body-active img[aria-hidden="true"]');
-    expect(logos).toHaveLength(3);
-    expect(logos[0].getAttribute('src')).toBe('/icons/logo_radarr.svg');
-    expect(logos[1].getAttribute('src')).toBe('/icons/logo_sonarr.svg');
-    expect(logos[2].getAttribute('src')).toBe('/icons/logo_seerr.svg');
+    await vi.waitFor(
+      async () => {
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const logos: NodeListOf<HTMLImageElement> = fixture.nativeElement.querySelectorAll(
+          '.mat-mdc-tab-body-active img[aria-hidden="true"]',
+        );
+        expect(logos).toHaveLength(3);
+        expect(logos[0].getAttribute('src')).toBe('/icons/logo_radarr.svg');
+        expect(logos[1].getAttribute('src')).toBe('/icons/logo_sonarr.svg');
+        expect(logos[2].getAttribute('src')).toBe('/icons/logo_seerr.svg');
+      },
+      { timeout: PUMP_TIMEOUT_MS, interval: PUMP_INTERVAL_MS },
+    );
   });
 
   it('should read the active tab from the url', async () => {
@@ -210,12 +239,10 @@ describe('SettingsPage', () => {
     const navigateSpy: MockInstance = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
     fixture.componentInstance['handleTabSelectionChange'](1);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    fixture.detectChanges();
-    httpTestingController.expectOne('/api/settings/instances').flush(createInstancesResponse());
-    httpTestingController.expectOne('/api/settings/seerr').flush(null, { status: 204, statusText: 'No Content' });
+    const instancesRequest: TestRequest = await requestWhenDispatched('/api/settings/instances');
+    instancesRequest.flush(createInstancesResponse());
+    const seerrRequest: TestRequest = await requestWhenDispatched('/api/settings/seerr');
+    seerrRequest.flush(null, { status: 204, statusText: 'No Content' });
 
     expect(fixture.componentInstance['selectedTabIndex']()).toBe(1);
     expect(navigateSpy).toHaveBeenCalledWith(
@@ -238,11 +265,8 @@ describe('SettingsPage', () => {
     fixture.detectChanges();
 
     activatedRouteStub.setQueryParams({ tab: 'tasks' });
-    fixture.detectChanges();
-    await fixture.whenStable();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    fixture.detectChanges();
-    httpTestingController.expectOne('/api/settings/tasks').flush(createScheduledTasksResponse());
+    const tasksRequest: TestRequest = await requestWhenDispatched('/api/settings/tasks');
+    tasksRequest.flush(createScheduledTasksResponse());
 
     expect(fixture.componentInstance['selectedTabIndex']()).toBe(3);
   });
